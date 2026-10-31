@@ -1,0 +1,16 @@
+spring:
+  application:
+    name: kasa
+  datasource:
+    url: ${KASA_DB_URL:jdbc:postgresql://localhost:5432/kasa}
+    username: ${KASA_DB_APP_USER:kasa_app}
+    password: ${KASA_DB_APP_PASSWORD:kasa_app}
+  # Migrations run as the schema owner; the application itself connects as a restricted role.
+  flyway:
+    user: ${KASA_DB_OWNER_USER:kasa}
+    password: ${KASA_DB_OWNER_PASSWORD:kasa}
+
+kasa:
+  jwt:
+    secret: ${KASA_JWT_SECRET}
+    ttl: 1h

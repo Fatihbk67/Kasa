@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: kasa
+      POSTGRES_USER: kasa
+      POSTGRES_PASSWORD: kasa
+    ports:
+      - "5432:5432"
+    volumes:
+      - kasa-postgres:/var/lib/postgresql
+      - ./infra/postgres/01-app-role.sql:/docker-entrypoint-initdb.d/01-app-role.sql:ro
+
+volumes:
+  kasa-postgres:
