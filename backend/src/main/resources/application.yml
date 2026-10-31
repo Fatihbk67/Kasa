@@ -48,3 +48,25 @@ kasa:
   admin:
     # The platform operator's API. With no token set, the admin API rejects every request.
     token: ${KASA_ADMIN_TOKEN:}
+  rate-limit:
+    window: PT1M
+    login-per-ip-and-email: 5
+    login-per-ip: 30
+    register-per-ip: 10
+    checkout-pay-per-ip: 30
+  metrics:
+    refresh-interval: PT15S
+
+server:
+  # Set to "native" behind a trusted reverse proxy, or every client appears to share the proxy's address.
+  forward-headers-strategy: ${KASA_FORWARD_HEADERS:none}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+  metrics:
+    distribution:
+      percentiles-histogram:
+        "[http.server.requests]": true

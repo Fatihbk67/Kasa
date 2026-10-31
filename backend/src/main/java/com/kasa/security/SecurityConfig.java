@@ -32,6 +32,10 @@ public class SecurityConfig {
     static final String API_SCOPE = "api";
     static final String ADMIN_SCOPE = "admin";
 
+    // Limits the damage of any script injection, which matters because the dashboard's token is reachable from script.
+    private static final String CONTENT_SECURITY_POLICY = "default-src 'self'; img-src 'self' data:; object-src 'none'; "
+            + "base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
+
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http, ApiKeyService apiKeys,
                                             AdminProperties adminProperties) throws Exception {
@@ -44,12 +48,16 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(requests -> requests
                         .requestMatchers("/api/v1/auth/**", "/api/v1/public/**", "/actuator/health", "/error").permitAll()
+                        .requestMatchers("/actuator/**").hasAuthority("SCOPE_" + ADMIN_SCOPE)
                         // A leaked API key must not be able to mint new keys or redirect webhooks.
                         .requestMatchers("/api/v1/api-keys/**", "/api/v1/webhook-endpoints/**")
                         .hasAuthority("SCOPE_" + DASHBOARD_SCOPE)
                         .requestMatchers("/api/v1/admin/**").hasAuthority("SCOPE_" + ADMIN_SCOPE)
                         // An admin token carries no tenant, so it opens nothing but the admin API.
-                        .anyRequest().hasAnyAuthority("SCOPE_" + DASHBOARD_SCOPE, "SCOPE_" + API_SCOPE))
+                        .requestMatchers("/api/**").hasAnyAuthority("SCOPE_" + DASHBOARD_SCOPE, "SCOPE_" + API_SCOPE)
+                        // Everything else is the public web interface, which holds no data of its own.
+                        .anyRequest().permitAll())
+                .headers(headers -> headers.contentSecurityPolicy(csp -> csp.policyDirectives(CONTENT_SECURITY_POLICY)))
                 .addFilterBefore(adminTokenFilter, BearerTokenAuthenticationFilter.class)
                 .addFilterBefore(apiKeyFilter, BearerTokenAuthenticationFilter.class)
                 .oauth2ResourceServer(server -> server.jwt(Customizer.withDefaults()))

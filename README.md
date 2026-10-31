@@ -4,6 +4,50 @@
 
 > Eğitim ve portföy projesidir. Gerçek kart verisi işlemez; banka tarafı simüle edilir.
 
+## Mimari
+
+```mermaid
+flowchart LR
+    C[Müşteri tarayıcısı] -->|ödeme bağlantısı| API
+    M[İşletme paneli] -->|JWT| API
+    S[İşletme sunucusu] -->|API anahtarı| API
+    subgraph Kasa [Modüler monolit]
+        API[REST API] --> P[Ödeme servisi]
+        P --> L[Çift taraflı defter]
+        J[Zamanlanmış işler] --> R[Kurtarma]
+        J --> D[Webhook göndericisi]
+        J --> SE[Hesap kesimi]
+        J --> MU[Mutabakat]
+    end
+    P -->|transaction dışında| B[Banka]
+    R --> B
+    SE --> B
+    MU -->|gün sonu dosyası| B
+    Kasa --> DB[(PostgreSQL<br/>RLS, trigger, kısıtlar)]
+    D -->|HMAC imzalı| S
+    PR[Prometheus] -->|metrikler| Kasa
+    G[Grafana] --> PR
+```
+
+## Ölçülen performans
+
+Tek dizüstü bilgisayarda (Intel i7-13650HX, 16 GB RAM) yük istemcisi, uygulama ve PostgreSQL aynı makinede çalışırken 30 saniyelik ölçümler. Bağlantı havuzu varsayılan 10 bağlantıdır, kalıcı commit (`synchronous_commit=on`) açıktır. Bir akış provizyon, tahsilat ve okumadan oluşur; tahsilat defter kaydı ve webhook kuyruğunu da yazar.
+
+| Senaryo | Akış/sn | Provizyon p95 | Tahsilat p95 | Beklenmeyen yanıt |
+|---|---|---:|---:|---:|
+| 50 eşzamanlı istemci, 20 işletme | 1.116 | 26 ms | 29 ms | 0 |
+| 50 eşzamanlı istemci, tek işletme | 581 | 45 ms | 65 ms | 0 |
+
+Tek işletmede verimin düşmesi beklenen bir durumdur: aynı bakiye satırı kilitlendiği için tahsilatlar sıraya girer. Bu, tutarlılığın bilinçli bedelidir.
+
+Ölçüm sonunda her işletmenin bakiyesi istemcinin bağımsız hesabıyla kuruşu kuruşuna eşleşti. Mutabakat 50.982 banka satırının tamamını farksız eşleştirdi.
+
+Sınırlar: Banka simüle edildiği için gerçek ağ gecikmesi yoktur. Rakamlar üretim kapasitesi değildir; sistemin bu makinedeki davranışını gösterir. Yeniden üretmek için sunucu çalışırken:
+
+```bash
+java -Djdk.net.unixdomain.tmpdir=backend/target load-test/LoadTest.java http://localhost:8080 50 30 20
+```
+
 ## Çözülen mühendislik problemleri
 
 - **Para kaybolmaz:** Her kayıtta borç ve alacak toplamı eşittir. Bu kural yalnızca uygulamada değil, veritabanında da zorunludur.
@@ -25,6 +69,8 @@
 - **Webhook URL'si iç ağa saldırı aracı olamaz (SSRF):** Özel ağ, loopback ve bulut metadata adresleri hem kayıtta hem her gönderimde engellenir; yönlendirmeler izlenmez.
 - **İşletmeye iki kez ödeme yapılmaz:** Bir işlem yalnızca tek bir canlı toplu ödemeye girebilir ve işletme başına günde tek ödeme oluşur. Bu kuralları veritabanı kısıtları uygular, iş aynı anda birden çok sunucuda çalışsa da geçerlidir.
 - **Reddedilen ödemede para kaybolmaz:** Para önce "yolda" hesabına alınır. Banka reddederse tutar ve kalemler geri döner, sonraki çalıştırma yeniden dener.
+- **Parola denemeleri yavaşlatılır:** Giriş, kayıt ve herkese açık ödeme uçlarında istek sınırı vardır; aşılınca `429` ve `Retry-After` döner. Sayaçlar sunucu başınadır, birden çok sunucuda ortak depo gerekir.
+- **Sistem gözlemlenebilir:** Sonucu bilinmeyen banka işlemleri, webhook kuyruğu ve mutabakat farkları Prometheus metriği olarak yayımlanır. Metrik ucu yalnızca yönetici token'ıyla açılır.
 - **Bankayla farklar yakalanır:** Günlük mutabakat banka dosyasını kayıtlarımızla karşılaştırır. Farkları raporlar ama düzeltmez, çünkü hangi tarafın doğru olduğuna insan karar vermelidir.
 
 ## Teknolojiler
@@ -69,18 +115,28 @@ npm run dev
 
 Ardından `http://localhost:5173` adresini açın. Demo hesabı `demo@kasa.test`, parolası `demo-parola-12345`'tir. Bu bilgiler yalnızca yerel demo içindir. Yönetici API'sinin yerel token'ı `local-dev-admin-token`'dır.
 
+Sunucuyu kapatırken terminalde `Ctrl+C` kullanın. Zorla sonlandırılırsa geçici PostgreSQL süreçleri açık kalabilir.
+
 Denemeye değer akış: **Test ödemesi oluştur** ile ödeme sayfasını açın ve "Banka yanıt vermiyor" kartını seçin. Sayfa bekleme durumuna geçer, yaklaşık bir buçuk dakika içinde kurtarma işi bankaya sorar ve sonuç kendiliğinden güncellenir. Ardından panelden ödemeyi tahsil edip iade edin.
 
 ## Docker ile çalıştırma
 
-Bu yol henüz denenmemiştir. `KASA_JWT_SECRET` en az 32 bayt olmalıdır; tanımlı değilse uygulama başlamaz. Aşağıdaki PowerShell komutları yalnızca yerel geliştirme içindir.
+Bu yol henüz çalıştırılarak denenmemiştir. `.env.example` dosyasını `.env` olarak kopyalayıp değerleri değiştirin, ardından:
 
-```powershell
-docker compose up -d
-cd backend
-$env:KASA_JWT_SECRET = "yerel-gelistirme-icin-en-az-32-baytlik-anahtar"
-mvn spring-boot:run
+```bash
+docker compose up --build
 ```
+
+Uygulama `http://localhost:8080`, Prometheus `http://localhost:9090`, Grafana `http://localhost:3000` adresindedir. Grafana'da "Kasa" panosu hazır gelir.
+
+## Yayına alma
+
+Tek bir Docker imajı API ile arayüzü birlikte sunar. Gerekenler: imajı çalıştıracak bir sunucu ve PostgreSQL.
+
+1. Veritabanında `infra/postgres/01-app-role.sql` içeriğini güçlü bir parolayla çalıştırın. Uygulama rolü tablo sahibi veya süper kullanıcı olursa uygulama başlamaz.
+2. `KASA_DB_URL`, `KASA_DB_APP_USER`, `KASA_DB_APP_PASSWORD`, `KASA_DB_OWNER_USER`, `KASA_DB_OWNER_PASSWORD`, `KASA_JWT_SECRET` ve `KASA_ADMIN_TOKEN` değerlerini tanımlayın.
+3. Ters proxy arkasındaysa `KASA_FORWARD_HEADERS=native` ayarlayın. Aksi halde tüm istemciler tek adres sayılır ve istek sınırı herkesi birlikte engeller.
+4. HTTPS kullanın. Demo ortamında, simüle banka kayıtlarının yeniden başlatmada silindiğini unutmayın.
 
 ## API
 
@@ -186,4 +242,5 @@ Banka simüle edilir; davranışı token belirler. Böylece her hata senaryosu i
 - [x] **Webhook:** Transactional outbox, `FOR UPDATE SKIP LOCKED`, üstel geri çekilmeli yeniden deneme, HMAC imzası
 - [x] **Hesap kesimi ve mutabakat:** İşletmelere toplu ödeme, banka dosyasıyla karşılaştırma, zamanlanmış işler
 - [x] **Frontend:** Ödeme sayfası ve işletme paneli (React, TypeScript)
-- [ ] **Vitrin:** k6 yük testi, Prometheus ve Grafana, GitHub Actions, canlı demo
+- [x] **Vitrin:** İstek sınırı, yük testi, Prometheus metrikleri, Grafana panosu, GitHub Actions, Docker imajı
+- [ ] **Canlı demo:** Uygulamanın herkese açık bir adreste yayınlanması

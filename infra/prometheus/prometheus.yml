@@ -1,0 +1,12 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: kasa
+    metrics_path: /actuator/prometheus
+    http_headers:
+      X-Admin-Token:
+        files:
+          - ADMIN_TOKEN_FILE
+    static_configs:
+      - targets: ["app:8080"]

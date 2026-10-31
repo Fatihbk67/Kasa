@@ -39,6 +39,10 @@ public abstract class PostgresIntegrationTest {
         registry.add("kasa.jwt.secret", () -> "test-only-secret-test-only-secret-1234");
         // Tests run recovery themselves, at the moment they choose.
         registry.add("kasa.payments.recovery-interval", () -> "PT1H");
+        // Every test registers from the same address. The per-email login limit stays real, for RateLimitApiTest.
+        registry.add("kasa.rate-limit.register-per-ip", () -> Integer.MAX_VALUE);
+        registry.add("kasa.rate-limit.login-per-ip", () -> Integer.MAX_VALUE);
+        registry.add("kasa.rate-limit.checkout-pay-per-ip", () -> Integer.MAX_VALUE);
         registry.add("kasa.settlement.cron", () -> "-");
         registry.add("kasa.settlement.recovery-interval", () -> "PT1H");
         registry.add("kasa.reconciliation.cron", () -> "-");

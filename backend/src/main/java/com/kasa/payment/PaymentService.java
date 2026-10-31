@@ -16,6 +16,7 @@ import com.kasa.bank.BankGateway;
 import com.kasa.bank.BankResponse;
 import com.kasa.bank.BankTimeoutException;
 import com.kasa.common.Hashes;
+import com.kasa.observability.BusinessMetrics;
 import com.kasa.payment.PaymentViews.OperationResult;
 import com.kasa.payment.PaymentViews.OperationView;
 import com.kasa.payment.PaymentViews.PaymentDetail;
@@ -49,11 +50,13 @@ public class PaymentService {
     private final BankGateway bank;
     private final PaymentProperties properties;
     private final WebhookEvents webhookEvents;
+    private final BusinessMetrics metrics;
 
     public PaymentService(TransactionTemplate tx, TenantScope tenantScope, PaymentStore store,
                           PaymentLedger paymentLedger, BankGateway bank, PaymentProperties properties,
-                          WebhookEvents webhookEvents) {
+                          WebhookEvents webhookEvents, BusinessMetrics metrics) {
         this.webhookEvents = webhookEvents;
+        this.metrics = metrics;
         this.tx = tx;
         this.tenantScope = tenantScope;
         this.store = store;
@@ -247,6 +250,7 @@ public class PaymentService {
         PaymentOperation operation = store.getOperation(operationId);
         webhookEvents.publish(tenantId, eventType(payment, operation),
                 new OperationResult(PaymentView.of(payment), OperationView.of(operation)));
+        metrics.countAfterCommit("kasa.payment.operations", "type", operation.type().name(), "status", operation.status().name());
     }
 
     private static String eventType(Payment payment, PaymentOperation operation) {

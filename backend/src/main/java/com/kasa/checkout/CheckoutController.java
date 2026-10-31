@@ -12,7 +12,10 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.kasa.security.CurrentTenant;
+import com.kasa.security.RateLimitProperties;
+import com.kasa.security.RateLimiter;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.NotNull;
@@ -33,9 +36,13 @@ public class CheckoutController {
     }
 
     private final CheckoutService checkout;
+    private final RateLimiter rateLimiter;
+    private final RateLimitProperties limits;
 
-    public CheckoutController(CheckoutService checkout) {
+    public CheckoutController(CheckoutService checkout, RateLimiter rateLimiter, RateLimitProperties limits) {
         this.checkout = checkout;
+        this.rateLimiter = rateLimiter;
+        this.limits = limits;
     }
 
     @PostMapping("/api/v1/checkout-sessions")
@@ -52,7 +59,9 @@ public class CheckoutController {
     }
 
     @PostMapping("/api/v1/public/checkout/{id}/pay")
-    public CheckoutService.PublicSession pay(@PathVariable UUID id, @Valid @RequestBody PayRequest request) {
+    public CheckoutService.PublicSession pay(@PathVariable UUID id, @Valid @RequestBody PayRequest request,
+                                             HttpServletRequest http) {
+        rateLimiter.check("checkout-pay:" + http.getRemoteAddr(), limits.checkoutPayPerIp());
         return checkout.pay(id, request.cardToken());
     }
 }

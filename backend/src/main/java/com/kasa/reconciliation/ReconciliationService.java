@@ -23,6 +23,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.kasa.bank.BankGateway;
+import com.kasa.observability.BusinessMetrics;
 
 /**
  * Compares a day's bank statement with our records and reports every difference. It records and alerts but
@@ -52,8 +53,10 @@ public class ReconciliationService {
     private final JdbcClient jdbc;
     private final TransactionTemplate tx;
     private final BankGateway bank;
+    private final BusinessMetrics metrics;
 
-    public ReconciliationService(JdbcClient jdbc, TransactionTemplate tx, BankGateway bank) {
+    public ReconciliationService(JdbcClient jdbc, TransactionTemplate tx, BankGateway bank, BusinessMetrics metrics) {
+        this.metrics = metrics;
         this.jdbc = jdbc;
         this.tx = tx;
         this.bank = bank;
@@ -102,6 +105,7 @@ public class ReconciliationService {
         if (!discrepancies.isEmpty()) {
             log.warn("Reconciliation for {} found {} discrepancies", date, discrepancies.size());
         }
+        discrepancies.forEach(discrepancy -> metrics.count("kasa.reconciliation.discrepancies", "kind", discrepancy.kind()));
         return get(runId);
     }
 

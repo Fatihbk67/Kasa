@@ -26,6 +26,7 @@ import com.kasa.ledger.AccountType;
 import com.kasa.ledger.LedgerService;
 import com.kasa.ledger.NewJournalEntry;
 import com.kasa.ledger.Posting;
+import com.kasa.observability.BusinessMetrics;
 import com.kasa.settlement.PayoutViews.PayoutDetail;
 import com.kasa.settlement.PayoutViews.PayoutItemView;
 import com.kasa.settlement.PayoutViews.PayoutView;
@@ -68,9 +69,11 @@ public class SettlementService {
     private final LedgerService ledger;
     private final BankGateway bank;
     private final WebhookEvents webhookEvents;
+    private final BusinessMetrics metrics;
 
     public SettlementService(JdbcClient jdbc, TransactionTemplate tx, TenantScope tenantScope, LedgerService ledger,
-                             BankGateway bank, WebhookEvents webhookEvents) {
+                             BankGateway bank, WebhookEvents webhookEvents, BusinessMetrics metrics) {
+        this.metrics = metrics;
         this.jdbc = jdbc;
         this.tx = tx;
         this.tenantScope = tenantScope;
@@ -303,6 +306,7 @@ public class SettlementService {
                     .query(SettlementService::mapPayout)
                     .single();
             webhookEvents.publish(tenantId, response.approved() ? "payout.paid" : "payout.failed", updated);
+            metrics.countAfterCommit("kasa.payouts", "status", updated.status());
         });
     }
 

@@ -1,5 +1,7 @@
 package com.kasa.auth;
 
+import java.util.Locale;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -7,6 +9,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.kasa.security.RateLimitProperties;
+import com.kasa.security.RateLimiter;
+
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -26,19 +32,28 @@ public class AuthController {
     }
 
     private final AuthService authService;
+    private final RateLimiter rateLimiter;
+    private final RateLimitProperties limits;
 
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService, RateLimiter rateLimiter, RateLimitProperties limits) {
         this.authService = authService;
+        this.rateLimiter = rateLimiter;
+        this.limits = limits;
     }
 
     @PostMapping("/register")
     @ResponseStatus(HttpStatus.CREATED)
-    public AuthService.TokenResponse register(@Valid @RequestBody RegisterRequest request) {
+    public AuthService.TokenResponse register(@Valid @RequestBody RegisterRequest request, HttpServletRequest http) {
+        rateLimiter.check("register:" + http.getRemoteAddr(), limits.registerPerIp());
         return authService.register(request.businessName(), request.email(), request.password());
     }
 
+    // Keys on address and email together, so an attacker cannot lock a merchant out just by knowing their email.
     @PostMapping("/login")
-    public AuthService.TokenResponse login(@Valid @RequestBody LoginRequest request) {
+    public AuthService.TokenResponse login(@Valid @RequestBody LoginRequest request, HttpServletRequest http) {
+        String ip = http.getRemoteAddr();
+        rateLimiter.check("login-ip:" + ip, limits.loginPerIp());
+        rateLimiter.check("login:" + ip + ":" + request.email().trim().toLowerCase(Locale.ROOT), limits.loginPerIpAndEmail());
         return authService.login(request.email(), request.password());
     }
 }

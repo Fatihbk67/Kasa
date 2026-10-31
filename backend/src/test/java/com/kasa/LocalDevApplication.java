@@ -35,7 +35,11 @@ public final class LocalDevApplication {
 
     public static void main(String[] args) throws IOException {
         // initdb rejects non-ASCII OS locale names such as "Turkish_Türkiye.1254".
-        EmbeddedPostgres postgres = EmbeddedPostgres.builder().setLocaleConfig("locale", "C").start();
+        // Durable commits, as in production. The embedded default turns them off, which would flatter any load test.
+        EmbeddedPostgres postgres = EmbeddedPostgres.builder()
+                .setLocaleConfig("locale", "C")
+                .setServerConfig("synchronous_commit", "on")
+                .start();
         JdbcClient.create(postgres.getPostgresDatabase())
                 .sql("CREATE ROLE kasa_app LOGIN PASSWORD 'kasa_app' NOSUPERUSER NOBYPASSRLS")
                 .update();
@@ -48,6 +52,11 @@ public final class LocalDevApplication {
         System.setProperty("kasa.jwt.secret", "local-development-only-secret-do-not-deploy");
         System.setProperty("kasa.admin.token", "local-dev-admin-token");
         System.setProperty("kasa.webhooks.allow-insecure-targets", "true");
+        // The load test registers its merchants in one burst from one address.
+        System.setProperty("kasa.rate-limit.register-per-ip", "1000");
+        // A clean way to stop, which also removes the throwaway database. A killed process would leave it running.
+        System.setProperty("management.endpoints.web.exposure.include", "health,prometheus,shutdown");
+        System.setProperty("management.endpoint.shutdown.access", "unrestricted");
 
         ConfigurableApplicationContext context = SpringApplication.run(KasaApplication.class, args);
         seedDemoData(context);

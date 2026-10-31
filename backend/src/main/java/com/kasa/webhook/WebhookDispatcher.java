@@ -21,6 +21,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import com.kasa.observability.BusinessMetrics;
 import com.kasa.tenant.TenantScope;
 
 /**
@@ -48,9 +49,11 @@ public class WebhookDispatcher {
     private final WebhookUrlGuard urlGuard;
     private final WebhookProperties properties;
     private final HttpClient httpClient;
+    private final BusinessMetrics metrics;
 
     public WebhookDispatcher(JdbcClient jdbc, TransactionTemplate tx, TenantScope tenantScope,
-                             WebhookUrlGuard urlGuard, WebhookProperties properties) {
+                             WebhookUrlGuard urlGuard, WebhookProperties properties, BusinessMetrics metrics) {
+        this.metrics = metrics;
         this.jdbc = jdbc;
         this.tx = tx;
         this.tenantScope = tenantScope;
@@ -134,6 +137,7 @@ public class WebhookDispatcher {
     private void record(Claimed delivery, Outcome outcome) {
         boolean exhausted = delivery.attempts() >= properties.maxAttempts();
         String status = outcome.delivered() ? "DELIVERED" : exhausted ? "FAILED" : "PENDING";
+        metrics.count("kasa.webhook.attempts", "result", status);
         Instant nextAttempt = Instant.now().plus(backoffAfter(delivery.attempts()));
         tx.executeWithoutResult(transaction -> {
             tenantScope.apply(delivery.tenantId());

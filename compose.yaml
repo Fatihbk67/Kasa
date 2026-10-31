@@ -5,11 +5,59 @@ services:
       POSTGRES_DB: kasa
       POSTGRES_USER: kasa
       POSTGRES_PASSWORD: kasa
-    ports:
-      - "5432:5432"
     volumes:
       - kasa-postgres:/var/lib/postgresql
       - ./infra/postgres/01-app-role.sql:/docker-entrypoint-initdb.d/01-app-role.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kasa -d kasa"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  app:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      KASA_DB_URL: jdbc:postgresql://postgres:5432/kasa
+      KASA_JWT_SECRET: ${KASA_JWT_SECRET:?copy .env.example to .env and set it}
+      KASA_ADMIN_TOKEN: ${KASA_ADMIN_TOKEN:?copy .env.example to .env and set it}
+    ports:
+      - "8080:8080"
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+    environment:
+      KASA_ADMIN_TOKEN: ${KASA_ADMIN_TOKEN:?copy .env.example to .env and set it}
+    entrypoint:
+      - /bin/sh
+      - -c
+      # Prometheus cannot read environment variables in its config, so the token goes into a private file.
+      - >-
+        printf '%s' "$$KASA_ADMIN_TOKEN" > /tmp/admin-token
+        && sed 's#ADMIN_TOKEN_FILE#/tmp/admin-token#' /etc/prometheus/prometheus.template.yml > /tmp/prometheus.yml
+        && exec /bin/prometheus --config.file=/tmp/prometheus.yml --storage.tsdb.path=/prometheus
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.template.yml:ro
+      - kasa-prometheus:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+
+  grafana:
+    image: grafana/grafana:12.0.0
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?copy .env.example to .env and set it}
+    volumes:
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - kasa-grafana:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3000:3000"
 
 volumes:
   kasa-postgres:
+  kasa-prometheus:
+  kasa-grafana:

@@ -17,6 +17,7 @@ const MESSAGES: Record<number, string> = {
   409: 'Bu işlem şu anki durumda yapılamıyor.',
   410: 'Bu bağlantının süresi doldu.',
   422: 'Girilen tutar kullanılabilir tutarı aşıyor.',
+  429: 'Çok fazla deneme yapıldı. Lütfen bir dakika sonra yeniden deneyin.',
 };
 
 let onSessionExpired: () => void = () => {};
