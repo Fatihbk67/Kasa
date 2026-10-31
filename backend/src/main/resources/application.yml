@@ -19,3 +19,15 @@ kasa:
     recovery-interval: PT30S
     # Longer than any bank call can take, so the job never races a request that is still in flight.
     recovery-stale-after: PT1M
+  webhooks:
+    dispatch-interval: PT5S
+    batch-size: 50
+    max-attempts: 8
+    connect-timeout: PT3S
+    request-timeout: PT5S
+    # Longer than the slowest possible send, so a delivery is not re-claimed while still in flight.
+    lease: PT1M
+    base-backoff: PT30S
+    max-backoff: PT1H
+    # Local development only: permits http and private addresses as webhook targets.
+    allow-insecure-targets: false

@@ -41,8 +41,9 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(requests -> requests
                         .requestMatchers("/api/v1/auth/**", "/actuator/health", "/error").permitAll()
-                        // A leaked API key must not be able to mint new keys.
-                        .requestMatchers("/api/v1/api-keys/**").hasAuthority("SCOPE_" + DASHBOARD_SCOPE)
+                        // A leaked API key must not be able to mint new keys or redirect webhooks.
+                        .requestMatchers("/api/v1/api-keys/**", "/api/v1/webhook-endpoints/**")
+                        .hasAuthority("SCOPE_" + DASHBOARD_SCOPE)
                         .anyRequest().authenticated())
                 .addFilterBefore(apiKeyFilter, BearerTokenAuthenticationFilter.class)
                 .oauth2ResourceServer(server -> server.jwt(Customizer.withDefaults()))

@@ -22,6 +22,7 @@ import com.kasa.payment.PaymentViews.PaymentDetail;
 import com.kasa.payment.PaymentViews.PaymentPage;
 import com.kasa.payment.PaymentViews.PaymentView;
 import com.kasa.tenant.TenantScope;
+import com.kasa.webhook.WebhookEvents;
 
 /**
  * Runs each bank call in three steps: commit a PENDING operation, call the bank with no transaction open,
@@ -47,9 +48,12 @@ public class PaymentService {
     private final PaymentLedger paymentLedger;
     private final BankGateway bank;
     private final PaymentProperties properties;
+    private final WebhookEvents webhookEvents;
 
     public PaymentService(TransactionTemplate tx, TenantScope tenantScope, PaymentStore store,
-                          PaymentLedger paymentLedger, BankGateway bank, PaymentProperties properties) {
+                          PaymentLedger paymentLedger, BankGateway bank, PaymentProperties properties,
+                          WebhookEvents webhookEvents) {
+        this.webhookEvents = webhookEvents;
         this.tx = tx;
         this.tenantScope = tenantScope;
         this.store = store;
@@ -234,7 +238,30 @@ public class PaymentService {
                     store.update(paymentId, failed, 0, 0, 0, null, response.declineCode());
                 }
             }
+            publishOutcome(tenantId, paymentId, operationId);
         });
+    }
+
+    private void publishOutcome(UUID tenantId, UUID paymentId, UUID operationId) {
+        Payment payment = store.find(paymentId).orElseThrow(PaymentService::notFound);
+        PaymentOperation operation = store.getOperation(operationId);
+        webhookEvents.publish(tenantId, eventType(payment, operation),
+                new OperationResult(PaymentView.of(payment), OperationView.of(operation)));
+    }
+
+    private static String eventType(Payment payment, PaymentOperation operation) {
+        if (operation.status() == OperationStatus.SUCCEEDED) {
+            return switch (operation.type()) {
+                case AUTHORIZE -> "payment.authorized";
+                case CAPTURE -> "payment.captured";
+                case VOID -> "payment.voided";
+                case REFUND -> "payment.refunded";
+            };
+        }
+        if (operation.type() == OperationType.AUTHORIZE) {
+            return payment.status() == PaymentStatus.FAILED ? "payment.failed" : "payment.declined";
+        }
+        return "payment.operation_failed";
     }
 
     private void applyApproval(UUID tenantId, Payment payment, PaymentOperation operation, BankResponse response) {

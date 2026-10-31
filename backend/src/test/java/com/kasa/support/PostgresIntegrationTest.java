@@ -39,6 +39,12 @@ public abstract class PostgresIntegrationTest {
         registry.add("kasa.jwt.secret", () -> "test-only-secret-test-only-secret-1234");
         // Tests run recovery themselves, at the moment they choose.
         registry.add("kasa.payments.recovery-interval", () -> "PT1H");
+        registry.add("kasa.webhooks.dispatch-interval", () -> "PT1H");
+        registry.add("kasa.webhooks.max-attempts", () -> 3);
+        registry.add("kasa.webhooks.request-timeout", () -> "PT1S");
+        registry.add("kasa.webhooks.connect-timeout", () -> "PT1S");
+        // The test receiver runs on localhost; WebhookUrlGuardTest covers the guard with this turned off.
+        registry.add("kasa.webhooks.allow-insecure-targets", () -> true);
     }
 
     private static EmbeddedPostgres startPostgres() {
