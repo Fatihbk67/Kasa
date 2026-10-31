@@ -43,7 +43,7 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(requests -> requests
-                        .requestMatchers("/api/v1/auth/**", "/actuator/health", "/error").permitAll()
+                        .requestMatchers("/api/v1/auth/**", "/api/v1/public/**", "/actuator/health", "/error").permitAll()
                         // A leaked API key must not be able to mint new keys or redirect webhooks.
                         .requestMatchers("/api/v1/api-keys/**", "/api/v1/webhook-endpoints/**")
                         .hasAuthority("SCOPE_" + DASHBOARD_SCOPE)

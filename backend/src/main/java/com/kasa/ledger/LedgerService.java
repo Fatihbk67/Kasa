@@ -45,6 +45,27 @@ public class LedgerService {
                 .single();
     }
 
+    public record MerchantBalance(String currency, long available, long inTransit) {
+    }
+
+    /** What the merchant is owed. The platform's own accounts, such as fee revenue, stay out of this view. */
+    @Transactional(readOnly = true)
+    public List<MerchantBalance> merchantBalances(UUID tenantId) {
+        tenantScope.apply(tenantId);
+        return jdbc.sql("""
+                        SELECT currency,
+                               COALESCE(SUM(balance) FILTER (WHERE code = 'merchant_payable'), 0) AS available,
+                               COALESCE(SUM(balance) FILTER (WHERE code = 'payout_in_transit'), 0) AS in_transit
+                        FROM ledger_accounts
+                        WHERE code IN ('merchant_payable', 'payout_in_transit')
+                        GROUP BY currency
+                        ORDER BY currency
+                        """)
+                .query((rs, rowNum) -> new MerchantBalance(
+                        rs.getString("currency"), rs.getLong("available"), rs.getLong("in_transit")))
+                .list();
+    }
+
     /** Returns the account, creating it first if needed. Safe to call concurrently. */
     @Transactional
     public LedgerAccount ensureAccount(UUID tenantId, String code, AccountType type, String currency,

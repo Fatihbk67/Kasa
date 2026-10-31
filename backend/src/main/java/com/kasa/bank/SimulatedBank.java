@@ -34,6 +34,9 @@ public class SimulatedBank implements BankGateway {
     private record StatementLine(String reference, String type, long amount, String currency, Instant bookedAt) {
     }
 
+    // After a restart the in-memory records are gone, and a real bank would also refuse a reference it cannot find.
+    private static final String UNKNOWN_AUTHORIZATION = "unknown_authorization";
+
     private final Map<UUID, BankResponse> processed = new ConcurrentHashMap<>();
     private final Map<String, Authorization> authorizations = new ConcurrentHashMap<>();
     private final Map<UUID, PayoutBehavior> payoutBehaviors = new ConcurrentHashMap<>();
@@ -59,6 +62,9 @@ public class SimulatedBank implements BankGateway {
     @Override
     public BankResponse capture(UUID operationId, String authorizationReference, long amount) {
         Authorization authorization = authorizations.get(authorizationReference);
+        if (authorization == null) {
+            return process(operationId, () -> BankResponse.declined(UNKNOWN_AUTHORIZATION));
+        }
         return switch (authorization.cardToken()) {
             case "tok_capture_declined" -> process(operationId, () -> BankResponse.declined("capture_rejected"));
             case "tok_capture_timeout" -> {
@@ -77,6 +83,9 @@ public class SimulatedBank implements BankGateway {
     @Override
     public BankResponse refund(UUID operationId, String authorizationReference, long amount) {
         Authorization authorization = authorizations.get(authorizationReference);
+        if (authorization == null) {
+            return process(operationId, () -> BankResponse.declined(UNKNOWN_AUTHORIZATION));
+        }
         BankResponse response = process(operationId, () -> book("REFUND", amount, authorization.currency()));
         if (authorization.cardToken().equals("tok_refund_timeout")) {
             throw new BankTimeoutException();

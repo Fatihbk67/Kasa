@@ -29,7 +29,9 @@
 
 ## Teknolojiler
 
-Java 21, Spring Boot 4, Spring Security, JWT, PostgreSQL 18, Flyway, JUnit, embedded PostgreSQL. Mimari modüler monolittir.
+**Backend:** Java 21, Spring Boot 4, Spring Security, JWT, PostgreSQL 18, Flyway, JUnit, embedded PostgreSQL. Mimari modüler monolittir.
+
+**Frontend:** React 19, TypeScript, Vite, React Router, Vitest. İşletme paneli ve herkese açık ödeme sayfasından oluşur.
 
 ## Testleri çalıştırma
 
@@ -40,9 +42,38 @@ cd backend
 mvn test
 ```
 
-## Uygulamayı çalıştırma
+```bash
+cd frontend
+npm install
+npm test
+```
 
-Docker gerektirir. `KASA_JWT_SECRET` en az 32 bayt olmalıdır; tanımlı değilse uygulama başlamaz. Aşağıdaki PowerShell komutları yalnızca yerel geliştirme içindir.
+## Hızlı başlangıç (Docker gerekmez)
+
+Java, Maven ve Node.js yeterlidir. Backend geçici bir PostgreSQL başlatır ve demo verisi yükler; her başlatmada veriler sıfırlanır.
+
+İlk terminalde:
+
+```bash
+cd backend
+mvn spring-boot:test-run
+```
+
+İkinci terminalde:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Ardından `http://localhost:5173` adresini açın. Demo hesabı `demo@kasa.test`, parolası `demo-parola-12345`'tir. Bu bilgiler yalnızca yerel demo içindir. Yönetici API'sinin yerel token'ı `local-dev-admin-token`'dır.
+
+Denemeye değer akış: **Test ödemesi oluştur** ile ödeme sayfasını açın ve "Banka yanıt vermiyor" kartını seçin. Sayfa bekleme durumuna geçer, yaklaşık bir buçuk dakika içinde kurtarma işi bankaya sorar ve sonuç kendiliğinden güncellenir. Ardından panelden ödemeyi tahsil edip iade edin.
+
+## Docker ile çalıştırma
+
+Bu yol henüz denenmemiştir. `KASA_JWT_SECRET` en az 32 bayt olmalıdır; tanımlı değilse uygulama başlamaz. Aşağıdaki PowerShell komutları yalnızca yerel geliştirme içindir.
 
 ```powershell
 docker compose up -d
@@ -72,6 +103,10 @@ mvn spring-boot:run
 | DELETE | `/api/v1/webhook-endpoints/{id}` | JWT | Devre dışı bırakır, bekleyen teslimatları iptal eder |
 | GET | `/api/v1/webhook-endpoints/{id}/deliveries` | JWT | Son teslimatları gösterir |
 | POST | `/api/v1/webhook-endpoints/deliveries/{id}/retry` | JWT | Başarısız teslimatı yeniden sıraya alır |
+| GET | `/api/v1/balances` | JWT veya `X-Api-Key` | Ödenecek ve yoldaki bakiyeyi döner |
+| POST | `/api/v1/checkout-sessions` | JWT veya `X-Api-Key` | 30 dakikalık ödeme bağlantısı oluşturur |
+| GET | `/api/v1/public/checkout/{id}` | Yok | Ödeme sayfası bilgilerini döner |
+| POST | `/api/v1/public/checkout/{id}/pay` | Yok | Test kartıyla ödeme yapar |
 | GET | `/api/v1/payouts` | JWT veya `X-Api-Key` | Toplu ödemeleri listeler |
 | GET | `/api/v1/payouts/{id}` | JWT veya `X-Api-Key` | Toplu ödemeyi kalemleriyle döner |
 | POST | `/api/v1/admin/settlements/run` | `X-Admin-Token` | Hesap kesimini hemen çalıştırır |
@@ -150,5 +185,5 @@ Banka simüle edilir; davranışı token belirler. Böylece her hata senaryosu i
 - [x] **Ödeme akışı:** Durum makinesi (authorize, capture, void, refund), simüle banka, hata senaryoları
 - [x] **Webhook:** Transactional outbox, `FOR UPDATE SKIP LOCKED`, üstel geri çekilmeli yeniden deneme, HMAC imzası
 - [x] **Hesap kesimi ve mutabakat:** İşletmelere toplu ödeme, banka dosyasıyla karşılaştırma, zamanlanmış işler
-- [ ] **Frontend:** Ödeme sayfası ve işletme paneli (React, TypeScript)
+- [x] **Frontend:** Ödeme sayfası ve işletme paneli (React, TypeScript)
 - [ ] **Vitrin:** k6 yük testi, Prometheus ve Grafana, GitHub Actions, canlı demo
