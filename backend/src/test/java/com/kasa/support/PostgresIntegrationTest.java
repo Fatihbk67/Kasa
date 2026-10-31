@@ -39,6 +39,10 @@ public abstract class PostgresIntegrationTest {
         registry.add("kasa.jwt.secret", () -> "test-only-secret-test-only-secret-1234");
         // Tests run recovery themselves, at the moment they choose.
         registry.add("kasa.payments.recovery-interval", () -> "PT1H");
+        registry.add("kasa.settlement.cron", () -> "-");
+        registry.add("kasa.settlement.recovery-interval", () -> "PT1H");
+        registry.add("kasa.reconciliation.cron", () -> "-");
+        registry.add("kasa.admin.token", () -> "test-admin-token");
         registry.add("kasa.webhooks.dispatch-interval", () -> "PT1H");
         registry.add("kasa.webhooks.max-attempts", () -> 3);
         registry.add("kasa.webhooks.request-timeout", () -> "PT1S");

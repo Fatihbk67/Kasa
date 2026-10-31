@@ -261,6 +261,22 @@ class PaymentApiTest extends PostgresIntegrationTest {
     }
 
     @Test
+    void concurrentRecoveryAppliesARefundOutcomeOnce() throws Exception {
+        String id = authorized(10_000, "tok_refund_timeout");
+        capture(merchant, id, key(), null);
+        refund(merchant, id, key(), 1_000L);
+
+        Concurrency.run(10, i -> () -> payments.recoverStale(Duration.ZERO));
+
+        Map<String, Object> detail = send(merchant, HttpMethod.GET, "/api/v1/payments/" + id, null, null).getBody();
+        assertThat(number((Map<String, Object>) detail.get("payment"), "refundedAmount")).isEqualTo(1_000);
+        assertThat(balance("psp_clearing")).isEqualTo(9_000);
+        assertThat(owner.sql("SELECT count(*) FROM webhook_events WHERE tenant_id = :t AND type = 'payment.refunded'")
+                .param("t", merchant.tenantId()).query(Integer.class).single()).isEqualTo(1);
+        assertBooksBalance();
+    }
+
+    @Test
     void concurrentDuplicateCreatesProduceOnePayment() throws Exception {
         String key = key();
 

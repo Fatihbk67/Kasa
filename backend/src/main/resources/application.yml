@@ -5,6 +5,11 @@ spring:
     url: ${KASA_DB_URL:jdbc:postgresql://localhost:5432/kasa}
     username: ${KASA_DB_APP_USER:kasa_app}
     password: ${KASA_DB_APP_PASSWORD:kasa_app}
+  # One thread per job, so a long settlement run cannot hold up webhook delivery or recovery.
+  task:
+    scheduling:
+      pool:
+        size: 5
   # Migrations run as the schema owner; the application itself connects as a restricted role.
   flyway:
     user: ${KASA_DB_OWNER_USER:kasa}
@@ -31,3 +36,15 @@ kasa:
     max-backoff: PT1H
     # Local development only: permits http and private addresses as webhook targets.
     allow-insecure-targets: false
+  settlement:
+    # Daily, in UTC. Funds become payable once this long has passed since the start of today.
+    cron: "0 0 2 * * *"
+    delay: P1D
+    recovery-interval: PT30S
+    recovery-stale-after: PT1M
+  reconciliation:
+    # Daily, in UTC: compares yesterday's bank statement with our records.
+    cron: "0 0 3 * * *"
+  admin:
+    # The platform operator's API. With no token set, the admin API rejects every request.
+    token: ${KASA_ADMIN_TOKEN:}

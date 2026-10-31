@@ -1,5 +1,6 @@
 package com.kasa.bank;
 
+import java.time.LocalDate;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -17,6 +18,11 @@ public interface BankGateway {
 
     BankResponse refund(UUID operationId, String authorizationReference, long amount);
 
+    BankResponse payout(UUID payoutId, UUID beneficiaryTenantId, long amount, String currency);
+
     /** Returns the result of an earlier call, or empty if the bank never received it. */
     Optional<BankResponse> lookup(UUID operationId);
+
+    /** Returns the day's money movements as CSV: reference,type,amount,currency,booked_at. */
+    String downloadStatement(LocalDate date);
 }
