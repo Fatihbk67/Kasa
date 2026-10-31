@@ -45,6 +45,30 @@ public class LedgerService {
                 .single();
     }
 
+    /** Returns the account, creating it first if needed. Safe to call concurrently. */
+    @Transactional
+    public LedgerAccount ensureAccount(UUID tenantId, String code, AccountType type, String currency,
+                                       boolean allowNegative) {
+        tenantScope.apply(tenantId);
+        jdbc.sql("""
+                        INSERT INTO ledger_accounts (tenant_id, code, type, currency, allow_negative)
+                        VALUES (:tenantId, :code, :type, :currency, :allowNegative)
+                        ON CONFLICT (tenant_id, code, currency) DO NOTHING
+                        """)
+                .param("tenantId", tenantId)
+                .param("code", code)
+                .param("type", type.name())
+                .param("currency", currency)
+                .param("allowNegative", allowNegative)
+                .update();
+        return jdbc.sql("SELECT * FROM ledger_accounts WHERE tenant_id = :tenantId AND code = :code AND currency = :currency")
+                .param("tenantId", tenantId)
+                .param("code", code)
+                .param("currency", currency)
+                .query(LedgerService::mapAccount)
+                .single();
+    }
+
     @Transactional(readOnly = true)
     public LedgerAccount getAccount(UUID tenantId, UUID accountId) {
         tenantScope.apply(tenantId);

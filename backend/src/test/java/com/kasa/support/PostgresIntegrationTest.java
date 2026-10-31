@@ -37,6 +37,8 @@ public abstract class PostgresIntegrationTest {
         registry.add("spring.flyway.user", () -> "postgres");
         registry.add("spring.flyway.password", () -> "postgres");
         registry.add("kasa.jwt.secret", () -> "test-only-secret-test-only-secret-1234");
+        // Tests run recovery themselves, at the moment they choose.
+        registry.add("kasa.payments.recovery-interval", () -> "PT1H");
     }
 
     private static EmbeddedPostgres startPostgres() {

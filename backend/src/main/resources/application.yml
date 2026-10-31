@@ -14,3 +14,8 @@ kasa:
   jwt:
     secret: ${KASA_JWT_SECRET}
     ttl: 1h
+  payments:
+    fee-basis-points: 250
+    recovery-interval: PT30S
+    # Longer than any bank call can take, so the job never races a request that is still in flight.
+    recovery-stale-after: PT1M

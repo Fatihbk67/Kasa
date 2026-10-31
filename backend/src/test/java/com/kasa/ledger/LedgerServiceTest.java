@@ -6,17 +6,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.Callable;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
+import com.kasa.support.Concurrency;
 import com.kasa.support.PostgresIntegrationTest;
 
 class LedgerServiceTest extends PostgresIntegrationTest {
@@ -115,7 +110,7 @@ class LedgerServiceTest extends PostgresIntegrationTest {
 
     @Test
     void concurrentDuplicatesPostExactlyOnce() throws Exception {
-        List<PostedEntry> results = runConcurrently(20, i -> () -> capture("capture-1", 1_000, 0));
+        List<PostedEntry> results = Concurrency.run(20, i -> () -> capture("capture-1", 1_000, 0));
 
         assertThat(results.stream().filter(result -> !result.replayed())).hasSize(1);
         assertThat(results.stream().map(PostedEntry::entryId).distinct()).hasSize(1);
@@ -126,7 +121,7 @@ class LedgerServiceTest extends PostgresIntegrationTest {
     void concurrentPayoutsCannotOverdraw() throws Exception {
         capture("capture-1", 1_000, 0);
 
-        List<Boolean> results = runConcurrently(50, i -> () -> {
+        List<Boolean> results = Concurrency.run(50, i -> () -> {
             try {
                 payout("payout-" + i, 100);
                 return true;
@@ -145,7 +140,7 @@ class LedgerServiceTest extends PostgresIntegrationTest {
         UUID a = ledger.createAccount(tenant, "a", AccountType.ASSET, "TRY", true).id();
         UUID b = ledger.createAccount(tenant, "b", AccountType.ASSET, "TRY", true).id();
 
-        List<PostedEntry> results = runConcurrently(100, i -> () -> {
+        List<PostedEntry> results = Concurrency.run(100, i -> () -> {
             UUID from = i % 2 == 0 ? a : b;
             UUID to = i % 2 == 0 ? b : a;
             return ledger.post(tenant, new NewJournalEntry("transfer-" + i, null, List.of(
@@ -256,34 +251,5 @@ class LedgerServiceTest extends PostgresIntegrationTest {
                 .param("d", direction)
                 .param("amount", amount)
                 .update();
-    }
-
-    private interface TaskFactory<T> {
-        Callable<T> create(int index);
-    }
-
-    /** Releases all tasks at once to maximise contention. A task's unexpected exception fails the test. */
-    private <T> List<T> runConcurrently(int count, TaskFactory<T> factory) throws Exception {
-        CountDownLatch start = new CountDownLatch(1);
-        try (ExecutorService pool = Executors.newFixedThreadPool(count)) {
-            List<Future<T>> futures = new ArrayList<>();
-            for (int i = 0; i < count; i++) {
-                Callable<T> task = factory.create(i);
-                futures.add(pool.submit(() -> {
-                    start.await();
-                    return task.call();
-                }));
-            }
-            start.countDown();
-            List<T> results = new ArrayList<>();
-            for (Future<T> future : futures) {
-                try {
-                    results.add(future.get());
-                } catch (ExecutionException e) {
-                    throw new AssertionError("concurrent task failed", e.getCause());
-                }
-            }
-            return results;
-        }
     }
 }

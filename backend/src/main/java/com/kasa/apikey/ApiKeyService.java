@@ -2,7 +2,6 @@ package com.kasa.apikey;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.OffsetDateTime;
 import java.util.HexFormat;
@@ -18,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.kasa.common.Hashes;
 import com.kasa.tenant.TenantScope;
 
 @Service
@@ -115,11 +115,6 @@ public class ApiKeyService {
 
     // A fast hash is safe here: unlike a password, the key has 256 random bits, so guessing is not feasible.
     private static String sha256(String value) {
-        try {
-            byte[] hash = MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(hash);
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException(e);
-        }
+        return Hashes.sha256Hex(value);
     }
 }
