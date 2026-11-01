@@ -112,14 +112,23 @@ public class PaymentService {
         });
     }
 
-    public PaymentPage list(UUID tenantId, PaymentStatus statusFilter, UUID before, int limit) {
+    public PaymentPage list(UUID tenantId, PaymentFilter filter, UUID before, int limit) {
         return tx.execute(status -> {
             tenantScope.apply(tenantId);
-            List<Payment> rows = store.list(statusFilter, before, limit + 1);
+            List<Payment> rows = store.list(filter, before, limit + 1);
             boolean hasMore = rows.size() > limit;
             List<Payment> page = hasMore ? rows.subList(0, limit) : rows;
             return new PaymentPage(page.stream().map(PaymentView::of).toList(), hasMore ? page.getLast().id() : null);
         });
+    }
+
+    public record CsvExport(byte[] content, boolean truncated) {
+    }
+
+    /** Reports whether rows were left out, so a cut-off report can never be mistaken for a complete one. */
+    public CsvExport exportCsv(UUID tenantId, PaymentFilter filter, int limit) {
+        PaymentPage page = list(tenantId, filter, null, limit);
+        return new CsvExport(PaymentCsv.write(page.items()), page.nextCursor() != null);
     }
 
     /** Asks the bank what happened to operations stuck in PENDING. Returns how many were resolved. */

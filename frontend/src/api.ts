@@ -87,6 +87,29 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
   return (text ? JSON.parse(text) : undefined) as T;
 }
 
+export async function downloadFile(path: string, filename: string): Promise<{ truncated: boolean }> {
+  const token = getToken();
+  let response: Response;
+  try {
+    response = await fetch(`/api/v1${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  } catch {
+    throw new ApiError(0, 'Sunucuya ulaşılamadı. Bağlantınızı kontrol edip yeniden deneyin.');
+  }
+  if (response.status === 401 && token) {
+    onSessionExpired();
+  }
+  if (!response.ok) {
+    throw new ApiError(response.status, MESSAGES[response.status] ?? 'Beklenmeyen bir hata oluştu.');
+  }
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+  return { truncated: response.headers.get('X-Export-Truncated') === 'true' };
+}
+
 /** Created once per user intent, so a double click or a retried request cannot move money twice. */
 export function newIdempotencyKey(): string {
   return crypto.randomUUID();

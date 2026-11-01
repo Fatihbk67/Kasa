@@ -6,6 +6,7 @@ import { useFetch } from './useFetch';
 
 const NAV = [
   { to: '/', label: 'Genel bakış', end: true },
+  { to: '/analytics', label: 'Analiz', end: false },
   { to: '/payments', label: 'Ödemeler', end: false },
   { to: '/payouts', label: 'Hesap kesimleri', end: false },
   { to: '/developers', label: 'Geliştiriciler', end: false },

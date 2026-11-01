@@ -1,8 +1,12 @@
 package com.kasa.payment;
 
+import java.time.LocalDate;
 import java.util.UUID;
 
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -33,6 +37,8 @@ public class PaymentController {
 
     private static final String IDEMPOTENCY_KEY = "Idempotency-Key";
     private static final int MAX_PAGE_SIZE = 100;
+    private static final int MAX_EXPORT_ROWS = 10_000;
+    private static final int MAX_QUERY_LENGTH = 200;
 
     /** Accepts only a token, so a raw card number can never enter the system. */
     public record CreatePaymentRequest(
@@ -68,12 +74,41 @@ public class PaymentController {
     @GetMapping
     public PaymentPage list(Authentication authentication,
                             @RequestParam(required = false) PaymentStatus status,
+                            @RequestParam(required = false) String q,
+                            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+                            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+                            @RequestParam(required = false) Long minAmount,
+                            @RequestParam(required = false) Long maxAmount,
                             @RequestParam(required = false) UUID before,
                             @RequestParam(defaultValue = "20") int limit) {
         if (limit < 1 || limit > MAX_PAGE_SIZE) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "limit must be between 1 and " + MAX_PAGE_SIZE);
         }
-        return payments.list(CurrentTenant.of(authentication), status, before, limit);
+        return payments.list(CurrentTenant.of(authentication), filter(status, q, from, to, minAmount, maxAmount), before, limit);
+    }
+
+    @GetMapping("/export")
+    public ResponseEntity<byte[]> export(Authentication authentication,
+                                         @RequestParam(required = false) PaymentStatus status,
+                                         @RequestParam(required = false) String q,
+                                         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+                                         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+                                         @RequestParam(required = false) Long minAmount,
+                                         @RequestParam(required = false) Long maxAmount) {
+        PaymentService.CsvExport export = payments.exportCsv(CurrentTenant.of(authentication),
+                filter(status, q, from, to, minAmount, maxAmount), MAX_EXPORT_ROWS);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("text/csv; charset=UTF-8"))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"kasa-odemeler.csv\"")
+                .header("X-Export-Truncated", String.valueOf(export.truncated()))
+                .body(export.content());
+    }
+
+    private static PaymentFilter filter(PaymentStatus status, String q, LocalDate from, LocalDate to, Long minAmount, Long maxAmount) {
+        if (q != null && q.length() > MAX_QUERY_LENGTH) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "q is too long");
+        }
+        return new PaymentFilter(status, q == null || q.isBlank() ? null : q.trim(), from, to, minAmount, maxAmount);
     }
 
     @PostMapping("/{id}/capture")

@@ -14,7 +14,11 @@ const PAYMENT_STATUS: Record<PaymentStatus, { label: string; tone: Tone }> = {
   REFUNDED: { label: 'İade edildi', tone: 'neutral' },
 };
 
-export const PAYMENT_STATUS_OPTIONS = Object.entries(PAYMENT_STATUS).map(([value, { label }]) => ({ value, label }));
+export function paymentStatusLabel(status: PaymentStatus): string {
+  return PAYMENT_STATUS[status].label;
+}
+
+export const PAYMENT_STATUS_OPTIONS =Object.entries(PAYMENT_STATUS).map(([value, { label }]) => ({ value, label }));
 
 const FAILURE_CODES: Record<string, string> = {
   card_declined: 'Kart bankası işlemi reddetti.',

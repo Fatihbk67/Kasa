@@ -45,6 +45,10 @@ public class ReconciliationService {
     public record RunDetail(RunView run, List<DiscrepancyView> discrepancies) {
     }
 
+    public record PlatformOverview(long tenantCount, long paymentCount, long capturesLastDay, long pendingOperations,
+                                   long pendingPayouts, long failedPayouts, long queuedWebhooks, long failedWebhooks) {
+    }
+
     private record Movement(UUID sourceId, UUID tenantId, String type, long amount, String currency, String reference) {
     }
 
@@ -107,6 +111,23 @@ public class ReconciliationService {
         }
         discrepancies.forEach(discrepancy -> metrics.count("kasa.reconciliation.discrepancies", "kind", discrepancy.kind()));
         return get(runId);
+    }
+
+    public PlatformOverview overview() {
+        return jdbc.sql("""
+                        SELECT o.*, b.pending_payment_operations, b.pending_payouts, b.queued_webhook_deliveries
+                        FROM platform_overview() o, platform_backlog_counts() b
+                        """)
+                .query((rs, rowNum) -> new PlatformOverview(
+                        rs.getLong("tenant_count"),
+                        rs.getLong("payment_count"),
+                        rs.getLong("captures_last_day"),
+                        rs.getLong("pending_payment_operations"),
+                        rs.getLong("pending_payouts"),
+                        rs.getLong("failed_payouts"),
+                        rs.getLong("queued_webhook_deliveries"),
+                        rs.getLong("failed_webhook_deliveries")))
+                .single();
     }
 
     public List<RunView> listRuns() {

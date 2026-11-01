@@ -3,6 +3,8 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from './auth';
 import { Layout } from './Layout';
+import { AdminHome, AdminRunDetail } from './pages/Admin';
+import { Analytics } from './pages/Analytics';
 import { Checkout } from './pages/Checkout';
 import { Developers } from './pages/Developers';
 import { Login, Register } from './pages/Auth';
@@ -25,8 +27,11 @@ createRoot(document.getElementById('root')!).render(
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/pay/:id" element={<Checkout />} />
+          <Route path="/admin" element={<AdminHome />} />
+          <Route path="/admin/reconciliation/:id" element={<AdminRunDetail />} />
           <Route element={<Protected />}>
             <Route index element={<Overview />} />
+            <Route path="analytics" element={<Analytics />} />
             <Route path="payments" element={<Payments />} />
             <Route path="payments/:id" element={<PaymentDetailPage />} />
             <Route path="payouts" element={<Payouts />} />

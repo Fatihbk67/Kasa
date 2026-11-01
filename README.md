@@ -75,6 +75,8 @@ java -Djdk.net.unixdomain.tmpdir=backend/target load-test/LoadTest.java http://l
 - **Reddedilen ödemede para kaybolmaz:** Para önce "yolda" hesabına alınır. Banka reddederse tutar ve kalemler geri döner, sonraki çalıştırma yeniden dener.
 - **Parola denemeleri yavaşlatılır:** Giriş, kayıt ve herkese açık ödeme uçlarında istek sınırı vardır; aşılınca `429` ve `Retry-After` döner. Sayaçlar sunucu başınadır, birden çok sunucuda ortak depo gerekir.
 - **Sistem gözlemlenebilir:** Sonucu bilinmeyen banka işlemleri, webhook kuyruğu ve mutabakat farkları Prometheus metriği olarak yayımlanır. Metrik ucu yalnızca yönetici token'ıyla açılır.
+- **Raporlar defterle aynı sonucu verir:** Analiz paneli tutarları paranın gerçekten hareket ettiği güne yazar ve net kazanç işletmenin defter bakiyesiyle uyuşur.
+- **Dışa aktarılan dosya saldırı aracı olamaz:** CSV'de formül gibi başlayan açıklamalar etkisizleştirilir (CSV injection). 10.000 satırda kesilen rapor kullanıcıya açıkça bildirilir.
 - **Bankayla farklar yakalanır:** Günlük mutabakat banka dosyasını kayıtlarımızla karşılaştırır. Farkları raporlar ama düzeltmez, çünkü hangi tarafın doğru olduğuna insan karar vermelidir.
 
 ## Teknolojiler
@@ -118,6 +120,8 @@ npm run dev
 ```
 
 Ardından `http://localhost:5173` adresini açın. Demo hesabı `demo@kasa.test`, parolası `demo-parola-12345`'tir. Bu bilgiler yalnızca yerel demo içindir. Yönetici API'sinin yerel token'ı `local-dev-admin-token`'dır.
+
+Demo verisi 60 günlük geçmiş içerir. Yönetici paneli `/admin` adresindedir ve yerelde yukarıdaki token ile açılır; demo için iki banka hatası hazır gelir. Canlı ortamda yönetici token'ı Render'daki `KASA_ADMIN_TOKEN` değeridir.
 
 Sunucuyu kapatırken terminalde `Ctrl+C` kullanın. Zorla sonlandırılırsa geçici PostgreSQL süreçleri açık kalabilir.
 
@@ -169,7 +173,9 @@ Başka bir platformda aynı değişkenlere ek olarak `KASA_DB_APP_USER=kasa_app`
 | GET | `/api/v1/api-keys` | JWT | Anahtarları gizli kısımları olmadan listeler |
 | DELETE | `/api/v1/api-keys/{id}` | JWT | Anahtarı iptal eder |
 | POST | `/api/v1/payments` | JWT veya `X-Api-Key` | Ödeme oluşturur ve provizyon alır |
-| GET | `/api/v1/payments` | JWT veya `X-Api-Key` | Ödemeleri listeler (`status`, `limit`, `before`) |
+| GET | `/api/v1/payments` | JWT veya `X-Api-Key` | Ödemeleri arar ve listeler (`q`, `status`, `from`, `to`, `minAmount`, `maxAmount`, `limit`, `before`) |
+| GET | `/api/v1/payments/export` | JWT veya `X-Api-Key` | Filtrelenen ödemeleri Excel uyumlu CSV olarak indirir (en fazla 10.000 satır) |
+| GET | `/api/v1/analytics/summary` | JWT veya `X-Api-Key` | Hacim, net kazanç, onay oranı ve reddedilme nedenleri (`days`: 7, 30, 90) |
 | GET | `/api/v1/payments/{id}` | JWT veya `X-Api-Key` | Ödemeyi işlem geçmişiyle döner |
 | POST | `/api/v1/payments/{id}/capture` | JWT veya `X-Api-Key` | Tutarın tamamını veya bir kısmını tahsil eder |
 | POST | `/api/v1/payments/{id}/void` | JWT veya `X-Api-Key` | Provizyonu iptal eder |
@@ -185,6 +191,7 @@ Başka bir platformda aynı değişkenlere ek olarak `KASA_DB_APP_USER=kasa_app`
 | POST | `/api/v1/public/checkout/{id}/pay` | Yok | Test kartıyla ödeme yapar |
 | GET | `/api/v1/payouts` | JWT veya `X-Api-Key` | Toplu ödemeleri listeler |
 | GET | `/api/v1/payouts/{id}` | JWT veya `X-Api-Key` | Toplu ödemeyi kalemleriyle döner |
+| GET | `/api/v1/admin/overview` | `X-Admin-Token` | Platform genelinde toplamlar ve bekleyen işler |
 | POST | `/api/v1/admin/settlements/run` | `X-Admin-Token` | Hesap kesimini hemen çalıştırır |
 | POST | `/api/v1/admin/reconciliation/runs?date=` | `X-Admin-Token` | Tarih için mutabakat çalıştırır |
 | GET | `/api/v1/admin/reconciliation/runs` | `X-Admin-Token` | Mutabakat geçmişini listeler |
@@ -264,3 +271,6 @@ Banka simüle edilir; davranışı token belirler. Böylece her hata senaryosu i
 - [x] **Frontend:** Ödeme sayfası ve işletme paneli (React, TypeScript)
 - [x] **Vitrin:** İstek sınırı, yük testi, Prometheus metrikleri, Grafana panosu, GitHub Actions, Docker imajı
 - [x] **Canlı demo:** Render üzerinde uygulama, Neon üzerinde PostgreSQL
+- [x] **Analiz ve yönetim:** Grafikli analiz paneli, gelişmiş arama ve filtreler, CSV dışa aktarma, platform yönetim paneli
+- [ ] **Ekip ve denetim:** Ekip üyeleri, rol bazlı yetkiler, değiştirilemez denetim günlüğü, ayarlar
+- [ ] **Yeni iş alanları:** İtiraz (chargeback) akışı, müşteri kayıtları, paylaşılabilir ödeme bağlantıları

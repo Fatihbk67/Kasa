@@ -45,6 +45,11 @@ public class AdminController {
         return reconciliation.get(id);
     }
 
+    @GetMapping("/overview")
+    public ReconciliationService.PlatformOverview overview() {
+        return reconciliation.overview();
+    }
+
     /** Settles everything completed so far, without waiting for the daily job. */
     @PostMapping("/settlements/run")
     public Map<String, Integer> settleNow() {

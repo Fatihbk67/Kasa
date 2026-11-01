@@ -4,12 +4,16 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
+
+import com.kasa.common.BusinessCalendar;
 
 /** SQL for payments. Every method except {@link #findStaleOperations} expects a transaction bound to a tenant. */
 @Component
@@ -106,19 +110,51 @@ class PaymentStore {
                 .optional();
     }
 
-    List<Payment> list(PaymentStatus status, UUID before, int limit) {
-        String sql = "SELECT * FROM payments WHERE true"
-                + (status == null ? "" : " AND status = :status")
-                + (before == null ? "" : " AND (created_at, id) < (SELECT created_at, id FROM payments WHERE id = :before)")
-                + " ORDER BY created_at DESC, id DESC LIMIT :limit";
-        JdbcClient.StatementSpec statement = jdbc.sql(sql).param("limit", limit);
-        if (status != null) {
-            statement = statement.param("status", status.name());
+    List<Payment> list(PaymentFilter filter, UUID before, int limit) {
+        StringBuilder sql = new StringBuilder("SELECT * FROM payments WHERE true");
+        Map<String, Object> params = new HashMap<>();
+        params.put("limit", limit);
+        if (filter.status() != null) {
+            sql.append(" AND status = :status");
+            params.put("status", filter.status().name());
+        }
+        if (filter.query() != null) {
+            addTextSearch(filter.query(), sql, params);
+        }
+        if (filter.from() != null) {
+            sql.append(" AND created_at >= :from");
+            params.put("from", BusinessCalendar.startOf(filter.from()));
+        }
+        if (filter.to() != null) {
+            sql.append(" AND created_at < :to");
+            params.put("to", BusinessCalendar.startOf(filter.to().plusDays(1)));
+        }
+        if (filter.minAmount() != null) {
+            sql.append(" AND amount >= :minAmount");
+            params.put("minAmount", filter.minAmount());
+        }
+        if (filter.maxAmount() != null) {
+            sql.append(" AND amount <= :maxAmount");
+            params.put("maxAmount", filter.maxAmount());
         }
         if (before != null) {
-            statement = statement.param("before", before);
+            sql.append(" AND (created_at, id) < (SELECT created_at, id FROM payments WHERE id = :before)");
+            params.put("before", before);
         }
-        return statement.query(PaymentStore::mapPayment).list();
+        sql.append(" ORDER BY created_at DESC, id DESC LIMIT :limit");
+        return jdbc.sql(sql.toString()).params(params).query(PaymentStore::mapPayment).list();
+    }
+
+    private static void addTextSearch(String query, StringBuilder sql, Map<String, Object> params) {
+        try {
+            params.put("id", UUID.fromString(query));
+            sql.append(" AND id = :id");
+        } catch (IllegalArgumentException notAnId) {
+            // Escaped so a typed % or _ means itself rather than a wildcard.
+            String escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+            params.put("description", "%" + escaped + "%");
+            sql.append(" AND description ILIKE :description");
+        }
     }
 
     void update(UUID paymentId, PaymentStatus status, long captured, long refunded, long fee, String bankReference,

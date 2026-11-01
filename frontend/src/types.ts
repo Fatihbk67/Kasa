@@ -118,6 +118,67 @@ export interface CheckoutSession {
   expiresAt: string;
 }
 
+export interface DayPoint {
+  day: string;
+  captured: number;
+  refunded: number;
+  captureCount: number;
+}
+
+export interface AnalyticsSummary {
+  days: number;
+  currency: string;
+  totals: {
+    captured: number;
+    refunded: number;
+    fees: number;
+    net: number;
+    captureCount: number;
+    authorizationAttempts: number;
+    authorizationsApproved: number;
+  };
+  daily: DayPoint[];
+  statuses: { status: PaymentStatus; count: number; amount: number }[];
+  failures: { code: string; count: number }[];
+}
+
+export interface PlatformOverview {
+  tenantCount: number;
+  paymentCount: number;
+  capturesLastDay: number;
+  pendingOperations: number;
+  pendingPayouts: number;
+  failedPayouts: number;
+  queuedWebhooks: number;
+  failedWebhooks: number;
+}
+
+export interface ReconciliationRun {
+  id: string;
+  statementDate: string;
+  status: 'COMPLETED' | 'FAILED';
+  bankLineCount: number;
+  matchedCount: number;
+  discrepancyCount: number;
+  error: string | null;
+  createdAt: string;
+}
+
+export interface Discrepancy {
+  kind: string;
+  bankReference: string | null;
+  tenantId: string | null;
+  sourceId: string | null;
+  expectedAmount: number | null;
+  actualAmount: number | null;
+  detail: string | null;
+}
+
+export interface ReconciliationDetail {
+  run: ReconciliationRun;
+  discrepancies: Discrepancy[];
+}
+
 export interface Tenant {
   id: string;
   name: string;
