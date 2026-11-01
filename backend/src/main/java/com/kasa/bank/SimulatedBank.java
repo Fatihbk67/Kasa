@@ -2,21 +2,25 @@ package com.kasa.bank;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Stands in for a real bank. The card token decides how the bank behaves, so every failure mode can be
- * reproduced on demand. State lives in memory, so a restart loses the bank's records.
+ * reproduced on demand. Its records live in their own tables, so a restart of our application does not make
+ * the bank forget what it did. Only the test settings stay in memory.
  */
 @Component
 public class SimulatedBank implements BankGateway {
@@ -34,14 +38,17 @@ public class SimulatedBank implements BankGateway {
     private record StatementLine(String reference, String type, long amount, String currency, Instant bookedAt) {
     }
 
-    // After a restart the in-memory records are gone, and a real bank would also refuse a reference it cannot find.
     private static final String UNKNOWN_AUTHORIZATION = "unknown_authorization";
 
-    private final Map<UUID, BankResponse> processed = new ConcurrentHashMap<>();
-    private final Map<String, Authorization> authorizations = new ConcurrentHashMap<>();
+    private final JdbcClient jdbc;
+    private final TransactionTemplate tx;
     private final Map<UUID, PayoutBehavior> payoutBehaviors = new ConcurrentHashMap<>();
-    private final Map<LocalDate, List<StatementLine>> statements = new ConcurrentHashMap<>();
     private final Map<LocalDate, String> malformedStatements = new ConcurrentHashMap<>();
+
+    public SimulatedBank(JdbcClient jdbc, TransactionTemplate tx) {
+        this.jdbc = jdbc;
+        this.tx = tx;
+    }
 
     @Override
     public BankResponse authorize(UUID operationId, String cardToken, long amount, String currency) {
@@ -61,10 +68,11 @@ public class SimulatedBank implements BankGateway {
 
     @Override
     public BankResponse capture(UUID operationId, String authorizationReference, long amount) {
-        Authorization authorization = authorizations.get(authorizationReference);
-        if (authorization == null) {
+        Optional<Authorization> found = findAuthorization(authorizationReference);
+        if (found.isEmpty()) {
             return process(operationId, () -> BankResponse.declined(UNKNOWN_AUTHORIZATION));
         }
+        Authorization authorization = found.get();
         return switch (authorization.cardToken()) {
             case "tok_capture_declined" -> process(operationId, () -> BankResponse.declined("capture_rejected"));
             case "tok_capture_timeout" -> {
@@ -82,10 +90,11 @@ public class SimulatedBank implements BankGateway {
 
     @Override
     public BankResponse refund(UUID operationId, String authorizationReference, long amount) {
-        Authorization authorization = authorizations.get(authorizationReference);
-        if (authorization == null) {
+        Optional<Authorization> found = findAuthorization(authorizationReference);
+        if (found.isEmpty()) {
             return process(operationId, () -> BankResponse.declined(UNKNOWN_AUTHORIZATION));
         }
+        Authorization authorization = found.get();
         BankResponse response = process(operationId, () -> book("REFUND", amount, authorization.currency()));
         if (authorization.cardToken().equals("tok_refund_timeout")) {
             throw new BankTimeoutException();
@@ -119,7 +128,12 @@ public class SimulatedBank implements BankGateway {
 
     @Override
     public Optional<BankResponse> lookup(UUID operationId) {
-        return Optional.ofNullable(processed.get(operationId));
+        return jdbc.sql("SELECT approved, reference, decline_code FROM sim_bank_operations WHERE operation_id = :id")
+                .param("id", operationId)
+                .query((rs, rowNum) -> rs.getBoolean("approved")
+                        ? BankResponse.approved(rs.getString("reference"))
+                        : BankResponse.declined(rs.getString("decline_code")))
+                .optional();
     }
 
     @Override
@@ -128,7 +142,21 @@ public class SimulatedBank implements BankGateway {
         if (malformed != null) {
             return malformed;
         }
-        String lines = statements.getOrDefault(date, List.of()).stream()
+        List<StatementLine> rows = jdbc.sql("""
+                        SELECT reference, type, amount, currency, booked_at
+                        FROM sim_bank_statement_lines
+                        WHERE booked_on = :date
+                        ORDER BY id
+                        """)
+                .param("date", date)
+                .query((rs, rowNum) -> new StatementLine(
+                        rs.getString("reference"),
+                        rs.getString("type"),
+                        rs.getLong("amount"),
+                        rs.getString("currency"),
+                        rs.getObject("booked_at", OffsetDateTime.class).toInstant()))
+                .list();
+        String lines = rows.stream()
                 .map(line -> String.join(",", line.reference(), line.type(), String.valueOf(line.amount()),
                         line.currency(), line.bookedAt().toString()))
                 .collect(Collectors.joining("\n"));
@@ -142,36 +170,47 @@ public class SimulatedBank implements BankGateway {
     // The methods below reproduce errors found in real bank files, so reconciliation can be exercised.
 
     public void simulateLineMissing(String reference) {
-        statements.values().forEach(lines -> lines.removeIf(line -> line.reference().equals(reference)));
+        jdbc.sql("DELETE FROM sim_bank_statement_lines WHERE reference = :reference")
+                .param("reference", reference)
+                .update();
     }
 
     public void simulateAmountChange(String reference, long amount) {
-        replaceLine(reference, line -> new StatementLine(reference, line.type(), amount, line.currency(), line.bookedAt()));
+        jdbc.sql("UPDATE sim_bank_statement_lines SET amount = :amount WHERE reference = :reference")
+                .param("amount", amount)
+                .param("reference", reference)
+                .update();
     }
 
     public void simulateCurrencyChange(String reference, String currency) {
-        replaceLine(reference, line -> new StatementLine(reference, line.type(), line.amount(), currency, line.bookedAt()));
+        jdbc.sql("UPDATE sim_bank_statement_lines SET currency = :currency WHERE reference = :reference")
+                .param("currency", currency)
+                .param("reference", reference)
+                .update();
     }
 
     public void simulateDuplicateLine(String reference) {
-        statements.values().forEach(lines -> lines.stream()
-                .filter(line -> line.reference().equals(reference))
-                .findFirst()
-                .ifPresent(lines::add));
+        jdbc.sql("""
+                        INSERT INTO sim_bank_statement_lines (reference, type, amount, currency, booked_at, booked_on)
+                        SELECT reference, type, amount, currency, booked_at, booked_on
+                        FROM sim_bank_statement_lines
+                        WHERE reference = :reference
+                        ORDER BY id
+                        LIMIT 1
+                        """)
+                .param("reference", reference)
+                .update();
     }
 
     public void simulateUnknownLine(LocalDate date, String reference, long amount) {
-        linesOf(date).add(new StatementLine(reference, "CAPTURE", amount, "TRY", Instant.now()));
+        insertLine(reference, "CAPTURE", amount, "TRY", Instant.now(), date);
     }
 
     public void simulateBookedOn(String reference, LocalDate date) {
-        statements.values().forEach(lines -> lines.stream()
-                .filter(line -> line.reference().equals(reference))
-                .findFirst()
-                .ifPresent(line -> {
-                    lines.remove(line);
-                    linesOf(date).add(line);
-                }));
+        jdbc.sql("UPDATE sim_bank_statement_lines SET booked_on = :date WHERE reference = :reference")
+                .param("date", date)
+                .param("reference", reference)
+                .update();
     }
 
     public void simulateMalformedStatement(LocalDate date, String content) {
@@ -182,31 +221,68 @@ public class SimulatedBank implements BankGateway {
         malformedStatements.remove(date);
     }
 
-    private void replaceLine(String reference, java.util.function.UnaryOperator<StatementLine> change) {
-        statements.values().forEach(lines -> lines.replaceAll(
-                line -> line.reference().equals(reference) ? change.apply(line) : line));
+    private Optional<Authorization> findAuthorization(String reference) {
+        return jdbc.sql("SELECT card_token, currency FROM sim_bank_authorizations WHERE reference = :reference")
+                .param("reference", reference)
+                .query((rs, rowNum) -> new Authorization(rs.getString("card_token"), rs.getString("currency")))
+                .optional();
     }
 
-    private List<StatementLine> linesOf(LocalDate date) {
-        return statements.computeIfAbsent(date, day -> new CopyOnWriteArrayList<>());
-    }
-
+    /**
+     * Repeating an operation id returns the first result and moves no money. The lock makes that hold when two
+     * callers arrive together, and the transaction keeps a booked line and its result from being split by a crash.
+     */
     private BankResponse process(UUID operationId, Supplier<BankResponse> outcome) {
-        return processed.computeIfAbsent(operationId, id -> outcome.get());
+        return tx.execute(status -> {
+            jdbc.sql("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))")
+                    .param("key", "bank:" + operationId)
+                    .query((rs, rowNum) -> 1)
+                    .single();
+            return lookup(operationId).orElseGet(() -> {
+                BankResponse response = outcome.get();
+                jdbc.sql("""
+                                INSERT INTO sim_bank_operations (operation_id, approved, reference, decline_code)
+                                VALUES (:id, :approved, :reference, :declineCode)
+                                """)
+                        .param("id", operationId)
+                        .param("approved", response.approved())
+                        .param("reference", response.reference())
+                        .param("declineCode", response.declineCode())
+                        .update();
+                return response;
+            });
+        });
     }
 
     private BankResponse approveAuthorization(String cardToken, String currency) {
         BankResponse response = approve();
-        authorizations.put(response.reference(), new Authorization(cardToken, currency));
+        jdbc.sql("INSERT INTO sim_bank_authorizations (reference, card_token, currency) VALUES (:reference, :token, :currency)")
+                .param("reference", response.reference())
+                .param("token", cardToken)
+                .param("currency", currency)
+                .update();
         return response;
     }
 
     private BankResponse book(String type, long amount, String currency) {
         BankResponse response = approve();
         Instant now = Instant.now();
-        linesOf(LocalDate.ofInstant(now, ZoneOffset.UTC))
-                .add(new StatementLine(response.reference(), type, amount, currency, now));
+        insertLine(response.reference(), type, amount, currency, now, LocalDate.ofInstant(now, ZoneOffset.UTC));
         return response;
+    }
+
+    private void insertLine(String reference, String type, long amount, String currency, Instant bookedAt, LocalDate bookedOn) {
+        jdbc.sql("""
+                        INSERT INTO sim_bank_statement_lines (reference, type, amount, currency, booked_at, booked_on)
+                        VALUES (:reference, :type, :amount, :currency, :bookedAt, :bookedOn)
+                        """)
+                .param("reference", reference)
+                .param("type", type)
+                .param("amount", amount)
+                .param("currency", currency)
+                .param("bookedAt", bookedAt.truncatedTo(ChronoUnit.MICROS).atOffset(ZoneOffset.UTC))
+                .param("bookedOn", bookedOn)
+                .update();
     }
 
     private static BankResponse approve() {

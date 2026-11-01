@@ -1,6 +1,7 @@
 package com.kasa;
 
 import java.io.IOException;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -31,7 +32,7 @@ import io.zonky.test.db.postgres.embedded.EmbeddedPostgres;
 /**
  * Runs the real application with a throwaway PostgreSQL and demo data, needing nothing installed but Java:
  * {@code mvn spring-boot:test-run}. Lives in the test tree so it can never ship in the production build.
- * Everything is recreated on each start, because the simulated bank keeps its own records in memory too.
+ * Everything is recreated on each start, unless KASA_LOCAL_DATA_DIR names a folder to keep the data in.
  */
 public final class LocalDevApplication {
 
@@ -46,13 +47,21 @@ public final class LocalDevApplication {
     public static void main(String[] args) throws IOException {
         // initdb rejects non-ASCII OS locale names such as "Turkish_Türkiye.1254".
         // Durable commits, as in production. The embedded default turns them off, which would flatter any load test.
-        EmbeddedPostgres postgres = EmbeddedPostgres.builder()
+        EmbeddedPostgres.Builder builder = EmbeddedPostgres.builder()
                 .setLocaleConfig("locale", "C")
-                .setServerConfig("synchronous_commit", "on")
-                .start();
-        JdbcClient.create(postgres.getPostgresDatabase())
-                .sql("CREATE ROLE kasa_app LOGIN PASSWORD 'kasa_app' NOSUPERUSER NOBYPASSRLS")
-                .update();
+                .setServerConfig("synchronous_commit", "on");
+        String dataDirectory = System.getenv("KASA_LOCAL_DATA_DIR");
+        if (dataDirectory != null && !dataDirectory.isBlank()) {
+            builder.setDataDirectory(Path.of(dataDirectory)).setCleanDataDirectory(false);
+        }
+        EmbeddedPostgres postgres = builder.start();
+        JdbcClient superuser = JdbcClient.create(postgres.getPostgresDatabase());
+        boolean roleExists = superuser.sql("SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'kasa_app')")
+                .query(Boolean.class)
+                .single();
+        if (!roleExists) {
+            superuser.sql("CREATE ROLE kasa_app LOGIN PASSWORD 'kasa_app' NOSUPERUSER NOBYPASSRLS").update();
+        }
 
         String url = "jdbc:postgresql://localhost:" + postgres.getPort() + "/postgres";
         System.setProperty("spring.datasource.url", url);
@@ -69,8 +78,12 @@ public final class LocalDevApplication {
         System.setProperty("management.endpoint.shutdown.access", "unrestricted");
 
         ConfigurableApplicationContext context = SpringApplication.run(KasaApplication.class, args);
+        boolean alreadySeeded = superuser.sql("SELECT EXISTS (SELECT 1 FROM tenants)").query(Boolean.class).single();
+        if (alreadySeeded) {
+            log.info("Kept the data from the last run in {}", dataDirectory);
+            return;
+        }
         UUID tenantId = seedDemoData(context);
-        JdbcClient superuser = JdbcClient.create(postgres.getPostgresDatabase());
         seedHistory(context, tenantId, superuser);
         seedTeam(context, tenantId, superuser);
         seedCustomersLinksAndDisputes(context, tenantId, superuser);

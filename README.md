@@ -39,14 +39,16 @@ Tek dizüstü bilgisayarda (Intel i7-13650HX, 16 GB RAM) yük istemcisi, uygulam
 
 | Senaryo | Akış/sn | Provizyon p95 | Tahsilat p95 | Beklenmeyen yanıt |
 |---|---|---:|---:|---:|
-| 50 eşzamanlı istemci, 20 işletme | 1.025 | 28 ms | 32 ms | 0 |
-| 50 eşzamanlı istemci, tek işletme | 597 | 44 ms | 59 ms | 0 |
+| 50 eşzamanlı istemci, 20 işletme | 879 | 36 ms | 43 ms | 0 |
+| 50 eşzamanlı istemci, tek işletme | 577 | 50 ms | 69 ms | 0 |
 
 Tek işletmede verimin düşmesi beklenen bir durumdur: aynı bakiye satırı ve denetim zinciri kilitlendiği için tahsilatlar sıraya girer. Bu, tutarlılığın bilinçli bedelidir. Hash zincirli denetim günlüğü eklenmeden önceki ölçüm çok işletmeli senaryoda 1.116 akış/sn idi, yani bedeli yaklaşık %8'dir.
 
-Ölçüm sonunda her işletmenin bakiyesi istemcinin bağımsız hesabıyla kuruşu kuruşuna eşleşti. Mutabakat 30.774 akışın ürettiği 31.033 banka satırının 31.031'ini eşleştirdi; kalan iki fark, demo verisine bilerek konan banka hatalarıdır.
+Ölçüm sonunda her işletmenin bakiyesi istemcinin bağımsız hesabıyla kuruşu kuruşuna eşleşti. Mutabakat 26.410 akışın ürettiği 26.669 banka satırının 26.667'sini eşleştirdi; kalan iki fark, demo verisine bilerek konan banka hatalarıdır.
 
-Her senaryo temiz veritabanında ölçüldü. Tek işletme senaryosu, 20 işletmeli ölçümün bıraktığı veriler üzerinde tekrarlanınca 496 akış/sn'ye düştü. Veri büyüdükçe hız kaybı olduğunu gösteriyor; nedeni henüz incelenmedi.
+Simüle bankanın kayıtları da aynı PostgreSQL'e yazılır. Banka bellekteyken çok işletmeli senaryo 1.025 akış/sn ölçülmüştü, yani kalıcılığın bu ortamdaki bedeli yaklaşık %14'tür. Gerçek bir bankanın disk yazmaları bizim veritabanımıza yük bindirmez, ama ağ gecikmesi ekler.
+
+Her senaryo temiz veritabanında ölçüldü. Banka bellekteyken tek işletme senaryosu, 20 işletmeli ölçümün bıraktığı veriler üzerinde tekrarlanınca 597'den 496 akış/sn'ye düşmüştü. Veri büyüdükçe hız kaybı olduğunu gösteriyor; nedeni henüz incelenmedi.
 
 Sınırlar: Banka simüle edildiği için gerçek ağ gecikmesi yoktur. Rakamlar üretim kapasitesi değildir; sistemin bu makinedeki davranışını gösterir. Yeniden üretmek için sunucu çalışırken:
 
@@ -86,6 +88,7 @@ java -Djdk.net.unixdomain.tmpdir=backend/target load-test/LoadTest.java http://l
 - **Son kontenjan bir kez satılır:** 20 kişi aynı anda son yeri ödemeye çalışsa da tek çekim olur. Kontenjan sayaçta tutulmaz, oturumlardan sayılır; yarıda kalan bir ödeme yeri kalıcı olarak kapatamaz.
 - **Kişisel veri silinebilir, mali kayıt kalır:** Müşteri silinince ad ve e-posta boşaltılır, ödemeler kişiyle bağlantısız olarak durur. Değiştirilemeyen denetim günlüğüne müşteri bilgisi hiç yazılmaz, yoksa silinemezdi.
 - **Ziyaretçi müşteri bilgisini değiştiremez:** Herkese açık formda var olan bir e-posta girilirse kayıtlı ad korunur.
+- **Yeniden başlatma bankayı unutturmaz:** Simüle banka da kayıtlarını veritabanında tutar. Kapatmadan önce alınan provizyon, açılınca tahsil edilebilir ve mutabakat eşleşir. Aynı işlem kimliğiyle gelen eşzamanlı çağrılar kilit sayesinde parayı bir kez hareket ettirir.
 - **Raporlar defterle aynı sonucu verir:** Analiz paneli tutarları paranın gerçekten hareket ettiği güne yazar ve net kazanç işletmenin defter bakiyesiyle uyuşur.
 - **Dışa aktarılan dosya saldırı aracı olamaz:** CSV'de formül gibi başlayan açıklamalar etkisizleştirilir (CSV injection). 10.000 satırda kesilen rapor kullanıcıya açıkça bildirilir.
 - **Bankayla farklar yakalanır:** Günlük mutabakat banka dosyasını kayıtlarımızla karşılaştırır. Farkları raporlar ama düzeltmez, çünkü hangi tarafın doğru olduğuna insan karar vermelidir.
@@ -136,6 +139,8 @@ Demo verisi 60 günlük geçmiş içerir. Görüntüleyici rolünü denemek içi
 
 Sunucuyu kapatırken terminalde `Ctrl+C` kullanın. Zorla sonlandırılırsa geçici PostgreSQL süreçleri açık kalabilir.
 
+Yerel demo her açılışta sıfırdan kurulur. Verilerin kalması için sunucuyu başlatmadan önce `KASA_LOCAL_DATA_DIR` ortam değişkenine bir klasör yolu verin; demo verisi yalnızca ilk açılışta yüklenir.
+
 İtirazın her aşaması, müşteriler ve iki ödeme bağlantısı da demo verisinde hazır gelir. Kendiniz denemek için tahsil edilmiş bir ödemeyi açıp **İtiraz simüle et** deyin.
 
 Denemeye değer akış: **Test ödemesi oluştur** ile ödeme sayfasını açın ve "Banka yanıt vermiyor" kartını seçin. Sayfa bekleme durumuna geçer, yaklaşık bir buçuk dakika içinde kurtarma işi bankaya sorar ve sonuç kendiliğinden güncellenir. Ardından panelden ödemeyi tahsil edip iade edin.
@@ -173,7 +178,7 @@ Tek bir Docker imajı API ile arayüzü birlikte sunar. Depodaki `render.yaml`, 
 
 Başka bir platformda aynı değişkenlere ek olarak `KASA_DB_APP_USER=kasa_app` tanımlayın. Ters proxy arkasında `KASA_FORWARD_HEADERS=native` gerekir; aksi halde tüm istemciler tek adres sayılır ve istek sınırı herkesi birlikte engeller.
 
-**Ücretsiz planda bilinmesi gerekenler:** Sunucu 15 dakika istek almazsa uyur ve ilk istekte yeniden başlaması bir dakikadan uzun sürebilir. Uyurken zamanlanmış işler çalışmaz, bu yüzden günlük hesap kesimi ve mutabakat güvenilir biçimde tetiklenmez. Simüle banka kayıtları her yeniden başlatmada silinir. Bu nedenle eski provizyonlar `unknown_authorization` hatası alır ve mutabakat eski işlemleri `MISSING_IN_BANK` olarak gösterir. Bunlar demo sınırıdır; gerçek bir bankada oluşmaz.
+**Ücretsiz planda bilinmesi gerekenler:** Sunucu 15 dakika istek almazsa uyur ve ilk istekte yeniden başlaması bir dakikadan uzun sürebilir. Uyurken zamanlanmış işler çalışmaz, bu yüzden günlük hesap kesimi ve mutabakat güvenilir biçimde tetiklenmez. İşletme verileri ve simüle bankanın kayıtları PostgreSQL'de durduğu için yeniden başlatmada kaybolmaz. Banka kalıcı hale gelmeden önce alınan eski provizyonlar `unknown_authorization` hatası alır, mutabakat da o dönemin işlemlerini `MISSING_IN_BANK` olarak gösterir.
 
 ## API
 
