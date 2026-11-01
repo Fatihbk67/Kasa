@@ -13,9 +13,16 @@ public final class CurrentTenant {
 
     public static UUID of(Authentication authentication) {
         return switch (authentication) {
-            case ApiKeyAuthentication apiKey -> apiKey.getPrincipal();
+            case ApiKeyAuthentication apiKey -> apiKey.getPrincipal().tenantId();
             case JwtAuthenticationToken jwt -> UUID.fromString(jwt.getToken().getClaimAsString(JwtService.TENANT_CLAIM));
             default -> throw new IllegalStateException("unsupported authentication: " + authentication.getClass());
         };
+    }
+
+    public static UUID userId(Authentication authentication) {
+        if (authentication instanceof JwtAuthenticationToken jwt) {
+            return UUID.fromString(jwt.getToken().getSubject());
+        }
+        throw new IllegalStateException("only a signed-in user has a user id");
     }
 }

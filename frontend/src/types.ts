@@ -179,7 +179,63 @@ export interface ReconciliationDetail {
   discrepancies: Discrepancy[];
 }
 
-export interface Tenant {
+export type Role = 'OWNER' | 'ADMIN' | 'VIEWER';
+
+export interface Me {
+  userId: string;
+  email: string;
+  role: Role;
+  tenantId: string;
+  tenantName: string;
+}
+
+export interface TeamMember {
   id: string;
-  name: string;
+  email: string;
+  role: Role;
+  disabledAt: string | null;
+  createdAt: string;
+}
+
+export interface TeamInvitation {
+  id: string;
+  email: string;
+  role: Role;
+  expiresAt: string;
+  createdAt: string;
+}
+
+export interface Team {
+  members: TeamMember[];
+  invitations: TeamInvitation[];
+}
+
+export interface PublicInvitation {
+  tenantName: string;
+  email: string;
+  role: Role;
+  status: 'OPEN' | 'ACCEPTED' | 'REVOKED' | 'EXPIRED';
+}
+
+export interface AuditEntry {
+  seq: number;
+  createdAt: string;
+  actorType: 'USER' | 'API_KEY' | 'SYSTEM';
+  actorLabel: string | null;
+  action: string;
+  targetType: string | null;
+  targetId: string | null;
+  metadata: string;
+  ip: string | null;
+}
+
+export interface AuditPage {
+  items: AuditEntry[];
+  nextCursor: number | null;
+}
+
+export interface ChainReport {
+  valid: boolean;
+  checked: number;
+  brokenAtSeq: number | null;
 }

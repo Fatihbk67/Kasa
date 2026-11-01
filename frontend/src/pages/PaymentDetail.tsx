@@ -12,6 +12,7 @@ import {
   PageHeader,
   PaymentStatusBadge,
 } from '../components';
+import { canOperate, useMe } from '../me';
 import { formatMoney, parseAmount } from '../money';
 import type { Operation, OperationResult, Payment, PaymentDetail } from '../types';
 import { useFetch, usePolling } from '../useFetch';
@@ -75,6 +76,7 @@ function ActionDialog({ action, payment, onClose, onDone }: {
 
 export function PaymentDetailPage() {
   const { id } = useParams();
+  const { me } = useMe();
   const detail = useFetch(() => api<PaymentDetail>(`/payments/${id}`), [id]);
   const [action, setAction] = useState<Action | null>(null);
   const [operationFailure, setOperationFailure] = useState<string | null>(null);
@@ -96,8 +98,9 @@ export function PaymentDetailPage() {
 
   const { payment, operations } = detail.data;
   const refundable = payment.capturedAmount - payment.refundedAmount;
-  const canCapture = payment.status === 'AUTHORIZED' && !hasPending;
-  const canRefund = (payment.status === 'CAPTURED' || payment.status === 'PARTIALLY_REFUNDED') && refundable > 0 && !hasPending;
+  const canAct = canOperate(me) && !hasPending;
+  const canCapture = payment.status === 'AUTHORIZED' && canAct;
+  const canRefund = (payment.status === 'CAPTURED' || payment.status === 'PARTIALLY_REFUNDED') && refundable > 0 && canAct;
 
   const finish = (message: string | null) => {
     setAction(null);

@@ -1,18 +1,17 @@
 package com.kasa.security;
 
 import java.util.List;
-import java.util.UUID;
 
 import org.springframework.security.authentication.AbstractAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 
 final class ApiKeyAuthentication extends AbstractAuthenticationToken {
 
-    private final UUID tenantId;
+    private final ApiKeyPrincipal principal;
 
-    ApiKeyAuthentication(UUID tenantId) {
+    ApiKeyAuthentication(ApiKeyPrincipal principal) {
         super(List.of(new SimpleGrantedAuthority("SCOPE_" + SecurityConfig.API_SCOPE)));
-        this.tenantId = tenantId;
+        this.principal = principal;
         setAuthenticated(true);
     }
 
@@ -22,7 +21,7 @@ final class ApiKeyAuthentication extends AbstractAuthenticationToken {
     }
 
     @Override
-    public UUID getPrincipal() {
-        return tenantId;
+    public ApiKeyPrincipal getPrincipal() {
+        return principal;
     }
 }

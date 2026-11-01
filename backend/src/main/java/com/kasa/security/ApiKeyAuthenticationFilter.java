@@ -2,7 +2,6 @@ package com.kasa.security;
 
 import java.io.IOException;
 import java.util.Optional;
-import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.context.SecurityContext;
@@ -35,14 +34,14 @@ class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
 
-        Optional<UUID> tenantId = apiKeys.authenticate(key);
-        if (tenantId.isEmpty()) {
+        Optional<ApiKeyPrincipal> principal = apiKeys.authenticate(key);
+        if (principal.isEmpty()) {
             response.setStatus(HttpStatus.UNAUTHORIZED.value());
             return;
         }
 
         SecurityContext context = SecurityContextHolder.createEmptyContext();
-        context.setAuthentication(new ApiKeyAuthentication(tenantId.get()));
+        context.setAuthentication(new ApiKeyAuthentication(principal.get()));
         SecurityContextHolder.setContext(context);
         chain.doFilter(request, response);
     }

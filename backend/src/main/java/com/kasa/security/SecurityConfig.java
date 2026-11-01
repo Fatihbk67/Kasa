@@ -7,7 +7,7 @@ import javax.crypto.spec.SecretKeySpec;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.security.config.Customizer;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -32,13 +32,17 @@ public class SecurityConfig {
     static final String API_SCOPE = "api";
     static final String ADMIN_SCOPE = "admin";
 
+    private static final String OWNER = "ROLE_OWNER";
+    private static final String MANAGER = "ROLE_ADMIN";
+    private static final String VIEWER = "ROLE_VIEWER";
+
     // Limits the damage of any script injection, which matters because the dashboard's token is reachable from script.
     private static final String CONTENT_SECURITY_POLICY = "default-src 'self'; img-src 'self' data:; object-src 'none'; "
             + "base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
 
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http, ApiKeyService apiKeys,
-                                            AdminProperties adminProperties) throws Exception {
+    SecurityFilterChain securityFilterChain(HttpSecurity http, ApiKeyService apiKeys, AdminProperties adminProperties,
+                                            UserAccessConverter userAccess) throws Exception {
         // Created here rather than as beans, so Spring Boot does not also register them for every servlet request.
         ApiKeyAuthenticationFilter apiKeyFilter = new ApiKeyAuthenticationFilter(apiKeys);
         AdminTokenFilter adminTokenFilter = new AdminTokenFilter(adminProperties);
@@ -49,18 +53,22 @@ public class SecurityConfig {
                 .authorizeHttpRequests(requests -> requests
                         .requestMatchers("/api/v1/auth/**", "/api/v1/public/**", "/actuator/health", "/error").permitAll()
                         .requestMatchers("/actuator/**").hasAuthority("SCOPE_" + ADMIN_SCOPE)
-                        // A leaked API key must not be able to mint new keys or redirect webhooks.
-                        .requestMatchers("/api/v1/api-keys/**", "/api/v1/webhook-endpoints/**")
-                        .hasAuthority("SCOPE_" + DASHBOARD_SCOPE)
                         .requestMatchers("/api/v1/admin/**").hasAuthority("SCOPE_" + ADMIN_SCOPE)
+                        .requestMatchers("/api/v1/me", "/api/v1/settings/password").hasAnyAuthority(OWNER, MANAGER, VIEWER)
+                        .requestMatchers("/api/v1/settings/**").hasAuthority(OWNER)
+                        // A leaked API key must not be able to mint new keys, redirect webhooks or add members.
+                        .requestMatchers("/api/v1/api-keys/**", "/api/v1/webhook-endpoints/**", "/api/v1/team/**",
+                                "/api/v1/audit-log/**").hasAnyAuthority(OWNER, MANAGER)
                         // An admin token carries no tenant, so it opens nothing but the admin API.
-                        .requestMatchers("/api/**").hasAnyAuthority("SCOPE_" + DASHBOARD_SCOPE, "SCOPE_" + API_SCOPE)
+                        .requestMatchers(HttpMethod.GET, "/api/**").hasAnyAuthority("SCOPE_" + DASHBOARD_SCOPE, "SCOPE_" + API_SCOPE)
+                        // Everything that changes data: a viewer can look but never move money.
+                        .requestMatchers("/api/**").hasAnyAuthority(OWNER, MANAGER, "SCOPE_" + API_SCOPE)
                         // Everything else is the public web interface, which holds no data of its own.
                         .anyRequest().permitAll())
                 .headers(headers -> headers.contentSecurityPolicy(csp -> csp.policyDirectives(CONTENT_SECURITY_POLICY)))
                 .addFilterBefore(adminTokenFilter, BearerTokenAuthenticationFilter.class)
                 .addFilterBefore(apiKeyFilter, BearerTokenAuthenticationFilter.class)
-                .oauth2ResourceServer(server -> server.jwt(Customizer.withDefaults()))
+                .oauth2ResourceServer(server -> server.jwt(jwt -> jwt.jwtAuthenticationConverter(userAccess)))
                 .build();
     }
 

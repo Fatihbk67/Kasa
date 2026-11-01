@@ -6,6 +6,7 @@ import java.security.SecureRandom;
 import java.time.OffsetDateTime;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.regex.Matcher;
@@ -17,7 +18,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.kasa.audit.AuditLog;
 import com.kasa.common.Hashes;
+import com.kasa.security.ApiKeyPrincipal;
 import com.kasa.tenant.TenantScope;
 
 @Service
@@ -39,10 +42,12 @@ public class ApiKeyService {
     private final SecureRandom random = new SecureRandom();
     private final JdbcClient jdbc;
     private final TenantScope tenantScope;
+    private final AuditLog auditLog;
 
-    public ApiKeyService(JdbcClient jdbc, TenantScope tenantScope) {
+    public ApiKeyService(JdbcClient jdbc, TenantScope tenantScope, AuditLog auditLog) {
         this.jdbc = jdbc;
         this.tenantScope = tenantScope;
+        this.auditLog = auditLog;
     }
 
     @Transactional
@@ -61,6 +66,7 @@ public class ApiKeyService {
                 .param("hash", sha256(key))
                 .query(UUID.class)
                 .single();
+        auditLog.record(tenantId, "API_KEY_CREATED", "API_KEY", id, Map.of("name", name, "prefix", prefix));
         return new CreatedApiKey(id, name, prefix, key);
     }
 
@@ -90,10 +96,11 @@ public class ApiKeyService {
         if (updated == 0) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "active API key not found");
         }
+        auditLog.record(tenantId, "API_KEY_REVOKED", "API_KEY", keyId, Map.of());
     }
 
     /** Returns the owning tenant if the key is valid and not revoked. */
-    public Optional<UUID> authenticate(String key) {
+    public Optional<ApiKeyPrincipal> authenticate(String key) {
         Matcher matcher = KEY_FORMAT.matcher(key);
         if (!matcher.matches()) {
             return Optional.empty();
@@ -104,7 +111,7 @@ public class ApiKeyService {
                 .query((rs, rowNum) -> new StoredKey(rs.getObject("tenant_id", UUID.class), rs.getString("key_hash")))
                 .optional()
                 .filter(stored -> MessageDigest.isEqual(presentedHash, stored.keyHash().getBytes(StandardCharsets.UTF_8)))
-                .map(StoredKey::tenantId);
+                .map(stored -> new ApiKeyPrincipal(stored.tenantId(), matcher.group(1)));
     }
 
     private String randomHex(int bytes) {

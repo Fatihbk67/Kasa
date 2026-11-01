@@ -8,7 +8,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 public class FrontendController {
 
     @GetMapping({"/login", "/register", "/pay/{id}", "/analytics", "/payments", "/payments/{id}", "/payouts", "/payouts/{id}",
-            "/developers", "/admin", "/admin/reconciliation/{id}"})
+            "/developers", "/team", "/audit", "/settings", "/invite/{token}", "/admin", "/admin/reconciliation/{id}"})
     public String frontendRoute() {
         return "forward:/index.html";
     }

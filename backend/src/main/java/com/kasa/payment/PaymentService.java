@@ -2,6 +2,7 @@ package com.kasa.payment;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.function.Supplier;
 
@@ -12,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.kasa.audit.AuditLog;
 import com.kasa.bank.BankGateway;
 import com.kasa.bank.BankResponse;
 import com.kasa.bank.BankTimeoutException;
@@ -51,10 +53,12 @@ public class PaymentService {
     private final PaymentProperties properties;
     private final WebhookEvents webhookEvents;
     private final BusinessMetrics metrics;
+    private final AuditLog auditLog;
 
     public PaymentService(TransactionTemplate tx, TenantScope tenantScope, PaymentStore store,
                           PaymentLedger paymentLedger, BankGateway bank, PaymentProperties properties,
-                          WebhookEvents webhookEvents, BusinessMetrics metrics) {
+                          WebhookEvents webhookEvents, BusinessMetrics metrics, AuditLog auditLog) {
+        this.auditLog = auditLog;
         this.webhookEvents = webhookEvents;
         this.metrics = metrics;
         this.tx = tx;
@@ -164,8 +168,10 @@ public class PaymentService {
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "another operation is in progress");
             }
             long amount = validatedAmount(payment, type, requestedAmount);
-            return new Begun(store.insertOperation(tenantId, paymentId, type, amount, key, hash),
-                    payment.bankReference(), false);
+            PaymentOperation operation = store.insertOperation(tenantId, paymentId, type, amount, key, hash);
+            auditLog.record(tenantId, "PAYMENT_" + type.name() + "_REQUESTED", "PAYMENT", paymentId,
+                    Map.of("amount", amount, "currency", payment.currency(), "operationId", operation.id()));
+            return new Begun(operation, payment.bankReference(), false);
         });
     }
 

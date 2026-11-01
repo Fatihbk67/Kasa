@@ -4,6 +4,7 @@ import java.security.SecureRandom;
 import java.time.OffsetDateTime;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
@@ -12,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.kasa.audit.AuditLog;
 import com.kasa.tenant.TenantScope;
 
 @Service
@@ -36,8 +38,10 @@ public class WebhookEndpointService {
     private final JdbcClient jdbc;
     private final TenantScope tenantScope;
     private final WebhookUrlGuard urlGuard;
+    private final AuditLog auditLog;
 
-    public WebhookEndpointService(JdbcClient jdbc, TenantScope tenantScope, WebhookUrlGuard urlGuard) {
+    public WebhookEndpointService(JdbcClient jdbc, TenantScope tenantScope, WebhookUrlGuard urlGuard, AuditLog auditLog) {
+        this.auditLog = auditLog;
         this.jdbc = jdbc;
         this.tenantScope = tenantScope;
         this.urlGuard = urlGuard;
@@ -70,6 +74,7 @@ public class WebhookEndpointService {
                 .param("secret", secret)
                 .query(UUID.class)
                 .single();
+        auditLog.record(tenantId, "WEBHOOK_ENDPOINT_CREATED", "WEBHOOK_ENDPOINT", id, Map.of("url", url));
         return new CreatedEndpoint(id, url, secret);
     }
 
@@ -100,6 +105,7 @@ public class WebhookEndpointService {
                         """)
                 .param("id", endpointId)
                 .update();
+        auditLog.record(tenantId, "WEBHOOK_ENDPOINT_DISABLED", "WEBHOOK_ENDPOINT", endpointId, Map.of());
     }
 
     @Transactional(readOnly = true)

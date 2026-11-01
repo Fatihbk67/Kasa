@@ -39,12 +39,12 @@ Tek dizüstü bilgisayarda (Intel i7-13650HX, 16 GB RAM) yük istemcisi, uygulam
 
 | Senaryo | Akış/sn | Provizyon p95 | Tahsilat p95 | Beklenmeyen yanıt |
 |---|---|---:|---:|---:|
-| 50 eşzamanlı istemci, 20 işletme | 1.116 | 26 ms | 29 ms | 0 |
-| 50 eşzamanlı istemci, tek işletme | 581 | 45 ms | 65 ms | 0 |
+| 50 eşzamanlı istemci, 20 işletme | 1.026 | 28 ms | 32 ms | 0 |
+| 50 eşzamanlı istemci, tek işletme | 601 | 43 ms | 61 ms | 0 |
 
-Tek işletmede verimin düşmesi beklenen bir durumdur: aynı bakiye satırı kilitlendiği için tahsilatlar sıraya girer. Bu, tutarlılığın bilinçli bedelidir.
+Tek işletmede verimin düşmesi beklenen bir durumdur: aynı bakiye satırı ve denetim zinciri kilitlendiği için tahsilatlar sıraya girer. Bu, tutarlılığın bilinçli bedelidir. Hash zincirli denetim günlüğü eklenmeden önceki ölçüm çok işletmeli senaryoda 1.116 akış/sn idi, yani bedeli yaklaşık %8'dir.
 
-Ölçüm sonunda her işletmenin bakiyesi istemcinin bağımsız hesabıyla kuruşu kuruşuna eşleşti. Mutabakat 50.982 banka satırının tamamını farksız eşleştirdi.
+Ölçüm sonunda her işletmenin bakiyesi istemcinin bağımsız hesabıyla kuruşu kuruşuna eşleşti. Mutabakat 48.866 akışın ürettiği tüm banka satırlarını eşleştirdi; raporlanan yalnızca iki fark, demo verisine bilerek konan banka hatalarıdır.
 
 Sınırlar: Banka simüle edildiği için gerçek ağ gecikmesi yoktur. Rakamlar üretim kapasitesi değildir; sistemin bu makinedeki davranışını gösterir. Yeniden üretmek için sunucu çalışırken:
 
@@ -75,6 +75,9 @@ java -Djdk.net.unixdomain.tmpdir=backend/target load-test/LoadTest.java http://l
 - **Reddedilen ödemede para kaybolmaz:** Para önce "yolda" hesabına alınır. Banka reddederse tutar ve kalemler geri döner, sonraki çalıştırma yeniden dener.
 - **Parola denemeleri yavaşlatılır:** Giriş, kayıt ve herkese açık ödeme uçlarında istek sınırı vardır; aşılınca `429` ve `Retry-After` döner. Sayaçlar sunucu başınadır, birden çok sunucuda ortak depo gerekir.
 - **Sistem gözlemlenebilir:** Sonucu bilinmeyen banka işlemleri, webhook kuyruğu ve mutabakat farkları Prometheus metriği olarak yayımlanır. Metrik ucu yalnızca yönetici token'ıyla açılır.
+- **Yetki değişikliği anında geçerli olur:** İmzalı token geri alınamaz, bu yüzden rol ve erişim her istekte veritabanından okunur. Çıkarılan üye bir sonraki istekte dışarıda kalır; parola değişince diğer oturumlar kapanır.
+- **İşletme sahipsiz kalamaz:** İki sahip aynı anda birbirinin yetkisini alsa bile satır kilitleri sayesinde biri sahip kalır.
+- **Geçmişle oynanırsa anlaşılır:** Denetim günlüğü değiştirilemez ve hash zinciriyle bağlıdır. Süper kullanıcı yetkisiyle yapılan bir değişiklik veya silme bile zincir doğrulamasında yakalanır. En yeni kayıtların silinmesini fark etmek için son hash'in veritabanı dışında saklanması gerekir; bu henüz yok.
 - **Raporlar defterle aynı sonucu verir:** Analiz paneli tutarları paranın gerçekten hareket ettiği güne yazar ve net kazanç işletmenin defter bakiyesiyle uyuşur.
 - **Dışa aktarılan dosya saldırı aracı olamaz:** CSV'de formül gibi başlayan açıklamalar etkisizleştirilir (CSV injection). 10.000 satırda kesilen rapor kullanıcıya açıkça bildirilir.
 - **Bankayla farklar yakalanır:** Günlük mutabakat banka dosyasını kayıtlarımızla karşılaştırır. Farkları raporlar ama düzeltmez, çünkü hangi tarafın doğru olduğuna insan karar vermelidir.
@@ -121,7 +124,7 @@ npm run dev
 
 Ardından `http://localhost:5173` adresini açın. Demo hesabı `demo@kasa.test`, parolası `demo-parola-12345`'tir. Bu bilgiler yalnızca yerel demo içindir. Yönetici API'sinin yerel token'ı `local-dev-admin-token`'dır.
 
-Demo verisi 60 günlük geçmiş içerir. Yönetici paneli `/admin` adresindedir ve yerelde yukarıdaki token ile açılır; demo için iki banka hatası hazır gelir. Canlı ortamda yönetici token'ı Render'daki `KASA_ADMIN_TOKEN` değeridir.
+Demo verisi 60 günlük geçmiş içerir. Görüntüleyici rolünü denemek için `izleyici@kasa.test` hesabı aynı parolayla açılır. Davet bağlantıları e-postayla gitmez; panelde gösterilir ve elle paylaşılır. Yönetici paneli `/admin` adresindedir ve yerelde yukarıdaki token ile açılır; demo için iki banka hatası hazır gelir. Canlı ortamda yönetici token'ı Render'daki `KASA_ADMIN_TOKEN` değeridir.
 
 Sunucuyu kapatırken terminalde `Ctrl+C` kullanın. Zorla sonlandırılırsa geçici PostgreSQL süreçleri açık kalabilir.
 
@@ -196,7 +199,18 @@ Başka bir platformda aynı değişkenlere ek olarak `KASA_DB_APP_USER=kasa_app`
 | POST | `/api/v1/admin/reconciliation/runs?date=` | `X-Admin-Token` | Tarih için mutabakat çalıştırır |
 | GET | `/api/v1/admin/reconciliation/runs` | `X-Admin-Token` | Mutabakat geçmişini listeler |
 | GET | `/api/v1/admin/reconciliation/runs/{id}` | `X-Admin-Token` | Çalıştırmayı farklarıyla döner |
+| GET | `/api/v1/me` | JWT | Oturumdaki kullanıcı, rol ve işletme |
+| GET | `/api/v1/team` | Sahip, yönetici | Üyeler ve bekleyen davetler |
+| POST | `/api/v1/team/invitations` | Sahip, yönetici | Tek kullanımlık davet oluşturur (yöneticiler yalnızca görüntüleyici davet edebilir) |
+| PUT, DELETE | `/api/v1/team/members/{id}` | Sahip | Rol değiştirir veya üyeyi çıkarır |
+| POST | `/api/v1/public/invitations/{token}/accept` | Yok | Daveti kabul eder |
+| GET | `/api/v1/audit-log` | Sahip, yönetici | Denetim kayıtlarını listeler |
+| GET | `/api/v1/audit-log/verify` | Sahip, yönetici | Hash zincirini baştan sona doğrular |
+| PUT | `/api/v1/settings/tenant` | Sahip | İşletme adını değiştirir |
+| POST | `/api/v1/settings/password` | JWT | Parolayı değiştirir, diğer oturumları kapatır |
 | GET | `/actuator/health` | Yok | Sağlık kontrolü |
+
+Roller: **Sahip** her şeyi yönetir. **Yönetici** ödemeleri işler, API anahtarlarını ve webhook'ları yönetir. **Görüntüleyici** yalnızca okur. API anahtarları ödeme işleyebilir ama ekip, denetim ve ayarlara erişemez.
 
 Ödeme endpoint'lerindeki tüm `POST` istekleri `Idempotency-Key` başlığı ister. `202` yanıtı, bankadan henüz sonuç alınamadığını gösterir; ödemeyi daha sonra sorgulamak gerekir.
 
@@ -272,5 +286,5 @@ Banka simüle edilir; davranışı token belirler. Böylece her hata senaryosu i
 - [x] **Vitrin:** İstek sınırı, yük testi, Prometheus metrikleri, Grafana panosu, GitHub Actions, Docker imajı
 - [x] **Canlı demo:** Render üzerinde uygulama, Neon üzerinde PostgreSQL
 - [x] **Analiz ve yönetim:** Grafikli analiz paneli, gelişmiş arama ve filtreler, CSV dışa aktarma, platform yönetim paneli
-- [ ] **Ekip ve denetim:** Ekip üyeleri, rol bazlı yetkiler, değiştirilemez denetim günlüğü, ayarlar
+- [x] **Ekip ve denetim:** Ekip üyeleri, rol bazlı yetkiler, değiştirilemez denetim günlüğü, ayarlar
 - [ ] **Yeni iş alanları:** İtiraz (chargeback) akışı, müşteri kayıtları, paylaşılabilir ödeme bağlantıları

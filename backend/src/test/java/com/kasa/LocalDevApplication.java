@@ -21,6 +21,7 @@ import com.kasa.checkout.CheckoutService;
 import com.kasa.payment.PaymentService;
 import com.kasa.payment.PaymentViews.OperationResult;
 import com.kasa.settlement.SettlementService;
+import com.kasa.team.TeamService;
 
 import io.zonky.test.db.postgres.embedded.EmbeddedPostgres;
 
@@ -66,8 +67,18 @@ public final class LocalDevApplication {
 
         ConfigurableApplicationContext context = SpringApplication.run(KasaApplication.class, args);
         UUID tenantId = seedDemoData(context);
-        seedHistory(context, tenantId, JdbcClient.create(postgres.getPostgresDatabase()));
+        JdbcClient superuser = JdbcClient.create(postgres.getPostgresDatabase());
+        seedHistory(context, tenantId, superuser);
+        seedTeam(context, tenantId, superuser);
         log.info("Demo merchant ready: {} / {}", DEMO_EMAIL, DEMO_PASSWORD);
+    }
+
+    /** A viewer account shows what limited rights look like, and an open invitation fills out the team page. */
+    private static void seedTeam(ConfigurableApplicationContext context, UUID tenantId, JdbcClient superuser) {
+        TeamService team = context.getBean(TeamService.class);
+        UUID ownerId = superuser.sql("SELECT id FROM users WHERE tenant_id = :t").param("t", tenantId).query(UUID.class).single();
+        team.accept(team.invite(tenantId, ownerId, "izleyici@kasa.test", "VIEWER").token(), DEMO_PASSWORD);
+        team.invite(tenantId, ownerId, "yeni-yonetici@kasa.test", "ADMIN");
     }
 
     /** Sixty days of realistic activity for the analytics charts, plus bank errors for the admin panel to show. */

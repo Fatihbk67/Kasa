@@ -748,6 +748,25 @@ select {
   margin-bottom: 0;
 }
 
+/* Team and settings */
+.row-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.settings {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 520px;
+}
+
+.settings-card h2 {
+  margin-bottom: 14px;
+}
+
 /* Admin */
 .admin-bar {
   display: flex;

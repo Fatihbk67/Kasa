@@ -15,6 +15,7 @@ public class JwtService {
 
     static final String ISSUER = "kasa";
     static final String TENANT_CLAIM = "tenant_id";
+    static final String VERSION_CLAIM = "ver";
 
     private final JwtEncoder encoder;
     private final JwtProperties properties;
@@ -24,7 +25,8 @@ public class JwtService {
         this.properties = properties;
     }
 
-    public String issue(UUID userId, UUID tenantId) {
+    /** Raising a user's token version invalidates every token issued before it. */
+    public String issue(UUID userId, UUID tenantId, int tokenVersion) {
         Instant now = Instant.now();
         JwtClaimsSet claims = JwtClaimsSet.builder()
                 .issuer(ISSUER)
@@ -32,7 +34,7 @@ public class JwtService {
                 .issuedAt(now)
                 .expiresAt(now.plus(properties.ttl()))
                 .claim(TENANT_CLAIM, tenantId.toString())
-                .claim("scope", SecurityConfig.DASHBOARD_SCOPE)
+                .claim(VERSION_CLAIM, tokenVersion)
                 .build();
         JwsHeader header = JwsHeader.with(MacAlgorithm.HS256).build();
         return encoder.encode(JwtEncoderParameters.from(header, claims)).getTokenValue();

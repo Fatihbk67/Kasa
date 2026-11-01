@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { EmptyState, ErrorNote, FormDialog, Loading, PageHeader } from '../components';
+import { canOperate, useMe } from '../me';
 import { formatMoney, parseAmount } from '../money';
 import type { Balance, PaymentPage } from '../types';
 import { useFetch } from '../useFetch';
@@ -43,6 +44,7 @@ function NewCheckoutDialog({ onClose }: { onClose: () => void }) {
 }
 
 export function Overview() {
+  const { me } = useMe();
   const balances = useFetch(() => api<Balance[]>('/balances'), []);
   const payments = useFetch(() => api<PaymentPage>('/payments?limit=5'), []);
   const [creating, setCreating] = useState(false);
@@ -52,7 +54,7 @@ export function Overview() {
     <>
       <PageHeader
         title="Genel bakış"
-        actions={<button type="button" className="button button-primary" onClick={() => setCreating(true)}>Test ödemesi oluştur</button>}
+        actions={canOperate(me) && <button type="button" className="button button-primary" onClick={() => setCreating(true)}>Test ödemesi oluştur</button>}
       />
       <ErrorNote message={balances.error} />
       {balances.loading && !balances.data ? <Loading /> : balanceList.map((balance) => (

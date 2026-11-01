@@ -48,7 +48,7 @@ export function setToken(token: string | null) {
 }
 
 interface RequestOptions {
-  method?: 'GET' | 'POST' | 'DELETE';
+  method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
   body?: unknown;
   idempotencyKey?: string;
 }

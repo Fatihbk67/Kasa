@@ -5,7 +5,10 @@ import { AuthProvider, useAuth } from './auth';
 import { Layout } from './Layout';
 import { AdminHome, AdminRunDetail } from './pages/Admin';
 import { Analytics } from './pages/Analytics';
+import { AuditPage } from './pages/Audit';
 import { Checkout } from './pages/Checkout';
+import { Settings } from './pages/Settings';
+import { AcceptInvitation, TeamPage } from './pages/Team';
 import { Developers } from './pages/Developers';
 import { Login, Register } from './pages/Auth';
 import { Overview } from './pages/Overview';
@@ -27,6 +30,7 @@ createRoot(document.getElementById('root')!).render(
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/pay/:id" element={<Checkout />} />
+          <Route path="/invite/:token" element={<AcceptInvitation />} />
           <Route path="/admin" element={<AdminHome />} />
           <Route path="/admin/reconciliation/:id" element={<AdminRunDetail />} />
           <Route element={<Protected />}>
@@ -37,6 +41,9 @@ createRoot(document.getElementById('root')!).render(
             <Route path="payouts" element={<Payouts />} />
             <Route path="payouts/:id" element={<PayoutDetailPage />} />
             <Route path="developers" element={<Developers />} />
+            <Route path="team" element={<TeamPage />} />
+            <Route path="audit" element={<AuditPage />} />
+            <Route path="settings" element={<Settings />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
