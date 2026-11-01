@@ -39,12 +39,14 @@ Tek dizüstü bilgisayarda (Intel i7-13650HX, 16 GB RAM) yük istemcisi, uygulam
 
 | Senaryo | Akış/sn | Provizyon p95 | Tahsilat p95 | Beklenmeyen yanıt |
 |---|---|---:|---:|---:|
-| 50 eşzamanlı istemci, 20 işletme | 1.026 | 28 ms | 32 ms | 0 |
-| 50 eşzamanlı istemci, tek işletme | 601 | 43 ms | 61 ms | 0 |
+| 50 eşzamanlı istemci, 20 işletme | 1.025 | 28 ms | 32 ms | 0 |
+| 50 eşzamanlı istemci, tek işletme | 597 | 44 ms | 59 ms | 0 |
 
 Tek işletmede verimin düşmesi beklenen bir durumdur: aynı bakiye satırı ve denetim zinciri kilitlendiği için tahsilatlar sıraya girer. Bu, tutarlılığın bilinçli bedelidir. Hash zincirli denetim günlüğü eklenmeden önceki ölçüm çok işletmeli senaryoda 1.116 akış/sn idi, yani bedeli yaklaşık %8'dir.
 
-Ölçüm sonunda her işletmenin bakiyesi istemcinin bağımsız hesabıyla kuruşu kuruşuna eşleşti. Mutabakat 48.866 akışın ürettiği tüm banka satırlarını eşleştirdi; raporlanan yalnızca iki fark, demo verisine bilerek konan banka hatalarıdır.
+Ölçüm sonunda her işletmenin bakiyesi istemcinin bağımsız hesabıyla kuruşu kuruşuna eşleşti. Mutabakat 30.774 akışın ürettiği 31.033 banka satırının 31.031'ini eşleştirdi; kalan iki fark, demo verisine bilerek konan banka hatalarıdır.
+
+Her senaryo temiz veritabanında ölçüldü. Tek işletme senaryosu, 20 işletmeli ölçümün bıraktığı veriler üzerinde tekrarlanınca 496 akış/sn'ye düştü. Veri büyüdükçe hız kaybı olduğunu gösteriyor; nedeni henüz incelenmedi.
 
 Sınırlar: Banka simüle edildiği için gerçek ağ gecikmesi yoktur. Rakamlar üretim kapasitesi değildir; sistemin bu makinedeki davranışını gösterir. Yeniden üretmek için sunucu çalışırken:
 
