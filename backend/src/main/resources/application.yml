@@ -54,6 +54,14 @@ kasa:
     login-per-ip: 30
     register-per-ip: 10
     checkout-pay-per-ip: 30
+    payment-link-session-per-ip: 20
+  disputes:
+    # Charged only when the merchant loses, in minor units.
+    loss-fee: 15000
+    response-window: P7D
+    # How long the simulated bank takes to decide. A real one takes weeks, which no demo would survive.
+    review-time: PT2M
+    job-interval: PT30S
   metrics:
     refresh-interval: PT15S
 

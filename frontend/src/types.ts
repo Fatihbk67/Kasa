@@ -18,6 +18,8 @@ export interface Payment {
   capturedAmount: number;
   refundedAmount: number;
   feeAmount: number;
+  disputedAmount: number;
+  customerId: string | null;
   description: string | null;
   failureCode: string | null;
   createdAt: string;
@@ -26,7 +28,7 @@ export interface Payment {
 
 export interface Operation {
   id: string;
-  type: 'AUTHORIZE' | 'CAPTURE' | 'VOID' | 'REFUND';
+  type: 'AUTHORIZE' | 'CAPTURE' | 'VOID' | 'REFUND' | 'DISPUTE_WITHDRAWAL' | 'DISPUTE_REVERSAL' | 'DISPUTE_FEE';
   amount: number;
   status: OperationStatus;
   failureCode: string | null;
@@ -68,7 +70,7 @@ export interface Payout {
 export interface PayoutItem {
   paymentId: string;
   operationId: string;
-  type: 'CAPTURE' | 'REFUND';
+  type: 'CAPTURE' | 'REFUND' | 'DISPUTE_WITHDRAWAL' | 'DISPUTE_REVERSAL' | 'DISPUTE_FEE';
   grossAmount: number;
   feeAmount: number;
   netAmount: number;
@@ -132,6 +134,8 @@ export interface AnalyticsSummary {
     captured: number;
     refunded: number;
     fees: number;
+    disputed: number;
+    disputeFees: number;
     net: number;
     captureCount: number;
     authorizationAttempts: number;
@@ -238,4 +242,69 @@ export interface ChainReport {
   valid: boolean;
   checked: number;
   brokenAtSeq: number | null;
+}
+
+export type DisputeStatus = 'NEEDS_RESPONSE' | 'UNDER_REVIEW' | 'WON' | 'LOST';
+export type DisputeReason = 'FRAUDULENT' | 'PRODUCT_NOT_RECEIVED' | 'DUPLICATE' | 'PRODUCT_UNACCEPTABLE' | 'OTHER';
+
+export interface Dispute {
+  id: string;
+  paymentId: string;
+  amount: number;
+  currency: string;
+  reason: DisputeReason;
+  status: DisputeStatus;
+  feeAmount: number;
+  respondBy: string;
+  evidenceExplanation: string | null;
+  evidenceTracking: string | null;
+  evidenceCommunication: string | null;
+  evidenceSubmittedAt: string | null;
+  resolvedAt: string | null;
+  createdAt: string;
+}
+
+export interface DisputePage {
+  items: Dispute[];
+  nextCursor: string | null;
+}
+
+export interface Customer {
+  id: string;
+  email: string | null;
+  name: string | null;
+  anonymized: boolean;
+  createdAt: string;
+  totals: { currency: string; spent: number; paymentCount: number }[];
+}
+
+export interface CustomerPage {
+  items: Customer[];
+  nextCursor: string | null;
+}
+
+export type PaymentLinkStatus = 'OPEN' | 'SOLD_OUT' | 'EXPIRED' | 'DISABLED';
+
+export interface PaymentLink {
+  id: string;
+  slug: string;
+  title: string;
+  description: string | null;
+  amount: number | null;
+  currency: string;
+  maxPayments: number | null;
+  expiresAt: string | null;
+  status: PaymentLinkStatus;
+  paidCount: number;
+  collected: number;
+  createdAt: string;
+}
+
+export interface PublicPaymentLink {
+  merchantName: string;
+  title: string;
+  description: string | null;
+  amount: number | null;
+  currency: string;
+  status: PaymentLinkStatus;
 }

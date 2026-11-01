@@ -18,7 +18,7 @@ final class BankStatementParser {
     }
 
     private static final String HEADER = "reference,type,amount,currency,booked_at";
-    private static final Set<String> TYPES = Set.of("CAPTURE", "REFUND", "PAYOUT");
+    private static final Set<String> TYPES = Set.of("CAPTURE", "REFUND", "PAYOUT", "DISPUTE_WITHDRAWAL", "DISPUTE_REVERSAL");
     private static final Pattern CURRENCY = Pattern.compile("[A-Z]{3}");
 
     private BankStatementParser() {

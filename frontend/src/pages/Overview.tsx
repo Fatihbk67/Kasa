@@ -4,7 +4,7 @@ import { api } from '../api';
 import { EmptyState, ErrorNote, FormDialog, Loading, PageHeader } from '../components';
 import { canOperate, useMe } from '../me';
 import { formatMoney, parseAmount } from '../money';
-import type { Balance, PaymentPage } from '../types';
+import type { Balance, DisputePage, PaymentPage } from '../types';
 import { useFetch } from '../useFetch';
 import { PaymentTable } from './PaymentTable';
 
@@ -47,6 +47,8 @@ export function Overview() {
   const { me } = useMe();
   const balances = useFetch(() => api<Balance[]>('/balances'), []);
   const payments = useFetch(() => api<PaymentPage>('/payments?limit=5'), []);
+  const openDisputes = useFetch(() => api<DisputePage>('/disputes?status=NEEDS_RESPONSE&limit=100'), []);
+  const disputeCount = openDisputes.data?.items.length ?? 0;
   const [creating, setCreating] = useState(false);
   const balanceList = balances.data && balances.data.length > 0 ? balances.data : [{ currency: 'TRY', available: 0, inTransit: 0 }];
 
@@ -56,6 +58,11 @@ export function Overview() {
         title="Genel bakış"
         actions={canOperate(me) && <button type="button" className="button button-primary" onClick={() => setCreating(true)}>Test ödemesi oluştur</button>}
       />
+      {disputeCount > 0 && (
+        <p className="note note-warning" role="status">
+          {disputeCount} itiraz yanıtınızı bekliyor. Süresinde kanıt göndermezseniz kaybedilir. <Link to="/disputes?status=NEEDS_RESPONSE">İtirazlara git</Link>
+        </p>
+      )}
       <ErrorNote message={balances.error} />
       {balances.loading && !balances.data ? <Loading /> : balanceList.map((balance) => (
         <section className="stats" key={balance.currency} aria-label={`${balance.currency} bakiyesi`}>

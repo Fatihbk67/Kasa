@@ -1,0 +1,241 @@
+import { useEffect, useState } from 'react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { api } from '../api';
+import { DisputeStatusBadge, EmptyState, ErrorNote, FormDialog, formatDateTime, Loading, PageHeader } from '../components';
+import { canOperate, useMe } from '../me';
+import { formatMoney } from '../money';
+import type { Dispute, DisputePage, DisputeReason, DisputeStatus } from '../types';
+import { useFetch, usePolling } from '../useFetch';
+
+export const DISPUTE_REASONS: Record<DisputeReason, string> = {
+  FRAUDULENT: 'Kart sahibi işlemi tanımıyor',
+  PRODUCT_NOT_RECEIVED: 'Ürün ulaşmadı',
+  PRODUCT_UNACCEPTABLE: 'Ürün beklendiği gibi değil',
+  DUPLICATE: 'Mükerrer çekim',
+  OTHER: 'Diğer',
+};
+
+const STATUS_OPTIONS: { value: DisputeStatus; label: string }[] = [
+  { value: 'NEEDS_RESPONSE', label: 'Yanıt bekliyor' },
+  { value: 'UNDER_REVIEW', label: 'İnceleniyor' },
+  { value: 'WON', label: 'Kazanıldı' },
+  { value: 'LOST', label: 'Kaybedildi' },
+];
+
+/** Whole days, rounded up, because "0 days left" would read as already too late. */
+export function daysLeft(respondBy: string, now = Date.now()): number {
+  return Math.max(0, Math.ceil((new Date(respondBy).getTime() - now) / 86_400_000));
+}
+
+export function Disputes() {
+  const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
+  const status = params.get('status') ?? '';
+  const query = `/disputes?limit=30${status ? `&status=${status}` : ''}`;
+  const firstPage = useFetch(() => api<DisputePage>(query), [query]);
+  const [items, setItems] = useState<Dispute[]>([]);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [moreError, setMoreError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (firstPage.data) {
+      setItems(firstPage.data.items);
+      setCursor(firstPage.data.nextCursor);
+    }
+  }, [firstPage.data]);
+
+  const loadMore = async () => {
+    setLoadingMore(true);
+    setMoreError(null);
+    try {
+      const page = await api<DisputePage>(`${query}&before=${cursor}`);
+      setItems((current) => [...current, ...page.items]);
+      setCursor(page.nextCursor);
+    } catch (e) {
+      setMoreError((e as Error).message);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  return (
+    <>
+      <PageHeader title="İtirazlar" description="Müşteri bankasına başvurduğunda banka tutarı hemen geri alır. Süresinde kanıt sunarsanız geri kazanabilirsiniz." />
+      <div className="toolbar">
+        <label className="field field-inline">
+          Durum
+          <select value={status} onChange={(e) => setParams(e.target.value ? { status: e.target.value } : {})}>
+            <option value="">Tümü</option>
+            {STATUS_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+        </label>
+      </div>
+      <ErrorNote message={firstPage.error} />
+      {firstPage.loading ? <Loading /> : items.length > 0 ? (
+        <>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Neden</th>
+                  <th scope="col">Durum</th>
+                  <th scope="col" className="numeric">Tutar</th>
+                  <th scope="col" className="hide-narrow">Son yanıt</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((dispute) => (
+                  <tr key={dispute.id} className="row-link" onClick={() => navigate(`/disputes/${dispute.id}`)}>
+                    <td>
+                      <a href={`/disputes/${dispute.id}`} onClick={(e) => e.preventDefault()}>{DISPUTE_REASONS[dispute.reason]}</a>
+                    </td>
+                    <td><DisputeStatusBadge status={dispute.status} /></td>
+                    <td className="numeric">{formatMoney(dispute.amount, dispute.currency)}</td>
+                    <td className="hide-narrow muted">
+                      {dispute.status === 'NEEDS_RESPONSE' ? `${daysLeft(dispute.respondBy)} gün kaldı` : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <ErrorNote message={moreError} />
+          {cursor !== null && (
+            <div className="load-more">
+              <button type="button" className="button" onClick={loadMore} disabled={loadingMore}>
+                {loadingMore ? 'Yükleniyor…' : 'Daha fazla göster'}
+              </button>
+            </div>
+          )}
+        </>
+      ) : !firstPage.error && (
+        <div className="card">
+          <EmptyState title={status ? 'Bu durumda itiraz yok' : 'Henüz itiraz yok'}>
+            Denemek için tahsil edilmiş bir ödemenin sayfasından banka itirazı simüle edebilirsiniz.
+          </EmptyState>
+        </div>
+      )}
+    </>
+  );
+}
+
+function EvidenceDialog({ dispute, onClose, onDone }: { dispute: Dispute; onClose: () => void; onDone: () => void }) {
+  const [explanation, setExplanation] = useState('');
+  const [tracking, setTracking] = useState('');
+  const [communication, setCommunication] = useState('');
+
+  const submit = async () => {
+    await api(`/disputes/${dispute.id}/evidence`, { method: 'POST', body: { explanation, tracking, communication } });
+    onDone();
+  };
+
+  return (
+    <FormDialog title="Kanıt gönder" submitLabel="Bankaya gönder" onClose={onClose} onSubmit={submit}>
+      <p className="muted">Bir kez gönderilir, sonradan değiştirilemez.</p>
+      <label className="field">
+        Açıklama
+        <textarea required autoFocus maxLength={4000} rows={4} value={explanation} onChange={(e) => setExplanation(e.target.value)} />
+      </label>
+      <label className="field">
+        Kargo takip numarası
+        <input maxLength={200} value={tracking} onChange={(e) => setTracking(e.target.value)} />
+        <span className="hint">Simüle banka, teslimat kanıtı olan itirazları işletme lehine sonuçlandırır.</span>
+      </label>
+      <label className="field">
+        Müşteriyle yazışma özeti
+        <textarea maxLength={4000} rows={3} value={communication} onChange={(e) => setCommunication(e.target.value)} />
+      </label>
+    </FormDialog>
+  );
+}
+
+export function DisputeDetailPage() {
+  const { id } = useParams();
+  const { me } = useMe();
+  const detail = useFetch(() => api<Dispute>(`/disputes/${id}`), [id]);
+  const [dialog, setDialog] = useState<'evidence' | 'accept' | null>(null);
+  usePolling(detail.data?.status === 'UNDER_REVIEW', detail.reload);
+
+  if (detail.loading && !detail.data) {
+    return <Loading />;
+  }
+  if (!detail.data) {
+    return (
+      <>
+        <ErrorNote message={detail.errorStatus === 404 ? 'Bu itiraz bulunamadı.' : detail.error} />
+        <Link to="/disputes">İtirazlara dön</Link>
+      </>
+    );
+  }
+
+  const dispute = detail.data;
+  const open = dispute.status === 'NEEDS_RESPONSE' && canOperate(me);
+  const finish = () => {
+    setDialog(null);
+    detail.reload();
+  };
+  const accept = async () => {
+    await api(`/disputes/${dispute.id}/accept`, { method: 'POST' });
+    finish();
+  };
+
+  return (
+    <>
+      <p className="breadcrumb"><Link to="/disputes">İtirazlar</Link> / Ayrıntı</p>
+      <PageHeader
+        title={formatMoney(dispute.amount, dispute.currency)}
+        description={DISPUTE_REASONS[dispute.reason]}
+        actions={open && (
+          <>
+            <button type="button" className="button button-primary" onClick={() => setDialog('evidence')}>Kanıt gönder</button>
+            <button type="button" className="button" onClick={() => setDialog('accept')}>Kabul et</button>
+          </>
+        )}
+      />
+      {dispute.status === 'NEEDS_RESPONSE' && (
+        <p className="note note-warning" role="status">
+          Tutar bakiyenizden düşüldü. {formatDateTime(dispute.respondBy)} tarihine kadar ({daysLeft(dispute.respondBy)} gün) kanıt göndermezseniz itiraz kaybedilir.
+        </p>
+      )}
+      {dispute.status === 'UNDER_REVIEW' && <p className="note note-warning" role="status">Kanıtınız bankada inceleniyor. Sonuç bu sayfada görünecek.</p>}
+      {dispute.status === 'WON' && <p className="note note-success" role="status">İtirazı kazandınız. Tutar bakiyenize geri döndü.</p>}
+      {dispute.status === 'LOST' && (
+        <p className="note note-danger" role="status">
+          İtiraz kaybedildi. Tutar müşteride kaldı{dispute.feeAmount > 0 ? `, ayrıca ${formatMoney(dispute.feeAmount, dispute.currency)} itiraz ücreti kesildi` : ''}.
+        </p>
+      )}
+
+      <section className="card">
+        <dl className="details">
+          <div><dt>Durum</dt><dd><DisputeStatusBadge status={dispute.status} /></dd></div>
+          <div><dt>Ödeme</dt><dd><Link to={`/payments/${dispute.paymentId}`}><code>{dispute.paymentId.slice(0, 8)}</code></Link></dd></div>
+          <div><dt>Açılış</dt><dd>{formatDateTime(dispute.createdAt)}</dd></div>
+          <div><dt>Son yanıt</dt><dd>{formatDateTime(dispute.respondBy)}</dd></div>
+          {dispute.resolvedAt && <div><dt>Sonuç tarihi</dt><dd>{formatDateTime(dispute.resolvedAt)}</dd></div>}
+        </dl>
+      </section>
+
+      {dispute.evidenceSubmittedAt && (
+        <>
+          <div className="section-header"><h2>Gönderilen kanıt</h2></div>
+          <section className="card">
+            <dl className="details">
+              <div className="details-id"><dt>Açıklama</dt><dd className="prewrap">{dispute.evidenceExplanation}</dd></div>
+              {dispute.evidenceTracking && <div><dt>Kargo takip</dt><dd>{dispute.evidenceTracking}</dd></div>}
+              {dispute.evidenceCommunication && <div className="details-id"><dt>Yazışma</dt><dd className="prewrap">{dispute.evidenceCommunication}</dd></div>}
+              <div><dt>Gönderim</dt><dd>{formatDateTime(dispute.evidenceSubmittedAt)}</dd></div>
+            </dl>
+          </section>
+        </>
+      )}
+
+      {dialog === 'evidence' && <EvidenceDialog dispute={dispute} onClose={() => setDialog(null)} onDone={finish} />}
+      {dialog === 'accept' && (
+        <FormDialog title="İtirazı kabul et" submitLabel="Kabul et" danger onClose={() => setDialog(null)} onSubmit={accept}>
+          <p>{formatMoney(dispute.amount, dispute.currency)} müşteride kalır ve itiraz ücreti kesilir. Bu işlem geri alınamaz.</p>
+        </FormDialog>
+      )}
+    </>
+  );
+}

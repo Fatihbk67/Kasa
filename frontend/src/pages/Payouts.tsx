@@ -2,8 +2,16 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api';
 import { EmptyState, ErrorNote, failureMessage, formatDate, formatDateTime, Loading, PageHeader, PayoutStatusBadge } from '../components';
 import { formatMoney } from '../money';
-import type { Payout, PayoutDetail } from '../types';
+import type { Payout, PayoutDetail, PayoutItem } from '../types';
 import { useFetch } from '../useFetch';
+
+const ITEM_LABELS: Record<PayoutItem['type'], string> = {
+  CAPTURE: 'Tahsilat',
+  REFUND: 'İade',
+  DISPUTE_WITHDRAWAL: 'İtiraz kesintisi',
+  DISPUTE_REVERSAL: 'İtiraz iadesi',
+  DISPUTE_FEE: 'İtiraz ücreti',
+};
 
 export function Payouts() {
   const navigate = useNavigate();
@@ -87,7 +95,7 @@ export function PayoutDetailPage() {
             {items.map((item) => (
               <tr key={item.operationId}>
                 <td><Link to={`/payments/${item.paymentId}`}><code>{item.paymentId.slice(0, 8)}</code></Link></td>
-                <td>{item.type === 'CAPTURE' ? 'Tahsilat' : 'İade'}</td>
+                <td>{ITEM_LABELS[item.type]}</td>
                 <td className="numeric">{formatMoney(item.grossAmount, payout.currency)}</td>
                 <td className="numeric">{formatMoney(item.feeAmount, payout.currency)}</td>
                 <td className={item.netAmount < 0 ? 'numeric negative' : 'numeric'}>{formatMoney(item.netAmount, payout.currency)}</td>

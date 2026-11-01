@@ -64,17 +64,26 @@ class PaymentStore {
                 .single();
     }
 
-    void insertPayment(UUID id, UUID tenantId, long amount, String currency, String description) {
+    void insertPayment(UUID id, UUID tenantId, long amount, String currency, String description, UUID customerId) {
         jdbc.sql("""
-                        INSERT INTO payments (id, tenant_id, amount, currency, status, description)
-                        VALUES (:id, :tenantId, :amount, :currency, 'PENDING', :description)
+                        INSERT INTO payments (id, tenant_id, amount, currency, status, description, customer_id)
+                        VALUES (:id, :tenantId, :amount, :currency, 'PENDING', :description, :customerId)
                         """)
                 .param("id", id)
                 .param("tenantId", tenantId)
                 .param("amount", amount)
                 .param("currency", currency)
                 .param("description", description)
+                .param("customerId", customerId)
                 .update();
+    }
+
+    /** Row level security hides other tenants' customers, so someone else's id reads as unknown. */
+    boolean activeCustomerExists(UUID customerId) {
+        return jdbc.sql("SELECT EXISTS (SELECT 1 FROM customers WHERE id = :id AND anonymized_at IS NULL)")
+                .param("id", customerId)
+                .query(Boolean.class)
+                .single();
     }
 
     PaymentOperation insertOperation(UUID tenantId, UUID paymentId, OperationType type, long amount, String key,
@@ -136,6 +145,10 @@ class PaymentStore {
         if (filter.maxAmount() != null) {
             sql.append(" AND amount <= :maxAmount");
             params.put("maxAmount", filter.maxAmount());
+        }
+        if (filter.customerId() != null) {
+            sql.append(" AND customer_id = :customerId");
+            params.put("customerId", filter.customerId());
         }
         if (before != null) {
             sql.append(" AND (created_at, id) < (SELECT created_at, id FROM payments WHERE id = :before)");
@@ -211,6 +224,8 @@ class PaymentStore {
                 rs.getLong("captured_amount"),
                 rs.getLong("refunded_amount"),
                 rs.getLong("fee_amount"),
+                rs.getLong("disputed_amount"),
+                rs.getObject("customer_id", UUID.class),
                 rs.getString("description"),
                 rs.getString("bank_reference"),
                 rs.getString("failure_code"),

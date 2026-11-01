@@ -15,8 +15,12 @@ import com.kasa.tenant.TenantScope;
 @Service
 public class AnalyticsService {
 
-    public record Totals(long captured, long refunded, long fees, long net, long captureCount,
+    /** {@code disputed} is what disputes took in the period after reversals, and can be negative after a good month. */
+    public record Totals(long captured, long refunded, long fees, long disputed, long disputeFees, long net, long captureCount,
                          long authorizationAttempts, long authorizationsApproved) {
+    }
+
+    private record DisputeMoves(long disputed, long fees) {
     }
 
     public record DayPoint(LocalDate day, long captured, long refunded, long captureCount) {
@@ -64,9 +68,28 @@ public class AnalyticsService {
         long declined = failures.stream().mapToLong(FailureCount::count).sum();
         long approved = approvedAuthorizations(from, to, currency);
 
-        Totals totals = new Totals(captured, refunded, fees, captured - fees - refunded, captureCount,
+        DisputeMoves disputes = disputeMoves(from, to, currency);
+        Totals totals = new Totals(captured, refunded, fees, disputes.disputed(), disputes.fees(),
+                captured - fees - refunded - disputes.disputed() - disputes.fees(), captureCount,
                 approved + declined, approved);
         return new Summary(days, currency, totals, daily, statuses, failures);
+    }
+
+    private DisputeMoves disputeMoves(OffsetDateTime from, OffsetDateTime to, String currency) {
+        return jdbc.sql("""
+                        SELECT COALESCE(SUM(o.amount) FILTER (WHERE o.type = 'DISPUTE_WITHDRAWAL'), 0)
+                                   - COALESCE(SUM(o.amount) FILTER (WHERE o.type = 'DISPUTE_REVERSAL'), 0) AS disputed,
+                               COALESCE(SUM(o.amount) FILTER (WHERE o.type = 'DISPUTE_FEE'), 0) AS fees
+                        FROM payment_operations o
+                        JOIN payments p ON p.id = o.payment_id
+                        WHERE o.status = 'SUCCEEDED' AND o.type IN ('DISPUTE_WITHDRAWAL', 'DISPUTE_REVERSAL', 'DISPUTE_FEE')
+                          AND p.currency = :currency AND o.updated_at >= :from AND o.updated_at < :to
+                        """)
+                .param("currency", currency)
+                .param("from", from)
+                .param("to", to)
+                .query((rs, rowNum) -> new DisputeMoves(rs.getLong("disputed"), rs.getLong("fees")))
+                .single();
     }
 
     private List<DayRow> dailyRows(LocalDate first, LocalDate last, OffsetDateTime from, OffsetDateTime to, String currency) {

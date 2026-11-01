@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, newIdempotencyKey } from '../api';
 import {
   CopyButton,
+  DisputeStatusBadge,
   ErrorNote,
   failureMessage,
   FormDialog,
@@ -14,8 +15,9 @@ import {
 } from '../components';
 import { canOperate, useMe } from '../me';
 import { formatMoney, parseAmount } from '../money';
-import type { Operation, OperationResult, Payment, PaymentDetail } from '../types';
+import type { Dispute, DisputePage, DisputeReason, Operation, OperationResult, Payment, PaymentDetail } from '../types';
 import { useFetch, usePolling } from '../useFetch';
+import { DISPUTE_REASONS } from './Disputes';
 
 type Action = 'capture' | 'void' | 'refund';
 
@@ -24,7 +26,31 @@ const OPERATION_LABELS: Record<Operation['type'], string> = {
   CAPTURE: 'Tahsilat',
   VOID: 'Provizyon iptali',
   REFUND: 'İade',
+  DISPUTE_WITHDRAWAL: 'İtiraz kesintisi',
+  DISPUTE_REVERSAL: 'İtiraz iadesi',
+  DISPUTE_FEE: 'İtiraz ücreti',
 };
+
+function SimulateDisputeDialog({ payment, onClose, onDone }: { payment: Payment; onClose: () => void; onDone: (disputeId: string) => void }) {
+  const [reason, setReason] = useState<DisputeReason>('PRODUCT_NOT_RECEIVED');
+
+  const submit = async () => {
+    const dispute = await api<Dispute>('/disputes/simulate', { method: 'POST', body: { paymentId: payment.id, reason } });
+    onDone(dispute.id);
+  };
+
+  return (
+    <FormDialog title="Banka itirazı simüle et" submitLabel="İtirazı başlat" danger onClose={onClose} onSubmit={submit}>
+      <p>Gerçekte itirazı müşterinin bankası başlatır. Tutar bakiyenizden hemen düşer.</p>
+      <label className="field">
+        Neden
+        <select value={reason} onChange={(e) => setReason(e.target.value as DisputeReason)}>
+          {Object.entries(DISPUTE_REASONS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        </select>
+      </label>
+    </FormDialog>
+  );
+}
 
 function ActionDialog({ action, payment, onClose, onDone }: {
   action: Action;
@@ -32,7 +58,7 @@ function ActionDialog({ action, payment, onClose, onDone }: {
   onClose: () => void;
   onDone: (message: string | null) => void;
 }) {
-  const limit = action === 'capture' ? payment.amount : payment.capturedAmount - payment.refundedAmount;
+  const limit = action === 'capture' ? payment.amount : payment.capturedAmount - payment.refundedAmount - payment.disputedAmount;
   const [amount, setAmount] = useState('');
   const [amountError, setAmountError] = useState<string | null>(null);
   // Stays the same for this dialog, so a repeated click on submit can never be processed twice.
@@ -77,7 +103,10 @@ function ActionDialog({ action, payment, onClose, onDone }: {
 export function PaymentDetailPage() {
   const { id } = useParams();
   const { me } = useMe();
+  const navigate = useNavigate();
   const detail = useFetch(() => api<PaymentDetail>(`/payments/${id}`), [id]);
+  const disputes = useFetch(() => api<DisputePage>(`/disputes?paymentId=${id}&limit=1`), [id]);
+  const [simulating, setSimulating] = useState(false);
   const [action, setAction] = useState<Action | null>(null);
   const [operationFailure, setOperationFailure] = useState<string | null>(null);
 
@@ -97,10 +126,12 @@ export function PaymentDetailPage() {
   }
 
   const { payment, operations } = detail.data;
-  const refundable = payment.capturedAmount - payment.refundedAmount;
+  const refundable = payment.capturedAmount - payment.refundedAmount - payment.disputedAmount;
   const canAct = canOperate(me) && !hasPending;
   const canCapture = payment.status === 'AUTHORIZED' && canAct;
   const canRefund = (payment.status === 'CAPTURED' || payment.status === 'PARTIALLY_REFUNDED') && refundable > 0 && canAct;
+  const dispute = disputes.data?.items[0] ?? null;
+  const canDispute = (payment.status === 'CAPTURED' || payment.status === 'PARTIALLY_REFUNDED') && canAct && Boolean(disputes.data) && !dispute;
 
   const finish = (message: string | null) => {
     setAction(null);
@@ -119,6 +150,7 @@ export function PaymentDetailPage() {
             {canCapture && <button type="button" className="button button-primary" onClick={() => setAction('capture')}>Tahsil et</button>}
             {canCapture && <button type="button" className="button" onClick={() => setAction('void')}>İptal et</button>}
             {canRefund && <button type="button" className="button" onClick={() => setAction('refund')}>İade et</button>}
+            {canDispute && <button type="button" className="button" onClick={() => setSimulating(true)}>İtiraz simüle et</button>}
           </>
         )}
       />
@@ -129,6 +161,11 @@ export function PaymentDetailPage() {
         </p>
       )}
       {payment.failureCode && <p className="note note-danger">{failureMessage(payment.failureCode)}</p>}
+      {dispute && (
+        <p className="note note-warning">
+          Bu ödemeye itiraz edildi: {formatMoney(dispute.amount, dispute.currency)}. <DisputeStatusBadge status={dispute.status} /> <Link to={`/disputes/${dispute.id}`}>İtirazı aç</Link>
+        </p>
+      )}
 
       <section className="card">
         <dl className="details">
@@ -136,6 +173,8 @@ export function PaymentDetailPage() {
           <div><dt>Tahsil edilen</dt><dd>{formatMoney(payment.capturedAmount, payment.currency)}</dd></div>
           <div><dt>Komisyon</dt><dd>{formatMoney(payment.feeAmount, payment.currency)}</dd></div>
           <div><dt>İade edilen</dt><dd>{formatMoney(payment.refundedAmount, payment.currency)}</dd></div>
+          {payment.disputedAmount > 0 && <div><dt>İtirazda</dt><dd>{formatMoney(payment.disputedAmount, payment.currency)}</dd></div>}
+          {payment.customerId && <div><dt>Müşteri</dt><dd><Link to={`/customers/${payment.customerId}`}>Müşteriyi aç</Link></dd></div>}
           <div><dt>Oluşturulma</dt><dd>{formatDateTime(payment.createdAt)}</dd></div>
           <div className="details-id"><dt>Ödeme kimliği</dt><dd><code>{payment.id}</code> <CopyButton value={payment.id} /></dd></div>
         </dl>
@@ -168,6 +207,7 @@ export function PaymentDetailPage() {
         </table>
       </div>
       {action && <ActionDialog action={action} payment={payment} onClose={() => setAction(null)} onDone={finish} />}
+      {simulating && <SimulateDisputeDialog payment={payment} onClose={() => setSimulating(false)} onDone={(disputeId) => navigate(`/disputes/${disputeId}`)} />}
     </>
   );
 }

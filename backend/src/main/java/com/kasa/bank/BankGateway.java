@@ -20,6 +20,15 @@ public interface BankGateway {
 
     BankResponse payout(UUID payoutId, UUID beneficiaryTenantId, long amount, String currency);
 
+    /**
+     * Money the bank moved by itself because of a dispute. A real bank announces this in a notification that
+     * already carries its reference; here the call stands in for that notification.
+     */
+    BankResponse disputeMovement(UUID operationId, String type, long amount, String currency);
+
+    /** The card network's decision on a dispute whose evidence is under review. True means the merchant won. */
+    boolean decideDispute(UUID disputeId, boolean hasDeliveryProof);
+
     /** Returns the result of an earlier call, or empty if the bank never received it. */
     Optional<BankResponse> lookup(UUID operationId);
 

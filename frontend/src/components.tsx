@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import type { OperationStatus, PaymentStatus, Payout, WebhookDelivery } from './types';
+import type { DisputeStatus, OperationStatus, PaymentLinkStatus, PaymentStatus, Payout, WebhookDelivery } from './types';
 
 type Tone = 'success' | 'warning' | 'danger' | 'neutral' | 'info';
 
@@ -66,6 +66,26 @@ export function DeliveryStatusBadge({ status }: { status: WebhookDelivery['statu
     DELIVERED: { label: 'Teslim edildi', tone: 'success' },
     FAILED: { label: 'Başarısız', tone: 'danger' },
     CANCELLED: { label: 'İptal edildi', tone: 'neutral' },
+  };
+  return <Badge {...map[status]} />;
+}
+
+export function DisputeStatusBadge({ status }: { status: DisputeStatus }) {
+  const map: Record<DisputeStatus, { label: string; tone: Tone }> = {
+    NEEDS_RESPONSE: { label: 'Yanıt bekliyor', tone: 'danger' },
+    UNDER_REVIEW: { label: 'İnceleniyor', tone: 'warning' },
+    WON: { label: 'Kazanıldı', tone: 'success' },
+    LOST: { label: 'Kaybedildi', tone: 'neutral' },
+  };
+  return <Badge {...map[status]} />;
+}
+
+export function PaymentLinkStatusBadge({ status }: { status: PaymentLinkStatus }) {
+  const map: Record<PaymentLinkStatus, { label: string; tone: Tone }> = {
+    OPEN: { label: 'Açık', tone: 'success' },
+    SOLD_OUT: { label: 'Kontenjan doldu', tone: 'warning' },
+    EXPIRED: { label: 'Süresi doldu', tone: 'neutral' },
+    DISABLED: { label: 'Kapatıldı', tone: 'neutral' },
   };
   return <Badge {...map[status]} />;
 }

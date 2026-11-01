@@ -56,7 +56,11 @@ public class SettlementService {
     private record UnsettledItem(UUID operationId, UUID paymentId, String type, long grossAmount, long feeAmount) {
         /** The fee stays with the platform on capture and is not returned on refund. */
         long netAmount() {
-            return type.equals("CAPTURE") ? grossAmount - feeAmount : -grossAmount;
+            return switch (type) {
+                case "CAPTURE" -> grossAmount - feeAmount;
+                case "DISPUTE_REVERSAL" -> grossAmount;
+                default -> -grossAmount;
+            };
         }
     }
 
@@ -251,7 +255,8 @@ public class SettlementService {
                                CASE WHEN o.type = 'CAPTURE' THEN p.fee_amount ELSE 0 END AS fee
                         FROM payment_operations o
                         JOIN payments p ON p.id = o.payment_id
-                        WHERE o.status = 'SUCCEEDED' AND o.type IN ('CAPTURE', 'REFUND')
+                        WHERE o.status = 'SUCCEEDED'
+                          AND o.type IN ('CAPTURE', 'REFUND', 'DISPUTE_WITHDRAWAL', 'DISPUTE_REVERSAL', 'DISPUTE_FEE')
                           AND o.updated_at < :cutoff AND p.currency = :currency
                           AND NOT EXISTS (SELECT 1 FROM payout_items i
                                           WHERE i.operation_id = o.id AND i.released_at IS NULL)

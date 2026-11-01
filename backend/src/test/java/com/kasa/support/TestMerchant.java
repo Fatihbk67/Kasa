@@ -26,6 +26,11 @@ public record TestMerchant(RestClient client, String token, String apiKey, UUID 
         return new TestMerchant(client, token, (String) key.get("key"), UUID.fromString((String) registered.get("tenantId")));
     }
 
+    /** Sends a request whose rejection is the point of the test, returning its status code instead of throwing. */
+    public static int statusOf(RestClient.RequestHeadersSpec<?> request) {
+        return request.exchange((sent, response) -> response.getStatusCode().value());
+    }
+
     /** Authorizes and captures a payment, returning the payment id. */
     public UUID capturedPayment(long amount) {
         UUID id = authorized(amount, "tok_success");

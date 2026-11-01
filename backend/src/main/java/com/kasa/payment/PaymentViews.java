@@ -11,12 +11,13 @@ public final class PaymentViews {
     }
 
     public record PaymentView(UUID id, long amount, String currency, PaymentStatus status, long capturedAmount,
-                              long refundedAmount, long feeAmount, String description, String failureCode,
-                              OffsetDateTime createdAt, OffsetDateTime updatedAt) {
+                              long refundedAmount, long feeAmount, long disputedAmount, UUID customerId,
+                              String description, String failureCode, OffsetDateTime createdAt, OffsetDateTime updatedAt) {
 
         static PaymentView of(Payment p) {
             return new PaymentView(p.id(), p.amount(), p.currency(), p.status(), p.capturedAmount(),
-                    p.refundedAmount(), p.feeAmount(), p.description(), p.failureCode(), p.createdAt(), p.updatedAt());
+                    p.refundedAmount(), p.feeAmount(), p.disputedAmount(), p.customerId(), p.description(),
+                    p.failureCode(), p.createdAt(), p.updatedAt());
         }
     }
 

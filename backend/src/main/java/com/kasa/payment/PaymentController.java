@@ -45,7 +45,8 @@ public class PaymentController {
             @NotNull @Positive @Max(1_000_000_000_000L) Long amount,
             @NotNull @Pattern(regexp = "[A-Z]{3}") String currency,
             @NotNull @Pattern(regexp = "tok_[a-z_]{1,64}") String cardToken,
-            @Size(max = 500) String description) {
+            @Size(max = 500) String description,
+            UUID customerId) {
     }
 
     public record AmountRequest(@Positive @Max(1_000_000_000_000L) Long amount) {
@@ -62,7 +63,7 @@ public class PaymentController {
                                                   @RequestHeader(IDEMPOTENCY_KEY) String key,
                                                   @Valid @RequestBody CreatePaymentRequest request) {
         OperationResult result = payments.create(CurrentTenant.of(authentication), key, request.amount(),
-                request.currency(), request.cardToken(), request.description());
+                request.currency(), request.cardToken(), request.description(), request.customerId());
         return respond(result, HttpStatus.CREATED);
     }
 
@@ -79,12 +80,13 @@ public class PaymentController {
                             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
                             @RequestParam(required = false) Long minAmount,
                             @RequestParam(required = false) Long maxAmount,
+                            @RequestParam(required = false) UUID customerId,
                             @RequestParam(required = false) UUID before,
                             @RequestParam(defaultValue = "20") int limit) {
         if (limit < 1 || limit > MAX_PAGE_SIZE) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "limit must be between 1 and " + MAX_PAGE_SIZE);
         }
-        return payments.list(CurrentTenant.of(authentication), filter(status, q, from, to, minAmount, maxAmount), before, limit);
+        return payments.list(CurrentTenant.of(authentication), filter(status, q, from, to, minAmount, maxAmount, customerId), before, limit);
     }
 
     @GetMapping("/export")
@@ -96,7 +98,7 @@ public class PaymentController {
                                          @RequestParam(required = false) Long minAmount,
                                          @RequestParam(required = false) Long maxAmount) {
         PaymentService.CsvExport export = payments.exportCsv(CurrentTenant.of(authentication),
-                filter(status, q, from, to, minAmount, maxAmount), MAX_EXPORT_ROWS);
+                filter(status, q, from, to, minAmount, maxAmount, null), MAX_EXPORT_ROWS);
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType("text/csv; charset=UTF-8"))
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"kasa-odemeler.csv\"")
@@ -104,11 +106,11 @@ public class PaymentController {
                 .body(export.content());
     }
 
-    private static PaymentFilter filter(PaymentStatus status, String q, LocalDate from, LocalDate to, Long minAmount, Long maxAmount) {
+    private static PaymentFilter filter(PaymentStatus status, String q, LocalDate from, LocalDate to, Long minAmount, Long maxAmount, UUID customerId) {
         if (q != null && q.length() > MAX_QUERY_LENGTH) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "q is too long");
         }
-        return new PaymentFilter(status, q == null || q.isBlank() ? null : q.trim(), from, to, minAmount, maxAmount);
+        return new PaymentFilter(status, q == null || q.isBlank() ? null : q.trim(), from, to, minAmount, maxAmount, customerId);
     }
 
     @PostMapping("/{id}/capture")

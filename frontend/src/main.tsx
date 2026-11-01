@@ -7,6 +7,9 @@ import { AdminHome, AdminRunDetail } from './pages/Admin';
 import { Analytics } from './pages/Analytics';
 import { AuditPage } from './pages/Audit';
 import { Checkout } from './pages/Checkout';
+import { CustomerDetailPage, Customers } from './pages/Customers';
+import { DisputeDetailPage, Disputes } from './pages/Disputes';
+import { PaymentLinks, PublicLinkPage } from './pages/PaymentLinks';
 import { Settings } from './pages/Settings';
 import { AcceptInvitation, TeamPage } from './pages/Team';
 import { Developers } from './pages/Developers';
@@ -30,6 +33,7 @@ createRoot(document.getElementById('root')!).render(
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/pay/:id" element={<Checkout />} />
+          <Route path="/l/:slug" element={<PublicLinkPage />} />
           <Route path="/invite/:token" element={<AcceptInvitation />} />
           <Route path="/admin" element={<AdminHome />} />
           <Route path="/admin/reconciliation/:id" element={<AdminRunDetail />} />
@@ -38,6 +42,11 @@ createRoot(document.getElementById('root')!).render(
             <Route path="analytics" element={<Analytics />} />
             <Route path="payments" element={<Payments />} />
             <Route path="payments/:id" element={<PaymentDetailPage />} />
+            <Route path="disputes" element={<Disputes />} />
+            <Route path="disputes/:id" element={<DisputeDetailPage />} />
+            <Route path="customers" element={<Customers />} />
+            <Route path="customers/:id" element={<CustomerDetailPage />} />
+            <Route path="payment-links" element={<PaymentLinks />} />
             <Route path="payouts" element={<Payouts />} />
             <Route path="payouts/:id" element={<PayoutDetailPage />} />
             <Route path="developers" element={<Developers />} />

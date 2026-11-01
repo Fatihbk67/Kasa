@@ -107,6 +107,17 @@ public class SimulatedBank implements BankGateway {
     }
 
     @Override
+    public BankResponse disputeMovement(UUID operationId, String type, long amount, String currency) {
+        return process(operationId, () -> book(type, amount, currency));
+    }
+
+    /** A predictable rule, so a demo can reach either outcome: proof of delivery wins, anything less loses. */
+    @Override
+    public boolean decideDispute(UUID disputeId, boolean hasDeliveryProof) {
+        return hasDeliveryProof;
+    }
+
+    @Override
     public Optional<BankResponse> lookup(UUID operationId) {
         return Optional.ofNullable(processed.get(operationId));
     }

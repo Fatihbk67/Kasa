@@ -25,6 +25,16 @@ const ACTION_LABELS: Record<string, string> = {
   PAYMENT_CAPTURE_REQUESTED: 'Tahsilat istendi',
   PAYMENT_VOID_REQUESTED: 'Provizyon iptali istendi',
   PAYMENT_REFUND_REQUESTED: 'İade istendi',
+  DISPUTE_OPENED: 'İtiraz açıldı',
+  DISPUTE_EVIDENCE_SUBMITTED: 'İtiraza kanıt gönderildi',
+  DISPUTE_ACCEPTED: 'İtiraz kabul edildi',
+  DISPUTE_WON: 'İtiraz kazanıldı',
+  DISPUTE_LOST: 'İtiraz kaybedildi',
+  CUSTOMER_CREATED: 'Müşteri eklendi',
+  CUSTOMER_UPDATED: 'Müşteri güncellendi',
+  CUSTOMER_ANONYMIZED: 'Müşteri verisi silindi',
+  PAYMENT_LINK_CREATED: 'Ödeme bağlantısı oluşturuldu',
+  PAYMENT_LINK_DISABLED: 'Ödeme bağlantısı kapatıldı',
 };
 
 const METADATA_LABELS: Record<string, string> = {
@@ -36,6 +46,8 @@ const METADATA_LABELS: Record<string, string> = {
   prefix: 'Önek',
   url: 'Adres',
   businessName: 'İşletme',
+  title: 'Başlık',
+  reason: 'Neden',
 };
 
 function actionLabel(action: string): string {

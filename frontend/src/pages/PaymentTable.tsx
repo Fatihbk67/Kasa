@@ -24,7 +24,10 @@ export function PaymentTable({ payments }: { payments: Payment[] }) {
                   {payment.description || 'Açıklamasız ödeme'}
                 </a>
               </td>
-              <td><PaymentStatusBadge status={payment.status} /></td>
+              <td>
+                <PaymentStatusBadge status={payment.status} />
+                {payment.disputedAmount > 0 && <span className="hint row-hint">İtiraz: {formatMoney(payment.disputedAmount, payment.currency)}</span>}
+              </td>
               <td className="numeric">{formatMoney(payment.amount, payment.currency)}</td>
               <td className="hide-narrow muted">{formatDateTime(payment.createdAt)}</td>
             </tr>

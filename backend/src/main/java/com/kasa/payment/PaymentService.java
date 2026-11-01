@@ -71,17 +71,25 @@ public class PaymentService {
 
     public OperationResult create(UUID tenantId, String key, long amount, String currency, String cardToken,
                                   String description) {
+        return create(tenantId, key, amount, currency, cardToken, description, null);
+    }
+
+    public OperationResult create(UUID tenantId, String key, long amount, String currency, String cardToken,
+                                  String description, UUID customerId) {
         requireValidKey(key);
         String hash = Hashes.sha256Hex(String.join("|", "CREATE", String.valueOf(amount), currency, cardToken,
-                String.valueOf(description)));
+                String.valueOf(description)) + (customerId == null ? "" : "|" + customerId));
         Begun begun = tx.execute(status -> {
             tenantScope.apply(tenantId);
             store.lockIdempotencyKey(tenantId, key);
             return store.findOperationByKey(key)
                     .map(existing -> replay(existing, hash))
                     .orElseGet(() -> {
+                        if (customerId != null && !store.activeCustomerExists(customerId)) {
+                            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, "unknown customer");
+                        }
                         UUID paymentId = UUID.randomUUID();
-                        store.insertPayment(paymentId, tenantId, amount, currency, description);
+                        store.insertPayment(paymentId, tenantId, amount, currency, description, customerId);
                         return new Begun(store.insertOperation(tenantId, paymentId, OperationType.AUTHORIZE, amount,
                                 key, hash), null, false);
                     });
@@ -187,9 +195,14 @@ public class PaymentService {
             }
             case REFUND -> {
                 requireStatus(payment, type, PaymentStatus.CAPTURED, PaymentStatus.PARTIALLY_REFUNDED);
-                yield withinLimit(requested, payment.capturedAmount() - payment.refundedAmount());
+                // The bank has already returned disputed money to the customer. Refunding it too would pay them twice.
+                long refundable = payment.capturedAmount() - payment.refundedAmount() - payment.disputedAmount();
+                if (refundable == 0) {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT, "nothing left to refund: the rest is under dispute");
+                }
+                yield withinLimit(requested, refundable);
             }
-            case AUTHORIZE -> throw new IllegalArgumentException("authorization starts with create");
+            default -> throw new IllegalArgumentException(type + " is not started through a bank call");
         };
     }
 
@@ -275,6 +288,7 @@ public class PaymentService {
                 case CAPTURE -> "payment.captured";
                 case VOID -> "payment.voided";
                 case REFUND -> "payment.refunded";
+                default -> throw new IllegalArgumentException(operation.type() + " is not started through a bank call");
             };
         }
         if (operation.type() == OperationType.AUTHORIZE) {
@@ -301,6 +315,7 @@ public class PaymentService {
                         payment.bankReference(), null);
                 paymentLedger.recordRefund(tenantId, payment.currency(), operation.id(), operation.amount());
             }
+            default -> throw new IllegalArgumentException(operation.type() + " is not started through a bank call");
         }
     }
 

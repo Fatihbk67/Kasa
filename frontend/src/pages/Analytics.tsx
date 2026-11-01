@@ -56,9 +56,10 @@ export function Analytics() {
         <>
           <section className="stats stats-wide" aria-label="Özet">
             <Stat label="Tahsilat hacmi" value={formatMoney(data.totals.captured, data.currency)} hint={`${data.totals.captureCount} tahsilat`} />
-            <Stat label="Net kazanç" value={formatMoney(data.totals.net, data.currency)} hint="Komisyon ve iadeler düşüldü" />
+            <Stat label="Net kazanç" value={formatMoney(data.totals.net, data.currency)} hint="Komisyon, iade ve itirazlar düşüldü" />
             <Stat label="Komisyon" value={formatMoney(data.totals.fees, data.currency)} />
             <Stat label="İadeler" value={formatMoney(data.totals.refunded, data.currency)} />
+            <Stat label="İtirazlar" value={formatMoney(data.totals.disputed + data.totals.disputeFees, data.currency)} hint="Kesinti ve ücretler, geri kazanılanlar düşüldü" />
             <Stat label="Onay oranı" value={rate} hint={`${data.totals.authorizationsApproved} / ${data.totals.authorizationAttempts} deneme`} />
           </section>
 

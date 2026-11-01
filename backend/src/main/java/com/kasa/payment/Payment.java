@@ -12,6 +12,8 @@ record Payment(
         long capturedAmount,
         long refundedAmount,
         long feeAmount,
+        long disputedAmount,
+        UUID customerId,
         String description,
         String bankReference,
         String failureCode,

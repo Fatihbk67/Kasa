@@ -18,6 +18,9 @@ import com.kasa.auth.AuthService;
 import com.kasa.bank.SimulatedBank;
 import com.kasa.reconciliation.ReconciliationService;
 import com.kasa.checkout.CheckoutService;
+import com.kasa.checkout.PaymentLinkService;
+import com.kasa.customer.CustomerService;
+import com.kasa.dispute.DisputeService;
 import com.kasa.payment.PaymentService;
 import com.kasa.payment.PaymentViews.OperationResult;
 import com.kasa.settlement.SettlementService;
@@ -70,6 +73,7 @@ public final class LocalDevApplication {
         JdbcClient superuser = JdbcClient.create(postgres.getPostgresDatabase());
         seedHistory(context, tenantId, superuser);
         seedTeam(context, tenantId, superuser);
+        seedCustomersLinksAndDisputes(context, tenantId, superuser);
         log.info("Demo merchant ready: {} / {}", DEMO_EMAIL, DEMO_PASSWORD);
     }
 
@@ -79,6 +83,42 @@ public final class LocalDevApplication {
         UUID ownerId = superuser.sql("SELECT id FROM users WHERE tenant_id = :t").param("t", tenantId).query(UUID.class).single();
         team.accept(team.invite(tenantId, ownerId, "izleyici@kasa.test", "VIEWER").token(), DEMO_PASSWORD);
         team.invite(tenantId, ownerId, "yeni-yonetici@kasa.test", "ADMIN");
+    }
+
+    /** One dispute at every stage, so each screen has something to show without any setup. */
+    private static void seedCustomersLinksAndDisputes(ConfigurableApplicationContext context, UUID tenantId, JdbcClient superuser) {
+        PaymentService payments = context.getBean(PaymentService.class);
+        CustomerService customers = context.getBean(CustomerService.class);
+        DisputeService disputes = context.getBean(DisputeService.class);
+
+        UUID ayse = customers.create(tenantId, "ayse@kasa.test", "Ayşe Yılmaz").id();
+        UUID mehmet = customers.create(tenantId, "mehmet@kasa.test", "Mehmet Demir").id();
+        customers.create(tenantId, "zeynep@kasa.test", "Zeynep Kaya");
+
+        UUID needsResponse = customerPayment(payments, tenantId, ayse, 89_900, "Espresso makinesi");
+        customerPayment(payments, tenantId, ayse, 24_900, "Çekirdek kahve aboneliği");
+        UUID underReview = customerPayment(payments, tenantId, mehmet, 45_000, "Filtre kahve seti");
+        UUID won = customerPayment(payments, tenantId, mehmet, 32_500, "Hediye kartı");
+        UUID lost = customerPayment(payments, tenantId, mehmet, 15_000, "Toplu sipariş");
+
+        disputes.open(tenantId, needsResponse, null, "PRODUCT_NOT_RECEIVED");
+        UUID reviewed = disputes.open(tenantId, underReview, null, "PRODUCT_UNACCEPTABLE").id();
+        disputes.submitEvidence(tenantId, reviewed, new DisputeService.Evidence("Ürün sağlam gönderildi.", null, null));
+        UUID wonId = disputes.open(tenantId, won, null, "DUPLICATE").id();
+        disputes.submitEvidence(tenantId, wonId, new DisputeService.Evidence("Tek bir tahsilat yapıldı ve ürün teslim edildi.", "KARGO-48213", null));
+        superuser.sql("UPDATE disputes SET evidence_submitted_at = now() - interval '1 hour' WHERE id = :id").param("id", wonId).update();
+        disputes.resolveDue(java.time.Duration.ofMinutes(30));
+        disputes.accept(tenantId, disputes.open(tenantId, lost, null, "FRAUDULENT").id());
+
+        PaymentLinkService links = context.getBean(PaymentLinkService.class);
+        links.create(tenantId, new PaymentLinkService.NewLink("Kahve demleme atölyesi", "Cumartesi 14.00, Kadıköy", 75_000L, "TRY", 12, null));
+        links.create(tenantId, new PaymentLinkService.NewLink("Kahve fonuna destek", "Dilediğiniz kadar", null, "TRY", null, null));
+    }
+
+    private static UUID customerPayment(PaymentService payments, UUID tenantId, UUID customerId, long amount, String description) {
+        UUID id = payments.create(tenantId, key(), amount, "TRY", "tok_success", description, customerId).payment().id();
+        capture(payments, tenantId, id);
+        return id;
     }
 
     /** Sixty days of realistic activity for the analytics charts, plus bank errors for the admin panel to show. */

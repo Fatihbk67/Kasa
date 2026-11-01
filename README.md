@@ -78,6 +78,12 @@ java -Djdk.net.unixdomain.tmpdir=backend/target load-test/LoadTest.java http://l
 - **Yetki değişikliği anında geçerli olur:** İmzalı token geri alınamaz, bu yüzden rol ve erişim her istekte veritabanından okunur. Çıkarılan üye bir sonraki istekte dışarıda kalır; parola değişince diğer oturumlar kapanır.
 - **İşletme sahipsiz kalamaz:** İki sahip aynı anda birbirinin yetkisini alsa bile satır kilitleri sayesinde biri sahip kalır.
 - **Geçmişle oynanırsa anlaşılır:** Denetim günlüğü değiştirilemez ve hash zinciriyle bağlıdır. Süper kullanıcı yetkisiyle yapılan bir değişiklik veya silme bile zincir doğrulamasında yakalanır. En yeni kayıtların silinmesini fark etmek için son hash'in veritabanı dışında saklanması gerekir; bu henüz yok.
+- **İtiraz, ödeme kesintisini kilitlemez:** Banka parayı geri alınca işletmenin bakiyesi eksiye düşebilir. İtiraz hareketleri de ödeme işlemi olduğu için bir sonraki hesap kesiminden düşülür, banka dosyasıyla da otomatik karşılaştırılır.
+- **Aynı para iki kez geri verilmez:** İtirazdaki tutar iade edilemez, iade edilen tutara itiraz açılamaz. İkisi aynı anda gelse bile satır kilidi sıraya koyar, veritabanı kısıtı da toplamı tahsilatla sınırlar.
+- **Son dakika kanıtı ezilmez:** Süre dolumu işi bir itirazı listeledikten sonra kanıt gelirse, iş durumu kilit altında yeniden okur ve itirazı kaybettirmez.
+- **Son kontenjan bir kez satılır:** 20 kişi aynı anda son yeri ödemeye çalışsa da tek çekim olur. Kontenjan sayaçta tutulmaz, oturumlardan sayılır; yarıda kalan bir ödeme yeri kalıcı olarak kapatamaz.
+- **Kişisel veri silinebilir, mali kayıt kalır:** Müşteri silinince ad ve e-posta boşaltılır, ödemeler kişiyle bağlantısız olarak durur. Değiştirilemeyen denetim günlüğüne müşteri bilgisi hiç yazılmaz, yoksa silinemezdi.
+- **Ziyaretçi müşteri bilgisini değiştiremez:** Herkese açık formda var olan bir e-posta girilirse kayıtlı ad korunur.
 - **Raporlar defterle aynı sonucu verir:** Analiz paneli tutarları paranın gerçekten hareket ettiği güne yazar ve net kazanç işletmenin defter bakiyesiyle uyuşur.
 - **Dışa aktarılan dosya saldırı aracı olamaz:** CSV'de formül gibi başlayan açıklamalar etkisizleştirilir (CSV injection). 10.000 satırda kesilen rapor kullanıcıya açıkça bildirilir.
 - **Bankayla farklar yakalanır:** Günlük mutabakat banka dosyasını kayıtlarımızla karşılaştırır. Farkları raporlar ama düzeltmez, çünkü hangi tarafın doğru olduğuna insan karar vermelidir.
@@ -127,6 +133,8 @@ Ardından `http://localhost:5173` adresini açın. Demo hesabı `demo@kasa.test`
 Demo verisi 60 günlük geçmiş içerir. Görüntüleyici rolünü denemek için `izleyici@kasa.test` hesabı aynı parolayla açılır. Davet bağlantıları e-postayla gitmez; panelde gösterilir ve elle paylaşılır. Yönetici paneli `/admin` adresindedir ve yerelde yukarıdaki token ile açılır; demo için iki banka hatası hazır gelir. Canlı ortamda yönetici token'ı Render'daki `KASA_ADMIN_TOKEN` değeridir.
 
 Sunucuyu kapatırken terminalde `Ctrl+C` kullanın. Zorla sonlandırılırsa geçici PostgreSQL süreçleri açık kalabilir.
+
+İtirazın her aşaması, müşteriler ve iki ödeme bağlantısı da demo verisinde hazır gelir. Kendiniz denemek için tahsil edilmiş bir ödemeyi açıp **İtiraz simüle et** deyin.
 
 Denemeye değer akış: **Test ödemesi oluştur** ile ödeme sayfasını açın ve "Banka yanıt vermiyor" kartını seçin. Sayfa bekleme durumuna geçer, yaklaşık bir buçuk dakika içinde kurtarma işi bankaya sorar ve sonuç kendiliğinden güncellenir. Ardından panelden ödemeyi tahsil edip iade edin.
 
@@ -199,6 +207,18 @@ Başka bir platformda aynı değişkenlere ek olarak `KASA_DB_APP_USER=kasa_app`
 | POST | `/api/v1/admin/reconciliation/runs?date=` | `X-Admin-Token` | Tarih için mutabakat çalıştırır |
 | GET | `/api/v1/admin/reconciliation/runs` | `X-Admin-Token` | Mutabakat geçmişini listeler |
 | GET | `/api/v1/admin/reconciliation/runs/{id}` | `X-Admin-Token` | Çalıştırmayı farklarıyla döner |
+| POST | `/api/v1/disputes/simulate` | JWT veya `X-Api-Key` | Bankanın itiraz açmasını simüle eder |
+| GET | `/api/v1/disputes` | JWT veya `X-Api-Key` | İtirazları listeler (`status`, `paymentId`, `limit`, `before`) |
+| GET | `/api/v1/disputes/{id}` | JWT veya `X-Api-Key` | İtirazı kanıtıyla döner |
+| POST | `/api/v1/disputes/{id}/evidence` | JWT veya `X-Api-Key` | Kanıt gönderir, bir kez yapılabilir |
+| POST | `/api/v1/disputes/{id}/accept` | JWT veya `X-Api-Key` | İtirazı kabul eder |
+| POST, GET | `/api/v1/customers` | JWT veya `X-Api-Key` | Müşteri ekler, arar ve listeler (`q`, `limit`, `before`) |
+| GET, PUT | `/api/v1/customers/{id}` | JWT veya `X-Api-Key` | Müşteriyi harcamasıyla döner veya günceller |
+| DELETE | `/api/v1/customers/{id}` | JWT veya `X-Api-Key` | Kişisel veriyi siler, ödeme kayıtlarını korur |
+| POST, GET | `/api/v1/payment-links` | JWT veya `X-Api-Key` | Paylaşılabilir ödeme bağlantısı oluşturur ve listeler |
+| POST | `/api/v1/payment-links/{id}/disable` | JWT veya `X-Api-Key` | Bağlantıyı kapatır |
+| GET | `/api/v1/public/links/{slug}` | Yok | Bağlantı bilgilerini döner |
+| POST | `/api/v1/public/links/{slug}/sessions` | Yok | Ziyaretçi için ödeme oturumu açar |
 | GET | `/api/v1/me` | JWT | Oturumdaki kullanıcı, rol ve işletme |
 | GET | `/api/v1/team` | Sahip, yönetici | Üyeler ve bekleyen davetler |
 | POST | `/api/v1/team/invitations` | Sahip, yönetici | Tek kullanımlık davet oluşturur (yöneticiler yalnızca görüntüleyici davet edebilir) |
@@ -223,9 +243,29 @@ PENDING ──> AUTHORIZED ──> CAPTURED ──> PARTIALLY_REFUNDED ──> R
    └──> FAILED
 ```
 
+## İtirazlar
+
+Müşteri bankasına başvurunca banka tutarı hemen geri alır. İşletmenin yanıt vermek için 7 günü vardır.
+
+```text
+NEEDS_RESPONSE ──> UNDER_REVIEW ──> WON
+      │                  └────────> LOST
+      └──> LOST (kabul edildi veya süre doldu)
+```
+
+| Adım | Borç | Alacak |
+|---|---|---|
+| İtiraz açıldı | `merchant_payable` | `psp_clearing` |
+| Kazanıldı | `psp_clearing` | `merchant_payable` |
+| Kaybedildi (ücret) | `merchant_payable` | `fee_revenue` |
+
+Simüle banka basit bir kural izler: kargo takip numarası varsa işletme kazanır, yoksa kaybeder. Karar birkaç dakikada verilir; gerçekte haftalar sürer. Kaybedilen itirazda ₺150 ücret kesilir.
+
+**Bilinen sınırlar:** Ödeme başına tek itiraz vardır. İki aşamalı itiraz (pre-arbitration) ve kanıt dosyası yükleme yoktur. Gerçek bankada itiraz bildirimle gelir; simülasyonda bu adımı `/disputes/simulate` temsil eder.
+
 ## Webhook'lar
 
-Olaylar: `payment.authorized`, `payment.declined`, `payment.failed`, `payment.captured`, `payment.voided`, `payment.refunded`, `payment.operation_failed`, `payout.paid`, `payout.failed`.
+Olaylar: `payment.authorized`, `payment.declined`, `payment.failed`, `payment.captured`, `payment.voided`, `payment.refunded`, `payment.operation_failed`, `payout.paid`, `payout.failed`, `dispute.opened`, `dispute.under_review`, `dispute.won`, `dispute.lost`.
 
 Teslimat **en az bir kez** garantilidir ve sıra garantisi yoktur. Alıcı `X-Kasa-Event-Id` ile tekrarları ayıklamalı, sıralama için gövdedeki `createdAt` alanını kullanmalıdır. 2xx dışındaki her yanıt başarısız sayılır; 8 denemeden sonra teslimat `FAILED` olur ve elle yeniden denenebilir.
 
@@ -237,7 +277,7 @@ Yerelde `localhost` hedefine göndermek için `KASA_WEBHOOKS_ALLOW_INSECURE_TARG
 
 ## Hesap kesimi ve mutabakat
 
-**Hesap kesimi** her gün 02:00 UTC'de çalışır. Dünün başlangıcından önce tamamlanan tahsilat ve iadeleri işletme ve para birimi bazında toplar. Tahsilatlar ücret düşülerek eklenir, iadeler çıkarılır; işlem ücreti iade edilmez. Net tutar sıfır veya negatifse kalemler sonraki güne devreder.
+**Hesap kesimi** her gün 02:00 UTC'de çalışır. Dünün başlangıcından önce tamamlanan tahsilat ve iadeleri işletme ve para birimi bazında toplar. Tahsilatlar ücret düşülerek eklenir, iadeler ve itiraz kesintileri çıkarılır, kazanılan itirazlar geri eklenir; işlem ücreti iade edilmez. Net tutar sıfır veya negatifse kalemler sonraki güne devreder.
 
 Defter kayıtları şöyledir:
 
@@ -287,4 +327,4 @@ Banka simüle edilir; davranışı token belirler. Böylece her hata senaryosu i
 - [x] **Canlı demo:** Render üzerinde uygulama, Neon üzerinde PostgreSQL
 - [x] **Analiz ve yönetim:** Grafikli analiz paneli, gelişmiş arama ve filtreler, CSV dışa aktarma, platform yönetim paneli
 - [x] **Ekip ve denetim:** Ekip üyeleri, rol bazlı yetkiler, değiştirilemez denetim günlüğü, ayarlar
-- [ ] **Yeni iş alanları:** İtiraz (chargeback) akışı, müşteri kayıtları, paylaşılabilir ödeme bağlantıları
+- [x] **Yeni iş alanları:** İtiraz (chargeback) akışı, müşteri kayıtları ve kişisel veri silme, paylaşılabilir ödeme bağlantıları

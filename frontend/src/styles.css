@@ -294,6 +294,8 @@ code {
 
 /* Tables */
 .table-wrap {
+  /* Keeps hidden column headings inside the scroll area, or they widen the whole page on a phone. */
+  position: relative;
   overflow-x: auto;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -423,6 +425,7 @@ tbody tr:last-child td {
 }
 
 input:not([type='radio']),
+textarea,
 select {
   width: 100%;
   min-height: 40px;
@@ -437,6 +440,22 @@ select {
 
 .field-inline select {
   width: auto;
+}
+
+textarea {
+  resize: vertical;
+}
+
+.prewrap {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+form.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
 }
 
 .button {
