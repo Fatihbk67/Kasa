@@ -21,6 +21,10 @@ services:
         generateValue: true
       - key: KASA_ADMIN_TOKEN
         generateValue: true
+      - key: KASA_ENCRYPTION_KEY
+        generateValue: true
+      - key: KASA_PUBLIC_URL
+        value: https://kasa-rpb3.onrender.com
       - key: KASA_FORWARD_HEADERS
         value: native
       # Fits the JVM into a small instance, trading peak speed for memory.

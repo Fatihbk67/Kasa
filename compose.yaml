@@ -23,6 +23,7 @@ services:
       KASA_DB_URL: jdbc:postgresql://postgres:5432/kasa
       KASA_JWT_SECRET: ${KASA_JWT_SECRET:?copy .env.example to .env and set it}
       KASA_ADMIN_TOKEN: ${KASA_ADMIN_TOKEN:?copy .env.example to .env and set it}
+      KASA_ENCRYPTION_KEY: ${KASA_ENCRYPTION_KEY:?copy .env.example to .env and set it}
     ports:
       - "8080:8080"
 

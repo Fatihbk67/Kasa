@@ -55,6 +55,15 @@ kasa:
     register-per-ip: 10
     checkout-pay-per-ip: 30
     payment-link-session-per-ip: 20
+    password-reset-per-ip: 5
+  encryption:
+    # Protects secrets the application must read back. Without it a key is derived from the JWT secret.
+    key: ${KASA_ENCRYPTION_KEY:}
+  # Links in emails are built from this, never from the request's Host header.
+  public-url: ${KASA_PUBLIC_URL:http://localhost:8080}
+  mail:
+    # No email provider is connected. A reset link in a log works as a password, so this stays off in production.
+    log-body: ${KASA_MAIL_LOG_BODY:false}
   disputes:
     # Charged only when the merchant loses, in minor units.
     loss-fee: 15000

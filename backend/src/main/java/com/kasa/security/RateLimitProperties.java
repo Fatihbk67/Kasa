@@ -6,5 +6,5 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties("kasa.rate-limit")
 public record RateLimitProperties(Duration window, int loginPerIpAndEmail, int loginPerIp, int registerPerIp,
-                                  int checkoutPayPerIp, int paymentLinkSessionPerIp) {
+                                  int checkoutPayPerIp, int paymentLinkSessionPerIp, int passwordResetPerIp) {
 }

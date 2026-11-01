@@ -12,6 +12,12 @@ const ACTION_LABELS: Record<string, string> = {
   TENANT_RENAMED: 'İşletme adı değişti',
   LOGIN_SUCCEEDED: 'Giriş yapıldı',
   LOGIN_FAILED: 'Başarısız giriş',
+  LOGIN_PASSWORD_ACCEPTED: 'Parola doğru, kod bekleniyor',
+  TWO_FACTOR_ENABLED: 'İki adımlı giriş açıldı',
+  TWO_FACTOR_DISABLED: 'İki adımlı giriş kapatıldı',
+  TWO_FACTOR_LOCKED: 'Hatalı kodlar nedeniyle hesap kilitlendi',
+  PASSWORD_RESET_REQUESTED: 'Parola sıfırlama istendi',
+  PASSWORD_RESET: 'Parola sıfırlandı',
   PASSWORD_CHANGED: 'Parola değişti',
   API_KEY_CREATED: 'API anahtarı oluşturuldu',
   API_KEY_REVOKED: 'API anahtarı iptal edildi',
@@ -57,6 +63,7 @@ const METADATA_LABELS: Record<string, string> = {
   title: 'Başlık',
   reason: 'Neden',
   planName: 'Plan',
+  secondFactor: 'İkinci adım',
 };
 
 function actionLabel(action: string): string {

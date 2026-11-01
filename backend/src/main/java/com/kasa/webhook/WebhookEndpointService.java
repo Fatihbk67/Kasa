@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.kasa.audit.AuditLog;
+import com.kasa.security.SecretCipher;
 import com.kasa.tenant.TenantScope;
 
 @Service
@@ -39,8 +40,10 @@ public class WebhookEndpointService {
     private final TenantScope tenantScope;
     private final WebhookUrlGuard urlGuard;
     private final AuditLog auditLog;
+    private final SecretCipher cipher;
 
-    public WebhookEndpointService(JdbcClient jdbc, TenantScope tenantScope, WebhookUrlGuard urlGuard, AuditLog auditLog) {
+    public WebhookEndpointService(JdbcClient jdbc, TenantScope tenantScope, WebhookUrlGuard urlGuard, AuditLog auditLog, SecretCipher cipher) {
+        this.cipher = cipher;
         this.auditLog = auditLog;
         this.jdbc = jdbc;
         this.tenantScope = tenantScope;
@@ -71,7 +74,7 @@ public class WebhookEndpointService {
                         """)
                 .param("tenantId", tenantId)
                 .param("url", url)
-                .param("secret", secret)
+                .param("secret", cipher.encrypt(WebhookSecrets.context(tenantId), secret))
                 .query(UUID.class)
                 .single();
         auditLog.record(tenantId, "WEBHOOK_ENDPOINT_CREATED", "WEBHOOK_ENDPOINT", id, Map.of("url", url));

@@ -45,6 +45,7 @@ public abstract class PostgresIntegrationTest {
         registry.add("kasa.rate-limit.login-per-ip", () -> Integer.MAX_VALUE);
         registry.add("kasa.rate-limit.checkout-pay-per-ip", () -> Integer.MAX_VALUE);
         registry.add("kasa.rate-limit.payment-link-session-per-ip", () -> Integer.MAX_VALUE);
+        registry.add("kasa.rate-limit.password-reset-per-ip", () -> Integer.MAX_VALUE);
         registry.add("kasa.disputes.job-interval", () -> "PT1H");
         registry.add("kasa.billing.job-interval", () -> "PT1H");
         registry.add("kasa.settlement.cron", () -> "-");

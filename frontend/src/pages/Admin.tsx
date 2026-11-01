@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { adminApi, getAdminToken, setAdminToken } from '../adminApi';
-import { EmptyState, ErrorNote, FormDialog, formatDate, formatDateTime, Loading, PageHeader } from '../components';
+import { adminApi, asAdminSession, getAdminToken, setAdminToken } from '../adminApi';
+import { api, ApiError } from '../api';
+import { EmptyState, ErrorNote, FormDialog, formatDate, formatDateTime, Loading, OneTimeSecret, PageHeader } from '../components';
 import { formatMoney } from '../money';
 import type { PlatformOverview, ReconciliationDetail, ReconciliationRun } from '../types';
 import { useFetch } from '../useFetch';
@@ -38,6 +39,10 @@ function AdminShell({ children, onSignOut }: { children: ReactNode; onSignOut: (
 }
 
 function AdminSignIn({ onSignedIn }: { onSignedIn: () => void }) {
+  const [useKey, setUseKey] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [code, setCode] = useState('');
   const [token, setToken] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -47,11 +52,17 @@ function AdminSignIn({ onSignedIn }: { onSignedIn: () => void }) {
     setBusy(true);
     setError(null);
     try {
-      await adminApi('/overview', 'GET', token);
-      setAdminToken(token);
+      if (useKey) {
+        await adminApi('/overview', 'GET', token);
+        setAdminToken(token);
+      } else {
+        const { accessToken } = await api<{ accessToken: string }>('/public/admin-login', { method: 'POST', body: { email, password, code } });
+        setAdminToken(asAdminSession(accessToken));
+      }
       onSignedIn();
     } catch (e) {
-      setError((e as Error).message);
+      const wrong = e instanceof ApiError && e.status === 401;
+      setError(wrong ? (useKey ? 'Anahtar geçersiz.' : 'E-posta, parola veya kod hatalı.') : (e as Error).message);
       setBusy(false);
     }
   };
@@ -63,17 +74,188 @@ function AdminSignIn({ onSignedIn }: { onSignedIn: () => void }) {
         <h1>Platform yönetimi</h1>
         <p className="muted">Bu bölüm işletmeler için değil, platformu işleten ekip içindir.</p>
         <form onSubmit={submit} className="stack">
-          <label className="field">
-            Yönetici anahtarı
-            <input type="password" required autoComplete="off" value={token} onChange={(e) => setToken(e.target.value)} />
-          </label>
+          {useKey ? (
+            <label className="field">
+              Yönetici anahtarı
+              <input type="password" required autoComplete="off" value={token} onChange={(e) => setToken(e.target.value)} />
+              <span className="hint">Makineler ve ilk hesabı oluşturmak içindir. İşlemler kişiye yazılmaz.</span>
+            </label>
+          ) : (
+            <>
+              <label className="field">
+                E-posta
+                <input type="email" required autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} />
+              </label>
+              <label className="field">
+                Parola
+                <input type="password" required autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+              </label>
+              <label className="field">
+                Doğrulama kodu
+                <input inputMode="numeric" required autoComplete="one-time-code" maxLength={6} value={code} onChange={(e) => setCode(e.target.value)} />
+              </label>
+            </>
+          )}
           <ErrorNote message={error} />
           <button type="submit" className="button button-primary button-block" disabled={busy}>
             {busy ? 'Doğrulanıyor…' : 'Giriş yap'}
           </button>
         </form>
+        <p className="muted auth-switch">
+          <button type="button" className="link-button" onClick={() => setUseKey(!useKey)}>
+            {useKey ? 'Hesabımla gireyim' : 'Yönetici anahtarıyla gir'}
+          </button>
+        </p>
       </div>
     </div>
+  );
+}
+
+interface AdminAccount {
+  id: string;
+  email: string;
+  disabled: boolean;
+  createdAt: string;
+}
+
+interface AdminAuditEntry {
+  id: number;
+  createdAt: string;
+  actor: string;
+  action: string;
+  target: string | null;
+  ip: string | null;
+}
+
+const ADMIN_ACTIONS: Record<string, string> = {
+  ADMIN_CREATED: 'Yönetici oluşturuldu',
+  ADMIN_DISABLED: 'Yönetici kapatıldı',
+  ADMIN_LOGIN: 'Giriş yapıldı',
+  ADMIN_LOGIN_FAILED: 'Başarısız giriş',
+  ADMIN_LOGIN_LOCKED: 'Kilitli hesaba giriş denemesi',
+  SETTLEMENT_RUN: 'Hesap kesimi çalıştırıldı',
+  RECONCILIATION_RUN: 'Mutabakat çalıştırıldı',
+};
+
+function AdminAccounts() {
+  const accounts = useFetch(() => adminApi<AdminAccount[]>('/accounts'), []);
+  const audit = useFetch(() => adminApi<AdminAuditEntry[]>('/audit-log'), []);
+  const [creating, setCreating] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [created, setCreated] = useState<{ email: string; totpSecret: string } | null>(null);
+  const [disabling, setDisabling] = useState<AdminAccount | null>(null);
+
+  const create = async () => {
+    try {
+      const result = await adminApi<{ email: string; totpSecret: string }>('/accounts', 'POST', undefined, { email, password });
+      setCreated(result);
+      setCreating(false);
+      setEmail('');
+      setPassword('');
+      accounts.reload();
+      audit.reload();
+    } catch (e) {
+      throw e instanceof ApiError && e.status === 409 ? new Error('Bu e-postanın zaten yönetici hesabı var.') : e;
+    }
+  };
+
+  const disable = async () => {
+    try {
+      await adminApi(`/accounts/${disabling!.id}/disable`, 'POST');
+    } catch (e) {
+      throw e instanceof ApiError && e.status === 409 ? new Error('Kendi hesabınızı kapatamazsınız.') : e;
+    }
+    setDisabling(null);
+    accounts.reload();
+    audit.reload();
+  };
+
+  return (
+    <>
+      <div className="section-header">
+        <h2>Yöneticiler</h2>
+        <button type="button" className="button button-small" onClick={() => setCreating(true)}>Yönetici ekle</button>
+      </div>
+      {created && <OneTimeSecret title={`${created.email} için kurulum anahtarı`} value={created.totpSecret} />}
+      <ErrorNote message={accounts.error} />
+      {accounts.loading ? <Loading /> : accounts.data && accounts.data.length > 0 ? (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">E-posta</th>
+                <th scope="col">Durum</th>
+                <th scope="col" className="hide-narrow">Oluşturulma</th>
+                <th scope="col"><span className="visually-hidden">İşlemler</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {accounts.data.map((account) => (
+                <tr key={account.id}>
+                  <td>{account.email}</td>
+                  <td>{account.disabled ? <span className="badge badge-neutral">Kapalı</span> : <span className="badge badge-success">Etkin</span>}</td>
+                  <td className="hide-narrow muted">{formatDateTime(account.createdAt)}</td>
+                  <td className="numeric">
+                    {!account.disabled && <button type="button" className="button button-small" onClick={() => setDisabling(account)}>Kapat</button>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : !accounts.error && <div className="card"><EmptyState title="Henüz yönetici yok">Ortak anahtar yerine kişiye özel hesap açın.</EmptyState></div>}
+
+      <div className="section-header"><h2>Yönetici işlem kayıtları</h2></div>
+      <ErrorNote message={audit.error} />
+      {audit.data && audit.data.length > 0 ? (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">İşlem</th>
+                <th scope="col">Yapan</th>
+                <th scope="col" className="hide-narrow">Tarih</th>
+              </tr>
+            </thead>
+            <tbody>
+              {audit.data.map((entry) => (
+                <tr key={entry.id}>
+                  <td>
+                    {ADMIN_ACTIONS[entry.action] ?? entry.action}
+                    {entry.target && <span className="hint row-hint">{entry.target}</span>}
+                  </td>
+                  <td>
+                    {entry.actor === 'platform-admin' ? 'Ortak anahtar' : entry.actor}
+                    {entry.ip && <span className="hint row-hint">{entry.ip}</span>}
+                  </td>
+                  <td className="hide-narrow muted">{formatDateTime(entry.createdAt)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : !audit.loading && !audit.error && <div className="card"><EmptyState title="Henüz kayıt yok" /></div>}
+
+      {creating && (
+        <FormDialog title="Yönetici ekle" submitLabel="Oluştur" onClose={() => setCreating(false)} onSubmit={create}>
+          <label className="field">
+            E-posta
+            <input type="email" required autoFocus value={email} onChange={(e) => setEmail(e.target.value)} />
+          </label>
+          <label className="field">
+            Parola
+            <input type="password" required minLength={12} maxLength={72} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <span className="hint">En az 12 karakter. İki adımlı doğrulama zorunludur; kurulum anahtarı oluşturunca gösterilir.</span>
+          </label>
+        </FormDialog>
+      )}
+      {disabling && (
+        <FormDialog title="Yöneticiyi kapat" submitLabel="Kapat" danger onClose={() => setDisabling(null)} onSubmit={disable}>
+          <p><strong>{disabling.email}</strong> erişimini hemen kaybeder ve açık oturumları kapanır.</p>
+        </FormDialog>
+      )}
+    </>
   );
 }
 
@@ -184,6 +366,8 @@ function AdminDashboard({ onSignOut }: { onSignOut: () => void }) {
           </table>
         </div>
       ) : !runs.error && <div className="card"><EmptyState title="Henüz mutabakat çalıştırılmadı" /></div>}
+
+      <AdminAccounts />
 
       {reconciling && (
         <FormDialog title="Mutabakat çalıştır" submitLabel="Çalıştır" onClose={() => setReconciling(false)} onSubmit={runReconciliation}>

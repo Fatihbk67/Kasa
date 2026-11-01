@@ -72,6 +72,8 @@ public final class LocalDevApplication {
         System.setProperty("kasa.jwt.secret", "local-development-only-secret-do-not-deploy");
         System.setProperty("kasa.admin.token", "local-dev-admin-token");
         System.setProperty("kasa.webhooks.allow-insecure-targets", "true");
+        // No email provider locally either, so a password reset link can be picked up from the console.
+        System.setProperty("kasa.mail.log-body", "true");
         // The load test registers its merchants in one burst from one address.
         System.setProperty("kasa.rate-limit.register-per-ip", "1000");
         // A clean way to stop, which also removes the throwaway database. A killed process would leave it running.

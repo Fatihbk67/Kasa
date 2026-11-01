@@ -1,5 +1,8 @@
 package com.kasa.auth;
 
+import java.util.List;
+import java.util.UUID;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -26,11 +29,25 @@ public class AccountController {
     public record ChangePasswordRequest(@NotBlank String currentPassword, @NotBlank @Size(min = 12, max = 72) String newPassword) {
     }
 
+    public record PasswordRequest(@NotBlank String password) {
+    }
+
+    public record CodeRequest(@NotBlank @Size(max = 32) String code) {
+    }
+
+    public record DisableTwoFactorRequest(@NotBlank String password, @NotBlank @Size(max = 32) String code) {
+    }
+
+    public record TwoFactorEnabled(List<String> recoveryCodes, String accessToken) {
+    }
+
     private final AuthService authService;
+    private final TwoFactorService twoFactor;
     private final RateLimiter rateLimiter;
     private final RateLimitProperties limits;
 
-    public AccountController(AuthService authService, RateLimiter rateLimiter, RateLimitProperties limits) {
+    public AccountController(AuthService authService, TwoFactorService twoFactor, RateLimiter rateLimiter, RateLimitProperties limits) {
+        this.twoFactor = twoFactor;
         this.authService = authService;
         this.rateLimiter = rateLimiter;
         this.limits = limits;
@@ -53,5 +70,34 @@ public class AccountController {
         rateLimiter.check("password:" + CurrentTenant.userId(authentication), limits.loginPerIpAndEmail());
         return authService.changePassword(CurrentTenant.of(authentication), CurrentTenant.userId(authentication),
                 request.currentPassword(), request.newPassword());
+    }
+
+    @GetMapping("/api/v1/settings/two-factor")
+    public TwoFactorService.Status twoFactorStatus(Authentication authentication) {
+        return twoFactor.status(CurrentTenant.of(authentication), CurrentTenant.userId(authentication));
+    }
+
+    @PostMapping("/api/v1/settings/two-factor/setup")
+    public TwoFactorService.Setup beginTwoFactor(Authentication authentication, @Valid @RequestBody PasswordRequest request) {
+        rateLimiter.check("password:" + CurrentTenant.userId(authentication), limits.loginPerIpAndEmail());
+        return twoFactor.beginSetup(CurrentTenant.of(authentication), CurrentTenant.userId(authentication), request.password());
+    }
+
+    @PostMapping("/api/v1/settings/two-factor/enable")
+    public TwoFactorEnabled enableTwoFactor(Authentication authentication, @Valid @RequestBody CodeRequest request) {
+        rateLimiter.check("password:" + CurrentTenant.userId(authentication), limits.loginPerIpAndEmail());
+        UUID tenantId = CurrentTenant.of(authentication);
+        UUID userId = CurrentTenant.userId(authentication);
+        TwoFactorService.EnabledResult enabled = twoFactor.enable(tenantId, userId, request.code().trim());
+        return new TwoFactorEnabled(enabled.recoveryCodes(), authService.token(userId, tenantId, enabled.tokenVersion()).accessToken());
+    }
+
+    @PostMapping("/api/v1/settings/two-factor/disable")
+    public AuthService.TokenResponse disableTwoFactor(Authentication authentication, @Valid @RequestBody DisableTwoFactorRequest request) {
+        rateLimiter.check("password:" + CurrentTenant.userId(authentication), limits.loginPerIpAndEmail());
+        UUID tenantId = CurrentTenant.of(authentication);
+        UUID userId = CurrentTenant.userId(authentication);
+        int version = twoFactor.disable(tenantId, userId, request.password(), request.code().trim());
+        return authService.token(userId, tenantId, version);
     }
 }

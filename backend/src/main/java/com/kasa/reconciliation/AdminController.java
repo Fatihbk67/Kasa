@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -14,7 +15,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.kasa.admin.AdminAccountService;
 import com.kasa.settlement.SettlementService;
+
+import jakarta.servlet.http.HttpServletRequest;
 
 /** For the platform operator, not merchants. Access is limited in SecurityConfig. */
 @RestController
@@ -23,15 +27,18 @@ public class AdminController {
 
     private final ReconciliationService reconciliation;
     private final SettlementService settlement;
+    private final AdminAccountService accounts;
 
-    public AdminController(ReconciliationService reconciliation, SettlementService settlement) {
+    public AdminController(ReconciliationService reconciliation, SettlementService settlement, AdminAccountService accounts) {
         this.reconciliation = reconciliation;
         this.settlement = settlement;
+        this.accounts = accounts;
     }
 
     @PostMapping("/reconciliation/runs")
-    public ReconciliationService.RunDetail reconcile(
+    public ReconciliationService.RunDetail reconcile(Authentication authentication, HttpServletRequest http,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        accounts.audit(authentication.getName(), http.getRemoteAddr(), "RECONCILIATION_RUN", date.toString());
         return reconciliation.reconcile(date);
     }
 
@@ -52,7 +59,8 @@ public class AdminController {
 
     /** Settles everything completed so far, without waiting for the daily job. */
     @PostMapping("/settlements/run")
-    public Map<String, Integer> settleNow() {
+    public Map<String, Integer> settleNow(Authentication authentication, HttpServletRequest http) {
+        accounts.audit(authentication.getName(), http.getRemoteAddr(), "SETTLEMENT_RUN", null);
         return Map.of("payoutsCreated", settlement.settleAll(Instant.now()));
     }
 }

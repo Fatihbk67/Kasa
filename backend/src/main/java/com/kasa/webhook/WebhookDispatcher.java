@@ -22,6 +22,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.kasa.observability.BusinessMetrics;
+import com.kasa.security.SecretCipher;
 import com.kasa.tenant.TenantScope;
 
 /**
@@ -50,9 +51,11 @@ public class WebhookDispatcher {
     private final WebhookProperties properties;
     private final HttpClient httpClient;
     private final BusinessMetrics metrics;
+    private final SecretCipher cipher;
 
     public WebhookDispatcher(JdbcClient jdbc, TransactionTemplate tx, TenantScope tenantScope,
-                             WebhookUrlGuard urlGuard, WebhookProperties properties, BusinessMetrics metrics) {
+                             WebhookUrlGuard urlGuard, WebhookProperties properties, BusinessMetrics metrics, SecretCipher cipher) {
+        this.cipher = cipher;
         this.metrics = metrics;
         this.jdbc = jdbc;
         this.tx = tx;
@@ -108,6 +111,13 @@ public class WebhookDispatcher {
         }
     }
 
+    // A secret from before encryption can still be here in the moment before WebhookSecretMigration reaches it.
+    private String signingSecret(Claimed delivery) {
+        return SecretCipher.isEncrypted(delivery.secret())
+                ? cipher.decrypt(WebhookSecrets.context(delivery.tenantId()), delivery.secret())
+                : delivery.secret();
+    }
+
     private Outcome send(Claimed delivery) {
         try {
             URI target = urlGuard.check(delivery.url());
@@ -118,7 +128,7 @@ public class WebhookDispatcher {
                     .header("X-Kasa-Event-Id", delivery.eventId().toString())
                     .header("X-Kasa-Event-Type", delivery.eventType())
                     .header("X-Kasa-Signature", WebhookSigner.signatureHeader(
-                            delivery.secret(), Instant.now().getEpochSecond(), delivery.payload()))
+                            signingSecret(delivery), Instant.now().getEpochSecond(), delivery.payload()))
                     .POST(HttpRequest.BodyPublishers.ofString(delivery.payload(), StandardCharsets.UTF_8))
                     .build();
             int status = httpClient.send(request, HttpResponse.BodyHandlers.discarding()).statusCode();

@@ -446,6 +446,12 @@ textarea {
   resize: vertical;
 }
 
+.recovery-codes {
+  display: block;
+  white-space: pre;
+  margin: 8px 0;
+}
+
 .prewrap {
   white-space: pre-wrap;
   overflow-wrap: anywhere;

@@ -93,6 +93,10 @@ java -Djdk.net.unixdomain.tmpdir=backend/target load-test/LoadTest.java http://l
 - **Tahsilat yarıda kesilirse kart ikinci kez çekilmez:** Her deneme, sonucu kesinleşene kadar numarasını ve kartını korur. Sunucu çökse bile aynı idempotency anahtarı aynı ödemeyi döndürür, yeni ödeme başlamaz. Kart bu arada değişse de bekleyen deneme eski kartla sonuçlanır.
 - **Ay sonu kaymaz:** 31 Ocak'ta başlayan abonelik 28 Şubat'ta, sonra 31 Mart'ta yenilenir. Her dönem bir öncekinden değil başlangıç tarihinden hesaplanır.
 - **Plan değişikliği hakkaniyetlidir:** Kalan süreye göre kuruş hesabı `BigInteger` ile yapılır, çünkü tutar çarpı saniye `long` sınırını aşabilir. Ucuz plana geçişte fark karta iade edilmez, sonraki faturadan düşülür.
+- **Parola çalınsa da hesaba girilemez:** İki adımlı giriş RFC 6238 ile yazıldı. Bir kod iki kez kullanılamaz, aynı kod aynı anda gelse de tek istek geçer. 10 hatalı denemede hesap 15 dakika kilitlenir; sayaç veritabanında olduğu için yeni giriş denemesi veya sunucu değişimi sıfırlamaz.
+- **Geri okunması gereken sırlar şifrelidir:** Webhook anahtarları ve doğrulama sırları AES-256-GCM ile saklanır, veritabanı yedeği çalınsa da açılmaz. Her değer sahibine bağlıdır; başka işletmenin satırına kopyalanırsa çözülmez. Eski düz metin değerler uygulama açılışında şifrelenir.
+- **Parola sıfırlama hesap sızdırmaz:** Kayıtlı olmayan e-postaya da aynı yanıt döner. Bağlantı tek kullanımlıktır, 30 dakika geçerlidir ve yalnızca özeti saklanır. Adresi isteğin `Host` başlığından değil ayardan üretilir, çünkü saldırgan o başlığı kendi sitesine çevirebilir. Sıfırlama tüm oturumları kapatır ama iki adımlı girişi kapatmaz.
+- **Yöneticiler kişiye özeldir:** Platform hesaplarında iki adımlı giriş zorunludur ve her işlem kimin yaptığıyla kaydedilir. Uygulama rolü bu kayıtları silemez. Yönetici token'ı hiçbir işletme verisini açmaz.
 - **Raporlar defterle aynı sonucu verir:** Analiz paneli tutarları paranın gerçekten hareket ettiği güne yazar ve net kazanç işletmenin defter bakiyesiyle uyuşur.
 - **Dışa aktarılan dosya saldırı aracı olamaz:** CSV'de formül gibi başlayan açıklamalar etkisizleştirilir (CSV injection). 10.000 satırda kesilen rapor kullanıcıya açıkça bildirilir.
 - **Bankayla farklar yakalanır:** Günlük mutabakat banka dosyasını kayıtlarımızla karşılaştırır. Farkları raporlar ama düzeltmez, çünkü hangi tarafın doğru olduğuna insan karar vermelidir.
@@ -240,6 +244,15 @@ Başka bir platformda aynı değişkenlere ek olarak `KASA_DB_APP_USER=kasa_app`
 | POST | `/api/v1/payment-links/{id}/disable` | JWT veya `X-Api-Key` | Bağlantıyı kapatır |
 | GET | `/api/v1/public/links/{slug}` | Yok | Bağlantı bilgilerini döner |
 | POST | `/api/v1/public/links/{slug}/sessions` | Yok | Ziyaretçi için ödeme oturumu açar |
+| POST | `/api/v1/auth/login/two-factor` | Yok | Girişin ikinci adımı: kod veya kurtarma kodu |
+| POST | `/api/v1/auth/password-reset/request` | Yok | Sıfırlama bağlantısı ister, yanıt hep `202` |
+| POST | `/api/v1/auth/password-reset/confirm` | Yok | Bağlantıdaki token ile yeni parola belirler |
+| GET | `/api/v1/settings/two-factor` | JWT | İki adımlı girişin durumu |
+| POST | `/api/v1/settings/two-factor/setup`, `/enable`, `/disable` | JWT | İki adımlı girişi kurar, açar, kapatır |
+| POST | `/api/v1/public/admin-login` | Yok | Yönetici girişi: parola ve kod |
+| POST, GET | `/api/v1/admin/accounts` | Yönetici | Yönetici hesabı oluşturur, listeler |
+| POST | `/api/v1/admin/accounts/{id}/disable` | Yönetici | Yönetici hesabını kapatır |
+| GET | `/api/v1/admin/audit-log` | Yönetici | Yönetici işlem kayıtları |
 | GET | `/api/v1/me` | JWT | Oturumdaki kullanıcı, rol ve işletme |
 | GET | `/api/v1/team` | Sahip, yönetici | Üyeler ve bekleyen davetler |
 | POST | `/api/v1/team/invitations` | Sahip, yönetici | Tek kullanımlık davet oluşturur (yöneticiler yalnızca görüntüleyici davet edebilir) |
@@ -308,7 +321,7 @@ Teslimat **en az bir kez** garantilidir ve sıra garantisi yoktur. Alıcı `X-Ka
 
 Yerelde `localhost` hedefine göndermek için `KASA_WEBHOOKS_ALLOW_INSECURE_TARGETS=true` tanımlanır. Bu ayar canlıda kapalı kalmalıdır.
 
-**Bilinen sınırlar:** İmza anahtarları veritabanında şifrelenmeden tutulur, çünkü imzalarken özgün değer gerekir; gerçek sistemde KMS gerekir. URL kontrolü ile bağlantı arasında DNS yanıtı değişebilir; bunu tamamen kapatmak için çıkış proxy'si gerekir.
+**Bilinen sınırlar:** İmza anahtarları şifreli tutulur ama anahtar uygulamanın ortam değişkenindedir; gerçek sistemde KMS gerekir. URL kontrolü ile bağlantı arasında DNS yanıtı değişebilir; bunu tamamen kapatmak için çıkış proxy'si gerekir.
 
 ## Hesap kesimi ve mutabakat
 
@@ -335,7 +348,9 @@ Defter kayıtları şöyledir:
 
 Yönetici API'si `KASA_ADMIN_TOKEN` ile açılır; tanımlı değilse tüm istekleri reddeder. Bu token kiracıya bağlı olmadığından işletme verilerine erişim sağlamaz.
 
-**Bilinen sınırlar:** Yönetici erişimi tek bir paylaşılan token'dır; gerçek sistemde kişiye özel hesap ve denetim kaydı gerekir. Dakika dakika canlı bakiye hesabı yerine günlük toplu çalışma tercih edilmiştir.
+İnsanlar `/admin` ekranından kişisel hesapla (parola ve doğrulama kodu) girer. Ortak token makineler (Prometheus) ve ilk yönetici hesabını oluşturmak içindir.
+
+**Bilinen sınırlar:** Ortak token hâlâ tam yetkilidir ve işlemleri kişiye yazmaz. Dakika dakika canlı bakiye hesabı yerine günlük toplu çalışma tercih edilmiştir.
 
 ## Test kart token'ları
 
@@ -364,3 +379,4 @@ Banka simüle edilir; davranışı token belirler. Böylece her hata senaryosu i
 - [x] **Ekip ve denetim:** Ekip üyeleri, rol bazlı yetkiler, değiştirilemez denetim günlüğü, ayarlar
 - [x] **Yeni iş alanları:** İtiraz (chargeback) akışı, müşteri kayıtları ve kişisel veri silme, paylaşılabilir ödeme bağlantıları
 - [x] **Abonelikler:** Planlar, tekrarlayan tahsilat, başarısız ödemede yeniden deneme, dönem ortası plan değişikliği
+- [x] **Güvenlik:** İki adımlı giriş, kurtarma kodları, parola sıfırlama, sırların şifrelenmesi, kişiye özel yönetici hesapları

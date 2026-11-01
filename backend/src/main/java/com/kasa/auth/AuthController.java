@@ -31,11 +31,22 @@ public class AuthController {
     public record LoginRequest(@NotBlank String email, @NotBlank String password) {
     }
 
+    public record TwoFactorRequest(@NotBlank @Size(max = 128) String challengeToken, @NotBlank @Size(max = 32) String code) {
+    }
+
+    public record ResetRequest(@NotBlank @Email @Size(max = 254) String email) {
+    }
+
+    public record ResetConfirmRequest(@NotBlank @Size(max = 128) String token, @NotBlank @Size(min = 12, max = 72) String newPassword) {
+    }
+
     private final AuthService authService;
+    private final PasswordResetService passwordResets;
     private final RateLimiter rateLimiter;
     private final RateLimitProperties limits;
 
-    public AuthController(AuthService authService, RateLimiter rateLimiter, RateLimitProperties limits) {
+    public AuthController(AuthService authService, PasswordResetService passwordResets, RateLimiter rateLimiter, RateLimitProperties limits) {
+        this.passwordResets = passwordResets;
         this.authService = authService;
         this.rateLimiter = rateLimiter;
         this.limits = limits;
@@ -50,10 +61,33 @@ public class AuthController {
 
     // Keys on address and email together, so an attacker cannot lock a merchant out just by knowing their email.
     @PostMapping("/login")
-    public AuthService.TokenResponse login(@Valid @RequestBody LoginRequest request, HttpServletRequest http) {
+    public AuthService.LoginResponse login(@Valid @RequestBody LoginRequest request, HttpServletRequest http) {
         String ip = http.getRemoteAddr();
         rateLimiter.check("login-ip:" + ip, limits.loginPerIp());
         rateLimiter.check("login:" + ip + ":" + request.email().trim().toLowerCase(Locale.ROOT), limits.loginPerIpAndEmail());
         return authService.login(request.email(), request.password());
+    }
+
+    @PostMapping("/login/two-factor")
+    public AuthService.TokenResponse completeLogin(@Valid @RequestBody TwoFactorRequest request, HttpServletRequest http) {
+        rateLimiter.check("login-ip:" + http.getRemoteAddr(), limits.loginPerIp());
+        return authService.completeLogin(request.challengeToken(), request.code().trim());
+    }
+
+    // Always answers 202, whatever happened, so the answer says nothing about who has an account.
+    @PostMapping("/password-reset/request")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public void requestReset(@Valid @RequestBody ResetRequest request, HttpServletRequest http) {
+        rateLimiter.check("reset-ip:" + http.getRemoteAddr(), limits.passwordResetPerIp());
+        // Also per email, so a stranger cannot flood someone's mailbox from many addresses.
+        rateLimiter.check("reset-email:" + request.email().trim().toLowerCase(Locale.ROOT), limits.passwordResetPerIp());
+        passwordResets.request(request.email());
+    }
+
+    @PostMapping("/password-reset/confirm")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void confirmReset(@Valid @RequestBody ResetConfirmRequest request, HttpServletRequest http) {
+        rateLimiter.check("reset-ip:" + http.getRemoteAddr(), limits.passwordResetPerIp());
+        passwordResets.confirm(request.token(), request.newPassword());
     }
 }

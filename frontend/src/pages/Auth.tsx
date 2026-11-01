@@ -1,11 +1,17 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
-import { Link, Navigate } from 'react-router-dom';
+import { Link, Navigate, useParams } from 'react-router-dom';
 import { api, ApiError } from '../api';
 import { useAuth } from '../auth';
 import { ErrorNote } from '../components';
 
 interface TokenResponse {
   accessToken: string;
+}
+
+interface LoginResponse {
+  accessToken: string | null;
+  twoFactorRequired: boolean;
+  challengeToken: string | null;
 }
 
 function AuthCard({ title, children }: { title: string; children: ReactNode }) {
@@ -30,6 +36,9 @@ export function Login() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const [challenge, setChallenge] = useState<string | null>(null);
+  const [code, setCode] = useState('');
+
   if (isSignedIn) {
     return <Navigate to="/" replace />;
   }
@@ -39,13 +48,54 @@ export function Login() {
     setBusy(true);
     setError(null);
     try {
-      const { accessToken } = await api<TokenResponse>('/auth/login', { method: 'POST', body: { email, password } });
-      signIn(accessToken);
+      const response = await api<LoginResponse>('/auth/login', { method: 'POST', body: { email, password } });
+      if (response.twoFactorRequired) {
+        setChallenge(response.challengeToken);
+        setBusy(false);
+      } else {
+        signIn(response.accessToken!);
+      }
     } catch (e) {
       setError(e instanceof ApiError && e.status === 401 ? 'E-posta veya parola hatalı.' : (e as Error).message);
       setBusy(false);
     }
   };
+
+  const submitCode = async (event: FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const { accessToken } = await api<TokenResponse>('/auth/login/two-factor', { method: 'POST', body: { challengeToken: challenge, code } });
+      signIn(accessToken);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 429) {
+        setError('Çok fazla hatalı deneme. 15 dakika sonra yeniden deneyin.');
+      } else {
+        setError(e instanceof ApiError && e.status === 401 ? 'Kod hatalı veya süresi dolmuş.' : (e as Error).message);
+      }
+      setCode('');
+      setBusy(false);
+    }
+  };
+
+  if (challenge) {
+    return (
+      <AuthCard title="Doğrulama kodu">
+        <form onSubmit={submitCode} className="stack">
+          <label className="field">
+            Kod
+            <input required autoFocus autoComplete="one-time-code" maxLength={32} value={code} onChange={(e) => setCode(e.target.value)} />
+            <span className="hint">Doğrulama uygulamanızdaki 6 haneli kod veya bir kurtarma kodu.</span>
+          </label>
+          <ErrorNote message={error} />
+          <button type="submit" className="button button-primary button-block" disabled={busy}>
+            {busy ? 'Doğrulanıyor…' : 'Giriş yap'}
+          </button>
+        </form>
+      </AuthCard>
+    );
+  }
 
   return (
     <AuthCard title="Giriş yapın">
@@ -63,7 +113,94 @@ export function Login() {
           {busy ? 'Giriş yapılıyor…' : 'Giriş yap'}
         </button>
       </form>
+      <p className="muted auth-switch"><Link to="/forgot-password">Parolamı unuttum</Link></p>
       <p className="muted auth-switch">Hesabınız yok mu? <Link to="/register">Kayıt olun</Link></p>
+    </AuthCard>
+  );
+}
+
+export function ForgotPassword() {
+  const [email, setEmail] = useState('');
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await api('/auth/password-reset/request', { method: 'POST', body: { email } });
+      setSent(true);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <AuthCard title="Parolamı unuttum">
+      {sent ? (
+        <p className="note note-success" role="status">
+          Bu e-postayla bir hesap varsa sıfırlama bağlantısı oluşturuldu. Bağlantı 30 dakika geçerlidir.
+          Demo gerçek e-posta göndermez; bağlantı yalnızca yerel çalıştırmada konsola yazılır.
+        </p>
+      ) : (
+        <form onSubmit={submit} className="stack">
+          <label className="field">
+            E-posta
+            <input type="email" required autoFocus autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} />
+          </label>
+          <ErrorNote message={error} />
+          <button type="submit" className="button button-primary button-block" disabled={busy}>
+            {busy ? 'Gönderiliyor…' : 'Sıfırlama bağlantısı iste'}
+          </button>
+        </form>
+      )}
+      <p className="muted auth-switch"><Link to="/login">Giriş sayfasına dön</Link></p>
+    </AuthCard>
+  );
+}
+
+export function ResetPassword() {
+  const { token } = useParams();
+  const [password, setPassword] = useState('');
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await api('/auth/password-reset/confirm', { method: 'POST', body: { token, newPassword: password } });
+      setDone(true);
+    } catch (e) {
+      setError(e instanceof ApiError && e.status === 410 ? 'Bu bağlantı kullanılmış veya süresi dolmuş. Yeni bir bağlantı isteyin.' : (e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <AuthCard title="Yeni parola belirleyin">
+      {done ? (
+        <p className="note note-success" role="status">Parolanız değişti ve açık oturumlar kapandı. <Link to="/login">Giriş yapın</Link></p>
+      ) : (
+        <form onSubmit={submit} className="stack">
+          <label className="field">
+            Yeni parola
+            <input type="password" required autoFocus minLength={12} maxLength={72} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <span className="hint">En az 12 karakter</span>
+          </label>
+          <ErrorNote message={error} />
+          <button type="submit" className="button button-primary button-block" disabled={busy}>
+            {busy ? 'Kaydediliyor…' : 'Parolayı değiştir'}
+          </button>
+        </form>
+      )}
     </AuthCard>
   );
 }

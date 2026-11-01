@@ -21,6 +21,7 @@ import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
 
 import com.kasa.apikey.ApiKeyService;
 import com.nimbusds.jose.jwk.source.ImmutableSecret;
@@ -54,7 +55,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/auth/**", "/api/v1/public/**", "/actuator/health", "/error").permitAll()
                         .requestMatchers("/actuator/**").hasAuthority("SCOPE_" + ADMIN_SCOPE)
                         .requestMatchers("/api/v1/admin/**").hasAuthority("SCOPE_" + ADMIN_SCOPE)
-                        .requestMatchers("/api/v1/me", "/api/v1/settings/password").hasAnyAuthority(OWNER, MANAGER, VIEWER)
+                        .requestMatchers("/api/v1/me", "/api/v1/settings/password", "/api/v1/settings/two-factor/**").hasAnyAuthority(OWNER, MANAGER, VIEWER)
                         .requestMatchers("/api/v1/settings/**").hasAuthority(OWNER)
                         // A leaked API key must not be able to mint new keys, redirect webhooks or add members.
                         .requestMatchers("/api/v1/api-keys/**", "/api/v1/webhook-endpoints/**", "/api/v1/team/**",
@@ -65,7 +66,10 @@ public class SecurityConfig {
                         .requestMatchers("/api/**").hasAnyAuthority(OWNER, MANAGER, "SCOPE_" + API_SCOPE)
                         // Everything else is the public web interface, which holds no data of its own.
                         .anyRequest().permitAll())
-                .headers(headers -> headers.contentSecurityPolicy(csp -> csp.policyDirectives(CONTENT_SECURITY_POLICY)))
+                // A password reset link holds its token in the path, which must not leak to other sites in a Referer header.
+                .headers(headers -> headers
+                        .contentSecurityPolicy(csp -> csp.policyDirectives(CONTENT_SECURITY_POLICY))
+                        .referrerPolicy(referrer -> referrer.policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.SAME_ORIGIN)))
                 .addFilterBefore(adminTokenFilter, BearerTokenAuthenticationFilter.class)
                 .addFilterBefore(apiKeyFilter, BearerTokenAuthenticationFilter.class)
                 .oauth2ResourceServer(server -> server.jwt(jwt -> jwt.jwtAuthenticationConverter(userAccess)))

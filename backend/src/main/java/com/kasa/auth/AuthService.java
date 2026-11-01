@@ -27,7 +27,12 @@ public class AuthService {
     public record Me(UUID userId, String email, String role, UUID tenantId, String tenantName) {
     }
 
-    private record LoginCredentials(UUID userId, UUID tenantId, String passwordHash, int tokenVersion) {
+    /** Either a token, or with {@code twoFactorRequired} a challenge token to bring to the second step. */
+    public record LoginResponse(UUID tenantId, String accessToken, Long expiresInSeconds, boolean twoFactorRequired,
+                                String challengeToken) {
+    }
+
+    private record LoginCredentials(UUID userId, UUID tenantId, String passwordHash, int tokenVersion, boolean twoFactor) {
     }
 
     private static final int BCRYPT_MAX_BYTES = 72;
@@ -39,10 +44,12 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final AuditLog auditLog;
+    private final TwoFactorService twoFactor;
     private final String decoyHash;
 
     public AuthService(JdbcClient jdbc, TransactionTemplate tx, TenantScope tenantScope,
-                       PasswordEncoder passwordEncoder, JwtService jwtService, AuditLog auditLog) {
+                       PasswordEncoder passwordEncoder, JwtService jwtService, AuditLog auditLog, TwoFactorService twoFactor) {
+        this.twoFactor = twoFactor;
         this.jdbc = jdbc;
         this.tx = tx;
         this.tenantScope = tenantScope;
@@ -86,10 +93,10 @@ public class AuthService {
         }
     }
 
-    public TokenResponse login(String email, String password) {
+    public LoginResponse login(String email, String password) {
         String normalizedEmail = normalize(email);
         Optional<LoginCredentials> credentials = jdbc.sql("""
-                        SELECT user_id, tenant_id, password_hash, token_version
+                        SELECT user_id, tenant_id, password_hash, token_version, two_factor
                         FROM find_login_credentials(:email)
                         """)
                 .param("email", normalizedEmail)
@@ -97,22 +104,34 @@ public class AuthService {
                         rs.getObject("user_id", UUID.class),
                         rs.getObject("tenant_id", UUID.class),
                         rs.getString("password_hash"),
-                        rs.getInt("token_version")))
+                        rs.getInt("token_version"),
+                        rs.getBoolean("two_factor")))
                 .optional();
 
         // Unknown emails still pay for a hash comparison, so response time does not reveal which emails exist.
         String hash = credentials.map(LoginCredentials::passwordHash).orElse(decoyHash);
         boolean matches = fitsBcrypt(password) && passwordEncoder.matches(password, hash);
-        credentials.ifPresent(found -> tx.executeWithoutResult(status -> {
+        String challenge = credentials.map(found -> tx.execute(status -> {
             tenantScope.apply(found.tenantId());
+            boolean needsCode = matches && found.twoFactor();
             auditLog.record(found.tenantId(), AuditLog.Actor.user(found.userId(), normalizedEmail),
-                    matches ? "LOGIN_SUCCEEDED" : "LOGIN_FAILED", "USER", found.userId(), Map.of());
-        }));
+                    !matches ? "LOGIN_FAILED" : needsCode ? "LOGIN_PASSWORD_ACCEPTED" : "LOGIN_SUCCEEDED", "USER", found.userId(), Map.of());
+            return needsCode ? twoFactor.startChallenge(found.tenantId(), found.userId(), found.tokenVersion()) : "";
+        })).orElse("");
         if (credentials.isEmpty() || !matches) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "invalid email or password");
         }
         LoginCredentials found = credentials.get();
-        return token(found.userId(), found.tenantId(), found.tokenVersion());
+        if (found.twoFactor()) {
+            return new LoginResponse(null, null, null, true, challenge);
+        }
+        TokenResponse issued = token(found.userId(), found.tenantId(), found.tokenVersion());
+        return new LoginResponse(issued.tenantId(), issued.accessToken(), issued.expiresInSeconds(), false, null);
+    }
+
+    public TokenResponse completeLogin(String challengeToken, String code) {
+        TwoFactorService.Passed passed = twoFactor.completeChallenge(challengeToken, code);
+        return token(passed.userId(), passed.tenantId(), passed.tokenVersion());
     }
 
     public Me me(UUID tenantId, UUID userId) {
