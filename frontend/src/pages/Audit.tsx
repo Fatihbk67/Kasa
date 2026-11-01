@@ -35,6 +35,14 @@ const ACTION_LABELS: Record<string, string> = {
   CUSTOMER_ANONYMIZED: 'Müşteri verisi silindi',
   PAYMENT_LINK_CREATED: 'Ödeme bağlantısı oluşturuldu',
   PAYMENT_LINK_DISABLED: 'Ödeme bağlantısı kapatıldı',
+  PLAN_CREATED: 'Plan oluşturuldu',
+  PLAN_ARCHIVED: 'Plan kapatıldı',
+  SUBSCRIPTION_CREATED: 'Abonelik başlatıldı',
+  SUBSCRIPTION_PLAN_CHANGED: 'Abonelik planı değişti',
+  SUBSCRIPTION_CARD_UPDATED: 'Abonelik kartı güncellendi',
+  SUBSCRIPTION_CANCEL_SCHEDULED: 'Abonelik iptali planlandı',
+  SUBSCRIPTION_RESUMED: 'Abonelik iptali geri alındı',
+  SUBSCRIPTION_CANCELED: 'Abonelik iptal edildi',
 };
 
 const METADATA_LABELS: Record<string, string> = {
@@ -48,6 +56,7 @@ const METADATA_LABELS: Record<string, string> = {
   businessName: 'İşletme',
   title: 'Başlık',
   reason: 'Neden',
+  planName: 'Plan',
 };
 
 function actionLabel(action: string): string {
@@ -62,6 +71,9 @@ function details(entry: AuditEntry): string {
       .map(([key, value]) => {
         if (key === 'amount') {
           return `Tutar: ${formatMoney(Number(value), String(metadata.currency ?? 'TRY'))}`;
+        }
+        if (entry.action === 'SUBSCRIPTION_PLAN_CHANGED') {
+          return `${key === 'from' ? 'Eski plan' : 'Yeni plan'}: ${String(value)}`;
         }
         if (key === 'role' || key === 'from' || key === 'to') {
           const label = ROLE_LABELS[value as Role] ?? String(value);

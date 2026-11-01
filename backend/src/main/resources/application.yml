@@ -62,6 +62,12 @@ kasa:
     # How long the simulated bank takes to decide. A real one takes weeks, which no demo would survive.
     review-time: PT2M
     job-interval: PT30S
+  billing:
+    # Waits after the first, second and third failed attempt. The fourth failure ends the subscription.
+    retry-delays: P1D,P3D,P5D
+    # Longer than any charge can take, so a job never takes over an attempt that is still running.
+    lease: PT2M
+    job-interval: PT30S
   metrics:
     refresh-interval: PT15S
 

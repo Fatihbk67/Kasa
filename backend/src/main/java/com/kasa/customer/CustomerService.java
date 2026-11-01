@@ -141,6 +141,13 @@ public class CustomerService {
             if (openDispute) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "this customer has an open dispute");
             }
+            boolean liveSubscription = jdbc.sql("SELECT EXISTS (SELECT 1 FROM subscriptions WHERE customer_id = :id AND status <> 'CANCELED')")
+                    .param("id", id)
+                    .query(Boolean.class)
+                    .single();
+            if (liveSubscription) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "this customer has a live subscription");
+            }
             int updated = jdbc.sql("""
                             UPDATE customers SET email = NULL, name = NULL, anonymized_at = now(), updated_at = now()
                             WHERE id = :id AND anonymized_at IS NULL

@@ -6,6 +6,7 @@ const NAV = [
   { to: '/', label: 'Genel bakış', end: true, operatorOnly: false },
   { to: '/analytics', label: 'Analiz', end: false, operatorOnly: false },
   { to: '/payments', label: 'Ödemeler', end: false, operatorOnly: false },
+  { to: '/subscriptions', label: 'Abonelikler', end: false, operatorOnly: false },
   { to: '/disputes', label: 'İtirazlar', end: false, operatorOnly: false },
   { to: '/customers', label: 'Müşteriler', end: false, operatorOnly: false },
   { to: '/payment-links', label: 'Ödeme bağlantıları', end: false, operatorOnly: false },

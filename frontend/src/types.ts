@@ -244,6 +244,75 @@ export interface ChainReport {
   brokenAtSeq: number | null;
 }
 
+export interface Plan {
+  id: string;
+  name: string;
+  amount: number;
+  currency: string;
+  billingInterval: 'MONTH' | 'YEAR';
+  archived: boolean;
+  activeSubscriptions: number;
+  createdAt: string;
+}
+
+export type SubscriptionStatus = 'INCOMPLETE' | 'ACTIVE' | 'PAST_DUE' | 'CANCELED';
+export type InvoiceStatus = 'OPEN' | 'PAID' | 'VOID' | 'UNCOLLECTIBLE';
+
+export interface Subscription {
+  id: string;
+  customerId: string;
+  customerLabel: string | null;
+  planId: string;
+  planName: string;
+  amount: number;
+  currency: string;
+  billingInterval: Plan['billingInterval'];
+  status: SubscriptionStatus;
+  currentPeriodStart: string;
+  currentPeriodEnd: string;
+  cancelAtPeriodEnd: boolean;
+  creditBalance: number;
+  cancelReason: string | null;
+  canceledAt: string | null;
+  createdAt: string;
+}
+
+export interface Invoice {
+  id: string;
+  kind: 'FIRST' | 'RENEWAL' | 'PLAN_CHANGE';
+  status: InvoiceStatus;
+  periodStart: string;
+  periodEnd: string;
+  subtotal: number;
+  creditApplied: number;
+  amount: number;
+  currency: string;
+  attemptCount: number;
+  nextAttemptAt: string | null;
+  paymentId: string | null;
+  failureCode: string | null;
+  paidAt: string | null;
+  createdAt: string;
+  lines: { kind: string; planName: string; amount: number }[];
+}
+
+export interface SubscriptionDetail {
+  subscription: Subscription;
+  invoices: Invoice[];
+}
+
+export interface SubscriptionPage {
+  items: Subscription[];
+  nextCursor: string | null;
+}
+
+export interface BillingSummary {
+  revenue: { currency: string; monthlyRecurring: number }[];
+  active: number;
+  pastDue: number;
+  canceledLast30Days: number;
+}
+
 export type DisputeStatus = 'NEEDS_RESPONSE' | 'UNDER_REVIEW' | 'WON' | 'LOST';
 export type DisputeReason = 'FRAUDULENT' | 'PRODUCT_NOT_RECEIVED' | 'DUPLICATE' | 'PRODUCT_UNACCEPTABLE' | 'OTHER';
 

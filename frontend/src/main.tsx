@@ -10,6 +10,7 @@ import { Checkout } from './pages/Checkout';
 import { CustomerDetailPage, Customers } from './pages/Customers';
 import { DisputeDetailPage, Disputes } from './pages/Disputes';
 import { PaymentLinks, PublicLinkPage } from './pages/PaymentLinks';
+import { SubscriptionDetailPage, Subscriptions } from './pages/Subscriptions';
 import { Settings } from './pages/Settings';
 import { AcceptInvitation, TeamPage } from './pages/Team';
 import { Developers } from './pages/Developers';
@@ -42,6 +43,8 @@ createRoot(document.getElementById('root')!).render(
             <Route path="analytics" element={<Analytics />} />
             <Route path="payments" element={<Payments />} />
             <Route path="payments/:id" element={<PaymentDetailPage />} />
+            <Route path="subscriptions" element={<Subscriptions />} />
+            <Route path="subscriptions/:id" element={<SubscriptionDetailPage />} />
             <Route path="disputes" element={<Disputes />} />
             <Route path="disputes/:id" element={<DisputeDetailPage />} />
             <Route path="customers" element={<Customers />} />

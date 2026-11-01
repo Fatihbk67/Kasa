@@ -89,6 +89,10 @@ java -Djdk.net.unixdomain.tmpdir=backend/target load-test/LoadTest.java http://l
 - **Kişisel veri silinebilir, mali kayıt kalır:** Müşteri silinince ad ve e-posta boşaltılır, ödemeler kişiyle bağlantısız olarak durur. Değiştirilemeyen denetim günlüğüne müşteri bilgisi hiç yazılmaz, yoksa silinemezdi.
 - **Ziyaretçi müşteri bilgisini değiştiremez:** Herkese açık formda var olan bir e-posta girilirse kayıtlı ad korunur.
 - **Yeniden başlatma bankayı unutturmaz:** Simüle banka da kayıtlarını veritabanında tutar. Kapatmadan önce alınan provizyon, açılınca tahsil edilebilir ve mutabakat eşleşir. Aynı işlem kimliğiyle gelen eşzamanlı çağrılar kilit sayesinde parayı bir kez hareket ettirir.
+- **Bir dönem iki kez faturalanmaz:** Abonelik başına dönem başına tek fatura kuralını veritabanı uygular, birden çok iş aynı anda çalışsa da geçerlidir.
+- **Tahsilat yarıda kesilirse kart ikinci kez çekilmez:** Her deneme, sonucu kesinleşene kadar numarasını ve kartını korur. Sunucu çökse bile aynı idempotency anahtarı aynı ödemeyi döndürür, yeni ödeme başlamaz. Kart bu arada değişse de bekleyen deneme eski kartla sonuçlanır.
+- **Ay sonu kaymaz:** 31 Ocak'ta başlayan abonelik 28 Şubat'ta, sonra 31 Mart'ta yenilenir. Her dönem bir öncekinden değil başlangıç tarihinden hesaplanır.
+- **Plan değişikliği hakkaniyetlidir:** Kalan süreye göre kuruş hesabı `BigInteger` ile yapılır, çünkü tutar çarpı saniye `long` sınırını aşabilir. Ucuz plana geçişte fark karta iade edilmez, sonraki faturadan düşülür.
 - **Raporlar defterle aynı sonucu verir:** Analiz paneli tutarları paranın gerçekten hareket ettiği güne yazar ve net kazanç işletmenin defter bakiyesiyle uyuşur.
 - **Dışa aktarılan dosya saldırı aracı olamaz:** CSV'de formül gibi başlayan açıklamalar etkisizleştirilir (CSV injection). 10.000 satırda kesilen rapor kullanıcıya açıkça bildirilir.
 - **Bankayla farklar yakalanır:** Günlük mutabakat banka dosyasını kayıtlarımızla karşılaştırır. Farkları raporlar ama düzeltmez, çünkü hangi tarafın doğru olduğuna insan karar vermelidir.
@@ -214,6 +218,16 @@ Başka bir platformda aynı değişkenlere ek olarak `KASA_DB_APP_USER=kasa_app`
 | POST | `/api/v1/admin/reconciliation/runs?date=` | `X-Admin-Token` | Tarih için mutabakat çalıştırır |
 | GET | `/api/v1/admin/reconciliation/runs` | `X-Admin-Token` | Mutabakat geçmişini listeler |
 | GET | `/api/v1/admin/reconciliation/runs/{id}` | `X-Admin-Token` | Çalıştırmayı farklarıyla döner |
+| POST, GET | `/api/v1/plans` | JWT veya `X-Api-Key` | Plan oluşturur ve listeler |
+| POST | `/api/v1/plans/{id}/archive` | JWT veya `X-Api-Key` | Planı yeni aboneliğe kapatır |
+| POST, GET | `/api/v1/subscriptions` | JWT veya `X-Api-Key` | Abonelik başlatır, listeler (`status`, `customerId`, `limit`, `before`) |
+| GET | `/api/v1/subscriptions/{id}` | JWT veya `X-Api-Key` | Aboneliği faturalarıyla döner |
+| POST | `/api/v1/subscriptions/{id}/change-plan` | JWT veya `X-Api-Key` | Planı değiştirir, farkı kalan süreye göre hesaplar |
+| POST | `/api/v1/subscriptions/{id}/cancel` | JWT veya `X-Api-Key` | Hemen veya dönem sonunda iptal eder (`atPeriodEnd`) |
+| POST | `/api/v1/subscriptions/{id}/resume` | JWT veya `X-Api-Key` | Planlanan iptali geri alır |
+| PUT | `/api/v1/subscriptions/{id}/card` | JWT veya `X-Api-Key` | Kartı değiştirir, ödenmemiş faturayı hemen dener |
+| POST | `/api/v1/subscriptions/{id}/simulate-renewal` | JWT veya `X-Api-Key` | Sonraki dönemi şimdi faturalar (demo için) |
+| GET | `/api/v1/billing/summary` | JWT veya `X-Api-Key` | Aylık tekrarlayan gelir ve abonelik sayıları |
 | POST | `/api/v1/disputes/simulate` | JWT veya `X-Api-Key` | Bankanın itiraz açmasını simüle eder |
 | GET | `/api/v1/disputes` | JWT veya `X-Api-Key` | İtirazları listeler (`status`, `paymentId`, `limit`, `before`) |
 | GET | `/api/v1/disputes/{id}` | JWT veya `X-Api-Key` | İtirazı kanıtıyla döner |
@@ -250,6 +264,20 @@ PENDING ──> AUTHORIZED ──> CAPTURED ──> PARTIALLY_REFUNDED ──> R
    └──> FAILED
 ```
 
+## Abonelikler
+
+İlk dönem hemen tahsil edilir; kart reddedilirse abonelik başlamaz. Başarısız yenileme 1, 3 ve 5 gün sonra yeniden denenir, dördüncü başarısızlıkta fatura `UNCOLLECTIBLE` olur ve abonelik biter. Kart güncellenince ödenmemiş fatura hemen denenir.
+
+```text
+INCOMPLETE ──> ACTIVE <──> PAST_DUE
+     │            │            │
+     └────────────┴────────────┴──> CANCELED
+```
+
+Tahsilat, ödeme servisinin bankayla kullandığı kuralı izler: denemeyi kaydet, transaction dışında tahsil et, sonucu kaydet. Para `PaymentService` üzerinden geçtiği için defter, hesap kesimi ve mutabakat abonelik ödemelerini ayrıca bir kural gerekmeden kapsar.
+
+**Bilinen sınırlar:** Deneme süresi (trial), kupon, vergi ve kullanıma göre ücretlendirme yoktur. Plan değişikliği yalnızca aynı para birimi ve dönem arasında yapılır. Hemen iptalde ödenmiş tutar ve kalan kredi iade edilmez. Kart token'ı veritabanında düz metindir; gerçek sistemde kartlar sağlayıcının kasasında durur.
+
 ## İtirazlar
 
 Müşteri bankasına başvurunca banka tutarı hemen geri alır. İşletmenin yanıt vermek için 7 günü vardır.
@@ -272,7 +300,7 @@ Simüle banka basit bir kural izler: kargo takip numarası varsa işletme kazan�
 
 ## Webhook'lar
 
-Olaylar: `payment.authorized`, `payment.declined`, `payment.failed`, `payment.captured`, `payment.voided`, `payment.refunded`, `payment.operation_failed`, `payout.paid`, `payout.failed`, `dispute.opened`, `dispute.under_review`, `dispute.won`, `dispute.lost`.
+Olaylar: `payment.authorized`, `payment.declined`, `payment.failed`, `payment.captured`, `payment.voided`, `payment.refunded`, `payment.operation_failed`, `payout.paid`, `payout.failed`, `dispute.opened`, `dispute.under_review`, `dispute.won`, `dispute.lost`, `invoice.paid`, `invoice.payment_failed`, `subscription.past_due`, `subscription.canceled`.
 
 Teslimat **en az bir kez** garantilidir ve sıra garantisi yoktur. Alıcı `X-Kasa-Event-Id` ile tekrarları ayıklamalı, sıralama için gövdedeki `createdAt` alanını kullanmalıdır. 2xx dışındaki her yanıt başarısız sayılır; 8 denemeden sonra teslimat `FAILED` olur ve elle yeniden denenebilir.
 
@@ -335,3 +363,4 @@ Banka simüle edilir; davranışı token belirler. Böylece her hata senaryosu i
 - [x] **Analiz ve yönetim:** Grafikli analiz paneli, gelişmiş arama ve filtreler, CSV dışa aktarma, platform yönetim paneli
 - [x] **Ekip ve denetim:** Ekip üyeleri, rol bazlı yetkiler, değiştirilemez denetim günlüğü, ayarlar
 - [x] **Yeni iş alanları:** İtiraz (chargeback) akışı, müşteri kayıtları ve kişisel veri silme, paylaşılabilir ödeme bağlantıları
+- [x] **Abonelikler:** Planlar, tekrarlayan tahsilat, başarısız ödemede yeniden deneme, dönem ortası plan değişikliği

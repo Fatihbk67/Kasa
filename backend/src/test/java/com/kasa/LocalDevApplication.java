@@ -17,6 +17,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 
 import com.kasa.auth.AuthService;
 import com.kasa.bank.SimulatedBank;
+import com.kasa.billing.BillingService;
 import com.kasa.reconciliation.ReconciliationService;
 import com.kasa.checkout.CheckoutService;
 import com.kasa.checkout.PaymentLinkService;
@@ -126,6 +127,17 @@ public final class LocalDevApplication {
         PaymentLinkService links = context.getBean(PaymentLinkService.class);
         links.create(tenantId, new PaymentLinkService.NewLink("Kahve demleme atölyesi", "Cumartesi 14.00, Kadıköy", 75_000L, "TRY", 12, null));
         links.create(tenantId, new PaymentLinkService.NewLink("Kahve fonuna destek", "Dilediğiniz kadar", null, "TRY", null, null));
+
+        BillingService billing = context.getBean(BillingService.class);
+        UUID box = billing.createPlan(tenantId, "Aylık kahve kutusu", 24_900, "TRY", "MONTH").id();
+        billing.createPlan(tenantId, "Büyük kahve kutusu", 44_900, "TRY", "MONTH");
+        UUID yearly = billing.createPlan(tenantId, "Yıllık üyelik", 249_000, "TRY", "YEAR").id();
+        billing.subscribe(tenantId, ayse, box, "tok_success");
+        billing.subscribe(tenantId, mehmet, yearly, "tok_success");
+        UUID can = customers.create(tenantId, "can@kasa.test", "Can Öztürk").id();
+        UUID pastDue = billing.subscribe(tenantId, can, box, "tok_success").subscription().id();
+        billing.updateCard(tenantId, pastDue, "tok_declined");
+        billing.simulateRenewal(tenantId, pastDue);
     }
 
     private static UUID customerPayment(PaymentService payments, UUID tenantId, UUID customerId, long amount, String description) {
