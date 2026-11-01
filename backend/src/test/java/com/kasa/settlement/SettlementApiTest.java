@@ -80,7 +80,7 @@ class SettlementApiTest extends PostgresIntegrationTest {
     @Test
     void operationsAfterTheCutoffWaitForALaterPayout() throws Exception {
         merchant.capturedPayment(1_000);
-        Instant cutoff = Instant.now();
+        Instant cutoff = databaseNow();
         Thread.sleep(5);
         merchant.capturedPayment(2_000);
 
@@ -133,7 +133,7 @@ class SettlementApiTest extends PostgresIntegrationTest {
     @Test
     void aRefundAfterTheCutoffStopsAPayoutTheMerchantCouldNotCover() throws Exception {
         UUID payment = merchant.capturedPayment(10_000);
-        Instant cutoff = Instant.now();
+        Instant cutoff = databaseNow();
         Thread.sleep(5);
         merchant.refund(payment, 10_000);
 
@@ -277,6 +277,13 @@ class SettlementApiTest extends PostgresIntegrationTest {
                         """).param("id", payoutId).update()).hasStackTraceContaining("payout_items_settled_once");
         assertThatThrownBy(() -> owner.sql("UPDATE payouts SET status = 'PENDING' WHERE id = :id")
                 .param("id", payoutId).update()).hasStackTraceContaining("illegal payout transition");
+    }
+
+    /** Operations are timestamped by the database, so a cutoff between two of them must come from the same clock. */
+    private static Instant databaseNow() {
+        return owner.sql("SELECT clock_timestamp()")
+                .query((rs, rowNum) -> rs.getObject(1, java.time.OffsetDateTime.class).toInstant())
+                .single();
     }
 
     private static Instant soon() {

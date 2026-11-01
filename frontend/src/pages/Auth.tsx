@@ -14,6 +14,9 @@ function AuthCard({ title, children }: { title: string; children: ReactNode }) {
       <div className="card auth-card">
         <div className="brand">Kasa</div>
         <h1>{title}</h1>
+        <p className="note note-warning auth-notice">
+          Bu bir portföy demosudur. Gerçek e-posta veya başka yerde kullandığınız bir parola girmeyin.
+        </p>
         {children}
       </div>
     </div>

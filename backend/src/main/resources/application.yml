@@ -58,6 +58,8 @@ kasa:
     refresh-interval: PT15S
 
 server:
+  # Hosting platforms choose the port through this variable.
+  port: ${PORT:8080}
   # Set to "native" behind a trusted reverse proxy, or every client appears to share the proxy's address.
   forward-headers-strategy: ${KASA_FORWARD_HEADERS:none}
 

@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: kasa
+    runtime: docker
+    plan: free
+    region: frankfurt
+    healthCheckPath: /actuator/health
+    envVars:
+      # The database lives on Neon. Render asks for these once, when the service is created.
+      - key: KASA_DB_URL
+        sync: false
+      - key: KASA_DB_APP_PASSWORD
+        sync: false
+      - key: KASA_DB_OWNER_USER
+        sync: false
+      - key: KASA_DB_OWNER_PASSWORD
+        sync: false
+      - key: KASA_DB_APP_USER
+        value: kasa_app
+      - key: KASA_JWT_SECRET
+        generateValue: true
+      - key: KASA_ADMIN_TOKEN
+        generateValue: true
+      - key: KASA_FORWARD_HEADERS
+        value: native
+      # Fits the JVM into a small instance, trading peak speed for memory.
+      - key: JAVA_TOOL_OPTIONS
+        value: -Xmx320m -XX:+UseSerialGC -XX:TieredStopAtLevel=1
+      - key: SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE
+        value: "5"

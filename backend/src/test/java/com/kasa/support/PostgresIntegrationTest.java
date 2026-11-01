@@ -21,21 +21,22 @@ public abstract class PostgresIntegrationTest {
 
     private static final EmbeddedPostgres POSTGRES = startPostgres();
 
-    protected static final JdbcClient owner = JdbcClient.create(POSTGRES.getPostgresDatabase());
+    protected static final JdbcClient owner = JdbcClient.create(POSTGRES.getDatabase("postgres", "kasa"));
 
     protected static final TransactionTemplate ownerTx =
-            new TransactionTemplate(new JdbcTransactionManager(POSTGRES.getPostgresDatabase()));
+            new TransactionTemplate(new JdbcTransactionManager(POSTGRES.getDatabase("postgres", "kasa")));
 
     @DynamicPropertySource
     static void applicationProperties(DynamicPropertyRegistry registry) {
-        String url = "jdbc:postgresql://localhost:" + POSTGRES.getPort() + "/postgres";
+        String url = "jdbc:postgresql://localhost:" + POSTGRES.getPort() + "/kasa";
         registry.add("spring.datasource.url", () -> url);
         registry.add("spring.datasource.username", () -> "kasa_app");
         registry.add("spring.datasource.password", () -> "kasa_app");
         registry.add("spring.datasource.hikari.maximum-pool-size", () -> 20);
         registry.add("spring.flyway.url", () -> url);
-        registry.add("spring.flyway.user", () -> "postgres");
-        registry.add("spring.flyway.password", () -> "postgres");
+        // Migrations run as an ordinary database owner, as on a managed PostgreSQL where no superuser is available.
+        registry.add("spring.flyway.user", () -> "kasa_owner");
+        registry.add("spring.flyway.password", () -> "kasa_owner");
         registry.add("kasa.jwt.secret", () -> "test-only-secret-test-only-secret-1234");
         // Tests run recovery themselves, at the moment they choose.
         registry.add("kasa.payments.recovery-interval", () -> "PT1H");
@@ -59,9 +60,10 @@ public abstract class PostgresIntegrationTest {
         try {
             // initdb rejects non-ASCII OS locale names such as "Turkish_Türkiye.1254".
             EmbeddedPostgres postgres = EmbeddedPostgres.builder().setLocaleConfig("locale", "C").start();
-            JdbcClient.create(postgres.getPostgresDatabase())
-                    .sql("CREATE ROLE kasa_app LOGIN PASSWORD 'kasa_app' NOSUPERUSER NOBYPASSRLS")
-                    .update();
+            JdbcClient admin = JdbcClient.create(postgres.getPostgresDatabase());
+            admin.sql("CREATE ROLE kasa_app LOGIN PASSWORD 'kasa_app' NOSUPERUSER NOBYPASSRLS").update();
+            admin.sql("CREATE ROLE kasa_owner LOGIN PASSWORD 'kasa_owner' NOSUPERUSER NOBYPASSRLS").update();
+            admin.sql("CREATE DATABASE kasa OWNER kasa_owner").update();
             return postgres;
         } catch (IOException e) {
             throw new UncheckedIOException(e);

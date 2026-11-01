@@ -1,5 +1,7 @@
 # Kasa
 
+[![CI](https://github.com/Fatihbk67/Kasa/actions/workflows/ci.yml/badge.svg)](https://github.com/Fatihbk67/Kasa/actions/workflows/ci.yml)
+
 Çok kiracılı (multi-tenant) ödeme altyapısı platformu. İşletmeler API anahtarıyla sisteme bağlanır, ödeme alır, iade yapar ve kazançlarını çeker. Her para hareketi çift taraflı muhasebe defterine (double-entry ledger) yazılır.
 
 > Eğitim ve portföy projesidir. Gerçek kart verisi işlemez; banka tarafı simüle edilir.
@@ -131,12 +133,28 @@ Uygulama `http://localhost:8080`, Prometheus `http://localhost:9090`, Grafana `h
 
 ## Yayına alma
 
-Tek bir Docker imajı API ile arayüzü birlikte sunar. Gerekenler: imajı çalıştıracak bir sunucu ve PostgreSQL.
+Tek bir Docker imajı API ile arayüzü birlikte sunar. Depodaki `render.yaml`, Render için hazırdır; veritabanı olarak Neon gibi yönetilen bir PostgreSQL kullanılır.
 
-1. Veritabanında `infra/postgres/01-app-role.sql` içeriğini güçlü bir parolayla çalıştırın. Uygulama rolü tablo sahibi veya süper kullanıcı olursa uygulama başlamaz.
-2. `KASA_DB_URL`, `KASA_DB_APP_USER`, `KASA_DB_APP_PASSWORD`, `KASA_DB_OWNER_USER`, `KASA_DB_OWNER_PASSWORD`, `KASA_JWT_SECRET` ve `KASA_ADMIN_TOKEN` değerlerini tanımlayın.
-3. Ters proxy arkasındaysa `KASA_FORWARD_HEADERS=native` ayarlayın. Aksi halde tüm istemciler tek adres sayılır ve istek sınırı herkesi birlikte engeller.
-4. HTTPS kullanın. Demo ortamında, simüle banka kayıtlarının yeniden başlatmada silindiğini unutmayın.
+1. Neon'da Frankfurt bölgesinde bir proje açın. SQL editöründe kendi güçlü parolanızla uygulama rolünü oluşturun:
+
+   ```sql
+   CREATE ROLE kasa_app LOGIN PASSWORD 'kendi-guclu-parolaniz';
+   ```
+
+2. Render'da **New → Blueprint** ile bu depoyu bağlayın ve istenen değerleri girin:
+
+   | Değişken | Değer |
+   |---|---|
+   | `KASA_DB_URL` | `jdbc:postgresql://<neon-host>/<veritabanı>?sslmode=require` (host adında `-pooler` olmayan doğrudan bağlantı) |
+   | `KASA_DB_APP_PASSWORD` | 1. adımdaki parola |
+   | `KASA_DB_OWNER_USER` | Neon'un sahip rolü, örneğin `neondb_owner` |
+   | `KASA_DB_OWNER_PASSWORD` | Sahip rolünün parolası |
+
+   `KASA_JWT_SECRET` ve `KASA_ADMIN_TOKEN` otomatik üretilir. Uygulama rolü tablo sahibi veya süper kullanıcı olursa uygulama bilerek başlamaz.
+
+Başka bir platformda aynı değişkenlere ek olarak `KASA_DB_APP_USER=kasa_app` tanımlayın. Ters proxy arkasında `KASA_FORWARD_HEADERS=native` gerekir; aksi halde tüm istemciler tek adres sayılır ve istek sınırı herkesi birlikte engeller.
+
+**Ücretsiz planda bilinmesi gerekenler:** Sunucu 15 dakika istek almazsa uyur ve ilk istekte yeniden başlaması bir dakikadan uzun sürebilir. Uyurken zamanlanmış işler çalışmaz, bu yüzden günlük hesap kesimi ve mutabakat güvenilir biçimde tetiklenmez. Simüle banka kayıtları her yeniden başlatmada silinir. Bu nedenle eski provizyonlar `unknown_authorization` hatası alır ve mutabakat eski işlemleri `MISSING_IN_BANK` olarak gösterir. Bunlar demo sınırıdır; gerçek bir bankada oluşmaz.
 
 ## API
 

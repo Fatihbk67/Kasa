@@ -198,8 +198,10 @@ class ReconciliationApiTest extends PostgresIntegrationTest {
     }
 
     @Test
-    void theAdminApiCanSettleOnDemand() {
+    void theAdminApiCanSettleOnDemand() throws Exception {
         merchant.capturedPayment(1_000);
+        // The endpoint's cutoff comes from the JVM clock and the capture's time from the database clock.
+        Thread.sleep(50);
 
         Map<String, Object> result = admin().post().uri("/api/v1/admin/settlements/run")
                 .header("X-Admin-Token", ADMIN_TOKEN)

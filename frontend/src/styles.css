@@ -592,6 +592,11 @@ select {
   padding: 0;
 }
 
+.auth-notice {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
 .auth-switch {
   text-align: center;
 }
