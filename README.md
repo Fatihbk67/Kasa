@@ -6,6 +6,8 @@
 
 > Eğitim ve portföy projesidir. Gerçek kart verisi işlemez; banka tarafı simüle edilir.
 
+**Canlı demo:** [kasa-rpb3.onrender.com](https://kasa-rpb3.onrender.com). Ücretsiz sunucu uykudaysa ilk açılış bir dakikadan uzun sürebilir. Kayıt olurken gerçek e-posta veya başka yerde kullandığınız bir parola girmeyin.
+
 ## Mimari
 
 ```mermaid
@@ -261,4 +263,4 @@ Banka simüle edilir; davranışı token belirler. Böylece her hata senaryosu i
 - [x] **Hesap kesimi ve mutabakat:** İşletmelere toplu ödeme, banka dosyasıyla karşılaştırma, zamanlanmış işler
 - [x] **Frontend:** Ödeme sayfası ve işletme paneli (React, TypeScript)
 - [x] **Vitrin:** İstek sınırı, yük testi, Prometheus metrikleri, Grafana panosu, GitHub Actions, Docker imajı
-- [ ] **Canlı demo:** Uygulamanın herkese açık bir adreste yayınlanması
+- [x] **Canlı demo:** Render üzerinde uygulama, Neon üzerinde PostgreSQL
