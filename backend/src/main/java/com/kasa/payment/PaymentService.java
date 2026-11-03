@@ -262,9 +262,10 @@ public class PaymentService {
             if (operation.status() != OperationStatus.PENDING) {
                 return;
             }
+            Runnable ledgerEntry = () -> { };
             if (response.approved()) {
                 store.completeOperation(operationId, OperationStatus.SUCCEEDED, response.reference(), null);
-                applyApproval(tenantId, payment, operation, response);
+                ledgerEntry = applyApproval(tenantId, payment, operation, response);
             } else {
                 store.completeOperation(operationId, OperationStatus.FAILED, null, response.declineCode());
                 if (operation.type() == OperationType.AUTHORIZE) {
@@ -275,6 +276,9 @@ public class PaymentService {
                 }
             }
             publishOutcome(tenantId, paymentId, operationId);
+            // Last, because posting locks the merchant's balance rows until commit, and every other payment
+            // of the same merchant waits for them. Nothing slow may run after it.
+            ledgerEntry.run();
         });
     }
 
@@ -302,14 +306,21 @@ public class PaymentService {
         return "payment.operation_failed";
     }
 
-    private void applyApproval(UUID tenantId, Payment payment, PaymentOperation operation, BankResponse response) {
-        switch (operation.type()) {
-            case AUTHORIZE -> store.update(payment.id(), PaymentStatus.AUTHORIZED, 0, 0, 0, response.reference(), null);
-            case VOID -> store.update(payment.id(), PaymentStatus.VOIDED, 0, 0, 0, payment.bankReference(), null);
+    /** Updates the payment and returns its ledger entry, which the caller posts at the very end of the transaction. */
+    private Runnable applyApproval(UUID tenantId, Payment payment, PaymentOperation operation, BankResponse response) {
+        return switch (operation.type()) {
+            case AUTHORIZE -> {
+                store.update(payment.id(), PaymentStatus.AUTHORIZED, 0, 0, 0, response.reference(), null);
+                yield () -> { };
+            }
+            case VOID -> {
+                store.update(payment.id(), PaymentStatus.VOIDED, 0, 0, 0, payment.bankReference(), null);
+                yield () -> { };
+            }
             case CAPTURE -> {
                 long fee = feeFor(operation.amount());
                 store.update(payment.id(), PaymentStatus.CAPTURED, operation.amount(), 0, fee, payment.bankReference(), null);
-                paymentLedger.recordCapture(tenantId, payment.currency(), operation.id(), operation.amount(), fee);
+                yield () -> paymentLedger.recordCapture(tenantId, payment.currency(), operation.id(), operation.amount(), fee);
             }
             case REFUND -> {
                 long refunded = payment.refundedAmount() + operation.amount();
@@ -318,10 +329,10 @@ public class PaymentService {
                         : PaymentStatus.PARTIALLY_REFUNDED;
                 store.update(payment.id(), next, payment.capturedAmount(), refunded, payment.feeAmount(),
                         payment.bankReference(), null);
-                paymentLedger.recordRefund(tenantId, payment.currency(), operation.id(), operation.amount());
+                yield () -> paymentLedger.recordRefund(tenantId, payment.currency(), operation.id(), operation.amount());
             }
             default -> throw new IllegalArgumentException(operation.type() + " is not started through a bank call");
-        }
+        };
     }
 
     /** Rounds half up, in integer arithmetic so no floating point error can touch money. */

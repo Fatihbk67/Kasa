@@ -48,7 +48,7 @@ public class LoadTest {
 
         List<Merchant> merchants = new ArrayList<>();
         for (int i = 0; i < merchantCount; i++) {
-            merchants.add(newMerchant());
+            merchants.add(newMerchant(adminToken));
         }
 
         Instant deadline = Instant.now().plusSeconds(seconds);
@@ -135,13 +135,18 @@ public class LoadTest {
                 + " matched=" + find(body, "\"matchedCount\":(\\d+)") + " discrepancies=" + find(body, "\"discrepancyCount\":(\\d+)");
     }
 
-    private static Merchant newMerchant() throws Exception {
+    /** New merchants wait for review, so each one is approved before it takes its first payment. */
+    private static Merchant newMerchant(String adminToken) throws Exception {
         String email = "load-" + UUID.randomUUID() + "@example.com";
         Reply registered = send(HttpRequest.newBuilder(URI.create(baseUrl + "/api/v1/auth/register"))
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString("{\"businessName\":\"Load\",\"email\":\"" + email
                         + "\",\"password\":\"load-test-password-1\"}")));
         String token = find(registered.body(), "\"accessToken\":\"([^\"]+)\"");
+        String tenantId = find(registered.body(), "\"tenantId\":\"([^\"]+)\"");
+        send(HttpRequest.newBuilder(URI.create(baseUrl + "/api/v1/admin/merchants/" + tenantId + "/approve"))
+                .header("X-Admin-Token", adminToken)
+                .POST(HttpRequest.BodyPublishers.noBody()));
         Reply key = send(HttpRequest.newBuilder(URI.create(baseUrl + "/api/v1/api-keys"))
                 .header("Authorization", "Bearer " + token)
                 .header("Content-Type", "application/json")

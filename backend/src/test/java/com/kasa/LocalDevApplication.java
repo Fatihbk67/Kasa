@@ -52,6 +52,10 @@ public final class LocalDevApplication {
         EmbeddedPostgres.Builder builder = EmbeddedPostgres.builder()
                 .setLocaleConfig("locale", "C")
                 .setServerConfig("synchronous_commit", "on");
+        // For finding slow queries: records the time every statement takes, which costs a little on every call.
+        if ("true".equals(System.getenv("KASA_LOCAL_QUERY_STATS"))) {
+            builder.setServerConfig("shared_preload_libraries", "pg_stat_statements");
+        }
         String dataDirectory = System.getenv("KASA_LOCAL_DATA_DIR");
         if (dataDirectory != null && !dataDirectory.isBlank()) {
             builder.setDataDirectory(Path.of(dataDirectory)).setCleanDataDirectory(false);
@@ -66,6 +70,7 @@ public final class LocalDevApplication {
         }
 
         String url = "jdbc:postgresql://localhost:" + postgres.getPort() + "/postgres";
+        log.info("Local database: {} (user postgres, password postgres)", url);
         System.setProperty("spring.datasource.url", url);
         System.setProperty("spring.flyway.url", url);
         System.setProperty("spring.flyway.user", "postgres");

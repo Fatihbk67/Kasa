@@ -2,11 +2,12 @@ package com.kasa.ledger;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Comparator;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -66,11 +67,23 @@ public class LedgerService {
                 .list();
     }
 
-    /** Returns the account, creating it first if needed. Safe to call concurrently. */
+    /**
+     * Returns the account, creating it first if needed. Safe to call concurrently. Looks before it inserts,
+     * because the account nearly always exists and an insert that conflicts still costs a write attempt.
+     */
     @Transactional
     public LedgerAccount ensureAccount(UUID tenantId, String code, AccountType type, String currency,
                                        boolean allowNegative) {
         tenantScope.apply(tenantId);
+        var existing = jdbc.sql("SELECT * FROM ledger_accounts WHERE tenant_id = :tenantId AND code = :code AND currency = :currency")
+                .param("tenantId", tenantId)
+                .param("code", code)
+                .param("currency", currency)
+                .query(LedgerService::mapAccount)
+                .optional();
+        if (existing.isPresent()) {
+            return existing.get();
+        }
         jdbc.sql("""
                         INSERT INTO ledger_accounts (tenant_id, code, type, currency, allow_negative)
                         VALUES (:tenantId, :code, :type, :currency, :allowNegative)
@@ -123,7 +136,8 @@ public class LedgerService {
             return replay(tenantId, request.idempotencyKey(), fingerprint);
         }
 
-        Map<UUID, LedgerAccount> accounts = lockAccounts(tenantId, request.postings());
+        // Read without a lock: the type and currency never change, and the balance is checked by the update itself.
+        Map<UUID, LedgerAccount> accounts = readAccounts(tenantId, request.postings());
         assertBalanced(request.postings(), accounts);
 
         for (Posting posting : request.postings()) {
@@ -180,16 +194,13 @@ public class LedgerService {
                 .single();
     }
 
-    /** Locks in id order, so entries touching the same accounts in opposite order cannot deadlock. */
-    private Map<UUID, LedgerAccount> lockAccounts(UUID tenantId, List<Posting> postings) {
+    private Map<UUID, LedgerAccount> readAccounts(UUID tenantId, List<Posting> postings) {
         Set<UUID> ids = postings.stream().map(Posting::accountId).collect(Collectors.toSet());
         Map<UUID, LedgerAccount> accounts = new HashMap<>();
         jdbc.sql("""
                         SELECT *
                         FROM ledger_accounts
                         WHERE tenant_id = :tenantId AND id IN (:ids)
-                        ORDER BY id
-                        FOR UPDATE
                         """)
                 .param("tenantId", tenantId)
                 .param("ids", ids)
@@ -217,22 +228,29 @@ public class LedgerService {
         });
     }
 
+    /**
+     * The row lock is taken here, as the last step, and held only until commit. Reading the balance under a lock
+     * at the start would make every other payment of the merchant wait for all the work in between. The
+     * condition in the update checks the balance at the moment of writing, so no stale read can overdraw it.
+     * Accounts are updated in one fixed order, so entries touching the same accounts cannot deadlock.
+     */
     private void applyBalances(List<Posting> postings, Map<UUID, LedgerAccount> accounts) {
-        Map<UUID, Long> deltas = new LinkedHashMap<>();
+        Map<UUID, Long> deltas = new TreeMap<>(Comparator.comparing(UUID::toString));
         for (Posting posting : postings) {
             long delta = accounts.get(posting.accountId()).type().balanceDelta(posting.direction(), posting.amount());
             deltas.merge(posting.accountId(), delta, Math::addExact);
         }
         deltas.forEach((accountId, delta) -> {
-            LedgerAccount account = accounts.get(accountId);
-            long balance = Math.addExact(account.balance(), delta);
-            if (balance < 0 && !account.allowNegative()) {
-                throw new LedgerException.InsufficientFunds(accountId);
-            }
-            jdbc.sql("UPDATE ledger_accounts SET balance = :balance WHERE id = :id")
-                    .param("balance", balance)
+            int updated = jdbc.sql("""
+                            UPDATE ledger_accounts SET balance = balance + :delta
+                            WHERE id = :id AND (allow_negative OR balance + :delta >= 0)
+                            """)
+                    .param("delta", delta)
                     .param("id", accountId)
                     .update();
+            if (updated == 0) {
+                throw new LedgerException.InsufficientFunds(accountId);
+            }
         });
     }
 
