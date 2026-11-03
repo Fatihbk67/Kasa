@@ -5,6 +5,7 @@ import { EmptyState, ErrorNote, FormDialog, formatDateTime, Loading, PageHeader 
 import { canOperate, useMe } from '../me';
 import { formatMoney } from '../money';
 import type { Customer, CustomerPage, PaymentPage } from '../types';
+import { useToast } from '../toast';
 import { useFetch } from '../useFetch';
 import { PaymentTable } from './PaymentTable';
 
@@ -156,6 +157,7 @@ export function Customers() {
 }
 
 export function CustomerDetailPage() {
+  const notify = useToast();
   const { id } = useParams();
   const { me } = useMe();
   const detail = useFetch(() => api<Customer>(`/customers/${id}`), [id]);
@@ -181,11 +183,12 @@ export function CustomerDetailPage() {
       await api(`/customers/${customer.id}`, { method: 'DELETE' });
     } catch (e) {
       throw e instanceof ApiError && e.status === 409
-        ? new Error('Açık bir itiraz var. Kanıt olarak gerekebileceği için itiraz sonuçlanmadan silinemez.')
+        ? new Error('Açık bir itiraz veya süren bir abonelik var. Önce onların sonuçlanması gerekir.')
         : e;
     }
     setDialog(null);
     detail.reload();
+    notify('Kişisel veriler silindi.');
   };
 
   return (
@@ -219,6 +222,7 @@ export function CustomerDetailPage() {
         <CustomerDialog customer={customer} onClose={() => setDialog(null)} onDone={() => {
           setDialog(null);
           detail.reload();
+          notify('Müşteri güncellendi.');
         }} />
       )}
       {dialog === 'anonymize' && (

@@ -5,6 +5,7 @@ import { DisputeStatusBadge, EmptyState, ErrorNote, FormDialog, formatDateTime, 
 import { canOperate, useMe } from '../me';
 import { formatMoney } from '../money';
 import type { Dispute, DisputePage, DisputeReason, DisputeStatus } from '../types';
+import { useToast } from '../toast';
 import { useFetch, usePolling } from '../useFetch';
 
 export const DISPUTE_REASONS: Record<DisputeReason, string> = {
@@ -151,6 +152,7 @@ function EvidenceDialog({ dispute, onClose, onDone }: { dispute: Dispute; onClos
 }
 
 export function DisputeDetailPage() {
+  const notify = useToast();
   const { id } = useParams();
   const { me } = useMe();
   const detail = useFetch(() => api<Dispute>(`/disputes/${id}`), [id]);
@@ -171,13 +173,14 @@ export function DisputeDetailPage() {
 
   const dispute = detail.data;
   const open = dispute.status === 'NEEDS_RESPONSE' && canOperate(me);
-  const finish = () => {
+  const finish = (message: string) => {
     setDialog(null);
     detail.reload();
+    notify(message);
   };
   const accept = async () => {
     await api(`/disputes/${dispute.id}/accept`, { method: 'POST' });
-    finish();
+    finish('İtiraz kabul edildi.');
   };
 
   return (
@@ -230,7 +233,7 @@ export function DisputeDetailPage() {
         </>
       )}
 
-      {dialog === 'evidence' && <EvidenceDialog dispute={dispute} onClose={() => setDialog(null)} onDone={finish} />}
+      {dialog === 'evidence' && <EvidenceDialog dispute={dispute} onClose={() => setDialog(null)} onDone={() => finish('Kanıt bankaya gönderildi.')} />}
       {dialog === 'accept' && (
         <FormDialog title="İtirazı kabul et" submitLabel="Kabul et" danger onClose={() => setDialog(null)} onSubmit={accept}>
           <p>{formatMoney(dispute.amount, dispute.currency)} müşteride kalır ve itiraz ücreti kesilir. Bu işlem geri alınamaz.</p>

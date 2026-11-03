@@ -39,16 +39,27 @@ Tek dizüstü bilgisayarda (Intel i7-13650HX, 16 GB RAM) yük istemcisi, uygulam
 
 | Senaryo | Akış/sn | Provizyon p95 | Tahsilat p95 | Beklenmeyen yanıt |
 |---|---|---:|---:|---:|
-| 50 eşzamanlı istemci, 20 işletme | 879 | 36 ms | 43 ms | 0 |
-| 50 eşzamanlı istemci, tek işletme | 577 | 50 ms | 69 ms | 0 |
+| 50 eşzamanlı istemci, 20 işletme | 826 | 39 ms | 47 ms | 0 |
+| 50 eşzamanlı istemci, tek işletme | 712 | 45 ms | 55 ms | 0 |
+| Tek işletme, 20 işletmelik veri dolduktan sonra | 619 | 50 ms | 66 ms | 0 |
 
-Tek işletmede verimin düşmesi beklenen bir durumdur: aynı bakiye satırı ve denetim zinciri kilitlendiği için tahsilatlar sıraya girer. Bu, tutarlılığın bilinçli bedelidir. Hash zincirli denetim günlüğü eklenmeden önceki ölçüm çok işletmeli senaryoda 1.116 akış/sn idi, yani bedeli yaklaşık %8'dir.
+Ölçüm sonunda her işletmenin bakiyesi istemcinin bağımsız hesabıyla kuruşu kuruşuna eşleşti. Mutabakat ürettiği bütün banka satırlarını eşleştirdi; kalan iki fark, demo verisine bilerek konan banka hatalarıdır.
 
-Ölçüm sonunda her işletmenin bakiyesi istemcinin bağımsız hesabıyla kuruşu kuruşuna eşleşti. Mutabakat 26.410 akışın ürettiği 26.669 banka satırının 26.667'sini eşleştirdi; kalan iki fark, demo verisine bilerek konan banka hatalarıdır.
+### Tek işletme darboğazı nasıl bulundu
 
-Simüle bankanın kayıtları da aynı PostgreSQL'e yazılır. Banka bellekteyken çok işletmeli senaryo 1.025 akış/sn ölçülmüştü, yani kalıcılığın bu ortamdaki bedeli yaklaşık %14'tür. Gerçek bir bankanın disk yazmaları bizim veritabanımıza yük bindirmez, ama ağ gecikmesi ekler.
+Tek işletmenin bütün ödemeleri aynı bakiye satırlarını günceller, bu yüzden o satırların kilitli kaldığı süre işletmenin kapasite sınırıdır. `pg_stat_statements` ile ölçüldüğünde zamanın büyük kısmı tek tek sorgularda değil, bakiye satırlarını `FOR UPDATE` ile kilitlemeyi beklerken geçiyordu. Kilit işlemin başında alınıyor, sonrasındaki bütün iş (hareket satırları, webhook kuyruğu, okumalar) boyunca tutuluyordu.
 
-Her senaryo temiz veritabanında ölçüldü. Banka bellekteyken tek işletme senaryosu, 20 işletmeli ölçümün bıraktığı veriler üzerinde tekrarlanınca 597'den 496 akış/sn'ye düşmüştü. Veri büyüdükçe hız kaybı olduğunu gösteriyor; nedeni henüz incelenmedi.
+Şimdi bakiye en sonda, eksi bakiye kuralını da kendi içinde uygulayan tek bir koşullu `UPDATE` ile değişir ve ondan sonra commit'ten başka iş yapılmaz. Aynı gün ve aynı makinede, önce eski sonra yeni kodla ölçüldü:
+
+| Senaryo | Eski kod | Yeni kod |
+|---|---:|---:|
+| Tek işletme, temiz veritabanı | 514 akış/sn | 712 akış/sn (+%38) |
+| Tek işletme, dolu veritabanı | 432 akış/sn | 619 akış/sn (+%43) |
+| 20 işletme | 814 akış/sn | 826 akış/sn |
+
+20 işletmede fark çıkmaz, çünkü orada ödemeler farklı satırlara yazar ve kilit beklenmez. Dolu veritabanında hâlâ yaklaşık %13 kayıp var. Checkpoint'ten kaynaklanmadığı, sorgu süreleri değişmediği ölçüldü; asıl nedeni henüz bulunmadı. Ölçmek için yerel demoyu `KASA_LOCAL_QUERY_STATS=true` ile başlatın; konsol veritabanı adresini yazar.
+
+Simüle bankanın kayıtları da aynı PostgreSQL'e yazılır; gerçek bir bankanın disk yazmaları bizim veritabanımıza yük bindirmez ama ağ gecikmesi ekler. Hash zincirli denetim günlüğünün bedeli çok işletmeli senaryoda yaklaşık %8 ölçülmüştü.
 
 Sınırlar: Banka simüle edildiği için gerçek ağ gecikmesi yoktur. Rakamlar üretim kapasitesi değildir; sistemin bu makinedeki davranışını gösterir. Yeniden üretmek için sunucu çalışırken:
 

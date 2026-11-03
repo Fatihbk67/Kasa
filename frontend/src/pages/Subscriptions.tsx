@@ -5,6 +5,7 @@ import { EmptyState, ErrorNote, failureMessage, FormDialog, formatDateTime, Invo
 import { canOperate, canTakePayments, useMe } from '../me';
 import { formatMoney, parseAmount } from '../money';
 import type { BillingSummary, Customer, CustomerPage, Plan, Subscription, SubscriptionDetail, SubscriptionPage, SubscriptionStatus } from '../types';
+import { useToast } from '../toast';
 import { useFetch, usePolling } from '../useFetch';
 
 const STATUS_OPTIONS: { value: SubscriptionStatus; label: string }[] = [
@@ -130,6 +131,7 @@ function NewSubscriptionDialog({ plans, onClose, onDone }: { plans: Plan[]; onCl
 }
 
 export function Subscriptions() {
+  const notify = useToast();
   const { me } = useMe();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
@@ -302,6 +304,7 @@ export function Subscriptions() {
       {dialog === 'plan' && <NewPlanDialog onClose={() => setDialog(null)} onDone={() => {
         setDialog(null);
         plans.reload();
+        notify('Plan oluşturuldu.');
       }} />}
       {dialog === 'subscription' && (
         <NewSubscriptionDialog plans={activePlans} onClose={() => setDialog(null)} onDone={(detail) => navigate(`/subscriptions/${detail.subscription.id}`)} />
@@ -382,6 +385,7 @@ function CancelDialog({ subscription, onClose, onDone }: { subscription: Subscri
 }
 
 export function SubscriptionDetailPage() {
+  const notify = useToast();
   const { id } = useParams();
   const { me } = useMe();
   const detail = useFetch(() => api<SubscriptionDetail>(`/subscriptions/${id}`), [id]);
@@ -409,16 +413,18 @@ export function SubscriptionDetailPage() {
   const active = operator && subscription.status === 'ACTIVE';
   const unpaid = invoices.find((invoice) => invoice.status === 'OPEN');
 
-  const finish = () => {
+  const finish = (message: string) => {
     setDialog(null);
     detail.reload();
+    notify(message);
   };
-  const run = async (path: string) => {
+  const run = async (path: string, message: string) => {
     setBusy(true);
     setActionError(null);
     try {
       await api(`/subscriptions/${subscription.id}/${path}`, { method: 'POST' });
       detail.reload();
+      notify(message);
     } catch (e) {
       setActionError((e as Error).message);
     } finally {
@@ -436,9 +442,9 @@ export function SubscriptionDetailPage() {
           <>
             {active && <button type="button" className="button" onClick={() => setDialog('plan')}>Planı değiştir</button>}
             <button type="button" className="button" onClick={() => setDialog('card')}>Kartı güncelle</button>
-            {active && !subscription.cancelAtPeriodEnd && <button type="button" className="button" disabled={busy} onClick={() => run('simulate-renewal')}>Yenilemeyi simüle et</button>}
+            {active && !subscription.cancelAtPeriodEnd && <button type="button" className="button" disabled={busy} onClick={() => run('simulate-renewal', 'Sonraki dönem faturalandı.')}>Yenilemeyi simüle et</button>}
             {subscription.cancelAtPeriodEnd
-              ? <button type="button" className="button" disabled={busy} onClick={() => run('resume')}>İptali geri al</button>
+              ? <button type="button" className="button" disabled={busy} onClick={() => run('resume', 'İptal geri alındı.')}>İptali geri al</button>
               : <button type="button" className="button" onClick={() => setDialog('cancel')}>İptal et</button>}
           </>
         )}
@@ -500,9 +506,9 @@ export function SubscriptionDetailPage() {
         </table>
       </div>
 
-      {dialog === 'plan' && <ChangePlanDialog subscription={subscription} plans={plans.data ?? []} onClose={() => setDialog(null)} onDone={finish} />}
-      {dialog === 'card' && <CardDialog subscription={subscription} onClose={() => setDialog(null)} onDone={finish} />}
-      {dialog === 'cancel' && <CancelDialog subscription={subscription} onClose={() => setDialog(null)} onDone={finish} />}
+      {dialog === 'plan' && <ChangePlanDialog subscription={subscription} plans={plans.data ?? []} onClose={() => setDialog(null)} onDone={() => finish('Plan değişti.')} />}
+      {dialog === 'card' && <CardDialog subscription={subscription} onClose={() => setDialog(null)} onDone={() => finish('Kart güncellendi.')} />}
+      {dialog === 'cancel' && <CancelDialog subscription={subscription} onClose={() => setDialog(null)} onDone={() => finish('İptal kaydedildi.')} />}
     </>
   );
 }

@@ -153,7 +153,63 @@ code {
 .sidebar nav {
   display: flex;
   flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+}
+
+.sidebar-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Two classes, so this outranks .button, which is declared later. */
+.sidebar .menu-toggle {
+  display: none;
+}
+
+.nav-group {
+  display: flex;
+  flex-direction: column;
   gap: 2px;
+}
+
+.nav-title {
+  padding: 0 10px 2px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.toast-region {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 20;
+  max-width: min(380px, calc(100vw - 32px));
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: var(--text);
+  color: var(--bg);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.18);
+}
+
+.toast-close {
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
 }
 
 .nav-link {
@@ -949,13 +1005,18 @@ form.toolbar {
     padding: 0;
   }
 
-  .sidebar nav {
-    flex-flow: row wrap;
-    gap: 4px;
+  .sidebar .menu-toggle {
+    display: inline-flex;
   }
 
-  .nav-link {
-    white-space: nowrap;
+  .sidebar:not(.sidebar-open) .sidebar-menu {
+    display: none;
+  }
+
+  .toast-region {
+    right: 16px;
+    left: 16px;
+    bottom: 16px;
   }
 
   .sidebar-footer {

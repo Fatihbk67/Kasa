@@ -1,38 +1,84 @@
+import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from './auth';
 import { canOperate, MeProvider, ROLE_LABELS, useMe } from './me';
+import { ToastProvider } from './toast';
 
-const NAV = [
-  { to: '/', label: 'Genel bakış', end: true, operatorOnly: false },
-  { to: '/analytics', label: 'Analiz', end: false, operatorOnly: false },
-  { to: '/payments', label: 'Ödemeler', end: false, operatorOnly: false },
-  { to: '/subscriptions', label: 'Abonelikler', end: false, operatorOnly: false },
-  { to: '/disputes', label: 'İtirazlar', end: false, operatorOnly: false },
-  { to: '/customers', label: 'Müşteriler', end: false, operatorOnly: false },
-  { to: '/payment-links', label: 'Ödeme bağlantıları', end: false, operatorOnly: false },
-  { to: '/payouts', label: 'Hesap kesimleri', end: false, operatorOnly: false },
-  { to: '/developers', label: 'Geliştiriciler', end: false, operatorOnly: true },
-  { to: '/team', label: 'Ekip', end: false, operatorOnly: true },
-  { to: '/audit', label: 'Denetim günlüğü', end: false, operatorOnly: true },
-  { to: '/settings', label: 'Ayarlar', end: false, operatorOnly: false },
+interface NavItem {
+  to: string;
+  label: string;
+  end?: boolean;
+  operatorOnly?: boolean;
+}
+
+const NAV: { title: string | null; items: NavItem[] }[] = [
+  {
+    title: null,
+    items: [
+      { to: '/', label: 'Genel bakış', end: true },
+      { to: '/analytics', label: 'Analiz' },
+    ],
+  },
+  {
+    title: 'Para',
+    items: [
+      { to: '/payments', label: 'Ödemeler' },
+      { to: '/subscriptions', label: 'Abonelikler' },
+      { to: '/payment-links', label: 'Ödeme bağlantıları' },
+      { to: '/disputes', label: 'İtirazlar' },
+      { to: '/payouts', label: 'Hesap kesimleri' },
+    ],
+  },
+  {
+    title: 'Müşteriler',
+    items: [{ to: '/customers', label: 'Müşteriler' }],
+  },
+  {
+    title: 'Hesap',
+    items: [
+      { to: '/developers', label: 'Geliştiriciler', operatorOnly: true },
+      { to: '/team', label: 'Ekip', operatorOnly: true },
+      { to: '/audit', label: 'Denetim günlüğü', operatorOnly: true },
+      { to: '/settings', label: 'Ayarlar' },
+    ],
+  },
 ];
 
 function Shell() {
   const { signOut } = useAuth();
   const { me } = useMe();
+  // Only matters on a phone, where the menu would otherwise push every page below the fold.
+  const [menuOpen, setMenuOpen] = useState(false);
 
   return (
     <div className="shell">
-      <aside className="sidebar">
-        <div className="brand">Kasa</div>
-        <nav aria-label="Ana menü">
-          {NAV.filter((item) => !item.operatorOnly || canOperate(me)).map((item) => (
-            <NavLink key={item.to} to={item.to} end={item.end} className="nav-link">
-              {item.label}
-            </NavLink>
-          ))}
+      <aside className={menuOpen ? 'sidebar sidebar-open' : 'sidebar'}>
+        <div className="sidebar-top">
+          <div className="brand">Kasa</div>
+          <button type="button" className="button button-small menu-toggle" aria-expanded={menuOpen} aria-controls="main-menu"
+            onClick={() => setMenuOpen(!menuOpen)}>
+            {menuOpen ? 'Kapat' : 'Menü'}
+          </button>
+        </div>
+        <nav id="main-menu" aria-label="Ana menü" className="sidebar-menu">
+          {NAV.map((group) => {
+            const items = group.items.filter((item) => !item.operatorOnly || canOperate(me));
+            if (items.length === 0) {
+              return null;
+            }
+            return (
+              <div className="nav-group" key={group.title ?? 'start'}>
+                {group.title && <span className="nav-title">{group.title}</span>}
+                {items.map((item) => (
+                  <NavLink key={item.to} to={item.to} end={item.end} className="nav-link" onClick={() => setMenuOpen(false)}>
+                    {item.label}
+                  </NavLink>
+                ))}
+              </div>
+            );
+          })}
         </nav>
-        <div className="sidebar-footer">
+        <div className="sidebar-footer sidebar-menu">
           <span className="merchant-name">{me?.tenantName}</span>
           {me && <span className="hint">{me.email} · {ROLE_LABELS[me.role]}</span>}
           <span className="test-mode">Test modu</span>
@@ -59,7 +105,9 @@ function Shell() {
 export function Layout() {
   return (
     <MeProvider>
-      <Shell />
+      <ToastProvider>
+        <Shell />
+      </ToastProvider>
     </MeProvider>
   );
 }

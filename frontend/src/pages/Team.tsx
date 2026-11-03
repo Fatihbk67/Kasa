@@ -5,6 +5,7 @@ import { useAuth } from '../auth';
 import { CopyButton, EmptyState, ErrorNote, FormDialog, formatDateTime, Loading, PageHeader } from '../components';
 import { canOperate, isOwner, ROLE_LABELS, useMe } from '../me';
 import type { PublicInvitation, Role, Team, TeamInvitation, TeamMember } from '../types';
+import { useToast } from '../toast';
 import { useFetch } from '../useFetch';
 
 const ROLE_HELP: Record<Role, string> = {
@@ -77,6 +78,7 @@ function RoleDialog({ member, onClose, onDone }: { member: TeamMember; onClose: 
 }
 
 export function TeamPage() {
+  const notify = useToast();
   const { me } = useMe();
   const team = useFetch(() => api<Team>('/team'), []);
   const [inviting, setInviting] = useState(false);
@@ -90,12 +92,14 @@ export function TeamPage() {
     await api(`/team/members/${removing!.id}`, { method: 'DELETE' });
     setRemoving(null);
     team.reload();
+    notify('Üye çıkarıldı, oturumları kapatıldı.');
   };
 
   const revoke = async () => {
     await api(`/team/invitations/${revoking!.id}`, { method: 'DELETE' });
     setRevoking(null);
     team.reload();
+    notify('Davet iptal edildi.');
   };
 
   return (
@@ -203,6 +207,7 @@ export function TeamPage() {
           onDone={() => {
             setEditing(null);
             team.reload();
+            notify('Rol değişti.');
           }}
         />
       )}

@@ -16,6 +16,7 @@ import {
 import { canOperate, useMe } from '../me';
 import { formatMoney, parseAmount } from '../money';
 import type { Dispute, DisputePage, DisputeReason, Operation, OperationResult, Payment, PaymentDetail } from '../types';
+import { useToast } from '../toast';
 import { useFetch, usePolling } from '../useFetch';
 import { DISPUTE_REASONS } from './Disputes';
 
@@ -63,6 +64,7 @@ function ActionDialog({ action, payment, onClose, onDone }: {
   const [amountError, setAmountError] = useState<string | null>(null);
   // Stays the same for this dialog, so a repeated click on submit can never be processed twice.
   const [idempotencyKey] = useState(newIdempotencyKey);
+  const notify = useToast();
   const titles: Record<Action, string> = { capture: 'Tahsil et', void: 'Provizyonu iptal et', refund: 'İade et' };
 
   const submit = async () => {
@@ -78,6 +80,9 @@ function ActionDialog({ action, payment, onClose, onDone }: {
     setAmountError(null);
     const path = { capture: 'capture', void: 'void', refund: 'refunds' }[action];
     const result = await api<OperationResult>(`/payments/${payment.id}/${path}`, { method: 'POST', body, idempotencyKey });
+    if (result.operation.status === 'SUCCEEDED') {
+      notify({ capture: 'Tahsilat tamamlandı.', void: 'Provizyon iptal edildi.', refund: 'İade tamamlandı.' }[action]);
+    }
     onDone(result.operation.status === 'FAILED' ? failureMessage(result.operation.failureCode) : null);
   };
 

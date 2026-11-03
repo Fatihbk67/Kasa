@@ -5,6 +5,7 @@ import { CopyButton, EmptyState, ErrorNote, FormDialog, formatDateTime, Loading,
 import { canTakePayments, useMe } from '../me';
 import { formatMoney, parseAmount } from '../money';
 import type { PaymentLink, PublicPaymentLink } from '../types';
+import { useToast } from '../toast';
 import { useFetch } from '../useFetch';
 import { BackToDashboard } from './Checkout';
 
@@ -65,6 +66,7 @@ function NewLinkDialog({ onClose, onCreated }: { onClose: () => void; onCreated:
 }
 
 export function PaymentLinks() {
+  const notify = useToast();
   const { me } = useMe();
   const links = useFetch(() => api<PaymentLink[]>('/payment-links'), []);
   const [creating, setCreating] = useState(false);
@@ -75,6 +77,7 @@ export function PaymentLinks() {
     await api(`/payment-links/${disabling!.id}/disable`, { method: 'POST' });
     setDisabling(null);
     links.reload();
+    notify('Bağlantı kapatıldı.');
   };
 
   return (
@@ -129,6 +132,7 @@ export function PaymentLinks() {
       {creating && <NewLinkDialog onClose={() => setCreating(false)} onCreated={() => {
         setCreating(false);
         links.reload();
+        notify('Bağlantı oluşturuldu. Kopyalayıp paylaşabilirsiniz.');
       }} />}
       {disabling && (
         <FormDialog title="Bağlantıyı kapat" submitLabel="Kapat" danger onClose={() => setDisabling(null)} onSubmit={disable}>
