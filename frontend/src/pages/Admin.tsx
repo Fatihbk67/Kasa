@@ -134,8 +134,134 @@ const ADMIN_ACTIONS: Record<string, string> = {
   ADMIN_LOGIN_FAILED: 'Başarısız giriş',
   ADMIN_LOGIN_LOCKED: 'Kilitli hesaba giriş denemesi',
   SETTLEMENT_RUN: 'Hesap kesimi çalıştırıldı',
+  MERCHANT_APPROVED: 'İşletme onaylandı',
+  MERCHANT_SUSPENDED: 'İşletme askıya alındı',
+  MERCHANT_REACTIVATED: 'İşletme yeniden açıldı',
   RECONCILIATION_RUN: 'Mutabakat çalıştırıldı',
 };
+
+interface MerchantRow {
+  id: string;
+  name: string;
+  status: 'PENDING' | 'ACTIVE' | 'SUSPENDED';
+  statusReason: string | null;
+  createdAt: string;
+  reviewedAt: string | null;
+  reviewedBy: string | null;
+  ownerEmail: string | null;
+  memberCount: number;
+  paymentCount: number;
+  captured: number;
+}
+
+const MERCHANT_STATUS: Record<MerchantRow['status'], { label: string; tone: string }> = {
+  PENDING: { label: 'Onay bekliyor', tone: 'warning' },
+  ACTIVE: { label: 'Etkin', tone: 'success' },
+  SUSPENDED: { label: 'Askıda', tone: 'danger' },
+};
+
+function Merchants({ onChanged }: { onChanged: () => void }) {
+  const [filter, setFilter] = useState<'' | MerchantRow['status']>('PENDING');
+  const merchants = useFetch(() => adminApi<MerchantRow[]>(`/merchants${filter ? `?status=${filter}` : ''}`), [filter]);
+  const [suspending, setSuspending] = useState<MerchantRow | null>(null);
+  const [reason, setReason] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const act = async (merchant: MerchantRow, action: 'approve' | 'reactivate') => {
+    setError(null);
+    try {
+      await adminApi(`/merchants/${merchant.id}/${action}`, 'POST');
+      merchants.reload();
+      onChanged();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  const suspend = async () => {
+    await adminApi(`/merchants/${suspending!.id}/suspend`, 'POST', undefined, { reason });
+    setSuspending(null);
+    setReason('');
+    merchants.reload();
+    onChanged();
+  };
+
+  return (
+    <>
+      <div className="section-header">
+        <h2>İşletmeler</h2>
+        <label className="field field-inline">
+          Durum
+          <select value={filter} onChange={(e) => setFilter(e.target.value as typeof filter)}>
+            <option value="PENDING">Onay bekleyen</option>
+            <option value="ACTIVE">Etkin</option>
+            <option value="SUSPENDED">Askıda</option>
+            <option value="">Tümü</option>
+          </select>
+        </label>
+      </div>
+      <ErrorNote message={merchants.error ?? error} />
+      {merchants.loading ? <Loading /> : merchants.data && merchants.data.length > 0 ? (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">İşletme</th>
+                <th scope="col">Durum</th>
+                <th scope="col" className="numeric hide-narrow">Ödeme</th>
+                <th scope="col" className="hide-narrow">Kayıt</th>
+                <th scope="col"><span className="visually-hidden">İşlemler</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {merchants.data.map((merchant) => (
+                <tr key={merchant.id}>
+                  <td>
+                    {merchant.name}
+                    <span className="hint row-hint">{merchant.ownerEmail ?? '—'} · {merchant.memberCount} üye</span>
+                    {merchant.statusReason && <span className="hint row-hint">Gerekçe: {merchant.statusReason}</span>}
+                  </td>
+                  <td>
+                    <span className={`badge badge-${MERCHANT_STATUS[merchant.status].tone}`}>{MERCHANT_STATUS[merchant.status].label}</span>
+                    {merchant.reviewedBy && <span className="hint row-hint">{merchant.reviewedBy === 'platform-admin' ? 'Ortak anahtar' : merchant.reviewedBy}</span>}
+                  </td>
+                  <td className="numeric hide-narrow">
+                    {merchant.paymentCount}
+                    <span className="hint row-hint">{formatMoney(merchant.captured, 'TRY')}</span>
+                  </td>
+                  <td className="hide-narrow muted">{formatDateTime(merchant.createdAt)}</td>
+                  <td className="numeric">
+                    <span className="row-actions">
+                      {merchant.status === 'PENDING' && <button type="button" className="button button-small button-primary" onClick={() => act(merchant, 'approve')}>Onayla</button>}
+                      {merchant.status === 'SUSPENDED' && <button type="button" className="button button-small" onClick={() => act(merchant, 'reactivate')}>Yeniden aç</button>}
+                      {merchant.status !== 'SUSPENDED' && (
+                        <button type="button" className="button button-small" onClick={() => setSuspending(merchant)}>
+                          {merchant.status === 'PENDING' ? 'Reddet' : 'Askıya al'}
+                        </button>
+                      )}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : !merchants.error && <div className="card"><EmptyState title={filter === 'PENDING' ? 'Onay bekleyen işletme yok' : 'İşletme yok'} /></div>}
+
+      {suspending && (
+        <FormDialog title={suspending.status === 'PENDING' ? 'Başvuruyu reddet' : 'İşletmeyi askıya al'} submitLabel="Onayla" danger
+          onClose={() => setSuspending(null)} onSubmit={suspend}>
+          <p><strong>{suspending.name}</strong> yeni ödeme alamaz ve hesap kesimi durur. İadeler ve itirazlar çalışmaya devam eder.</p>
+          <label className="field">
+            Gerekçe
+            <textarea required autoFocus maxLength={500} rows={3} value={reason} onChange={(e) => setReason(e.target.value)} />
+            <span className="hint">İşletme bu metni panelinde görür.</span>
+          </label>
+        </FormDialog>
+      )}
+    </>
+  );
+}
 
 function AdminAccounts() {
   const accounts = useFetch(() => adminApi<AdminAccount[]>('/accounts'), []);
@@ -287,6 +413,8 @@ function AdminDashboard({ onSignOut }: { onSignOut: () => void }) {
   const [settling, setSettling] = useState(false);
   const [date, setDate] = useState(yesterday);
   const [notice, setNotice] = useState<string | null>(null);
+  // Remounts the accounts section, so its log shows a decision made in the merchants section.
+  const [refreshed, setRefreshed] = useState(0);
 
   useEffect(() => {
     if (overview.errorStatus === 401) {
@@ -332,6 +460,11 @@ function AdminDashboard({ onSignOut }: { onSignOut: () => void }) {
         </section>
       )}
 
+      <Merchants onChanged={() => {
+        overview.reload();
+        setRefreshed((count) => count + 1);
+      }} />
+
       <div className="section-header"><h2>Mutabakat geçmişi</h2></div>
       <ErrorNote message={runs.error} />
       {runs.loading ? <Loading /> : runs.data && runs.data.length > 0 ? (
@@ -367,7 +500,7 @@ function AdminDashboard({ onSignOut }: { onSignOut: () => void }) {
         </div>
       ) : !runs.error && <div className="card"><EmptyState title="Henüz mutabakat çalıştırılmadı" /></div>}
 
-      <AdminAccounts />
+      <AdminAccounts key={refreshed} />
 
       {reconciling && (
         <FormDialog title="Mutabakat çalıştır" submitLabel="Çalıştır" onClose={() => setReconciling(false)} onSubmit={runReconciliation}>

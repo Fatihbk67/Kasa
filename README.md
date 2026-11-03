@@ -97,6 +97,7 @@ java -Djdk.net.unixdomain.tmpdir=backend/target load-test/LoadTest.java http://l
 - **Geri okunması gereken sırlar şifrelidir:** Webhook anahtarları ve doğrulama sırları AES-256-GCM ile saklanır, veritabanı yedeği çalınsa da açılmaz. Her değer sahibine bağlıdır; başka işletmenin satırına kopyalanırsa çözülmez. Eski düz metin değerler uygulama açılışında şifrelenir.
 - **Parola sıfırlama hesap sızdırmaz:** Kayıtlı olmayan e-postaya da aynı yanıt döner. Bağlantı tek kullanımlıktır, 30 dakika geçerlidir ve yalnızca özeti saklanır. Adresi isteğin `Host` başlığından değil ayardan üretilir, çünkü saldırgan o başlığı kendi sitesine çevirebilir. Sıfırlama tüm oturumları kapatır ama iki adımlı girişi kapatmaz.
 - **Yöneticiler kişiye özeldir:** Platform hesaplarında iki adımlı giriş zorunludur ve her işlem kimin yaptığıyla kaydedilir. Uygulama rolü bu kayıtları silemez. Yönetici token'ı hiçbir işletme verisini açmaz.
+- **Yeni işletme onaylanmadan para alamaz:** Kayıt olan işletme paneli gezebilir, ekibini ve ayarlarını hazırlayabilir; ödeme alması platform yöneticisinin onayını bekler. Kontrol, parayı başlatan tek yerde (`PaymentService.create`) yapılır, böylece API, panel, ödeme sayfası, bağlantılar ve abonelikler aynı kurala takılır. Askıya alınan işletmede yeni ödeme ve hesap kesimi durur ama iadeler ve itirazlar sürer, çünkü müşterilere borç kapanmaz.
 - **Raporlar defterle aynı sonucu verir:** Analiz paneli tutarları paranın gerçekten hareket ettiği güne yazar ve net kazanç işletmenin defter bakiyesiyle uyuşur.
 - **Dışa aktarılan dosya saldırı aracı olamaz:** CSV'de formül gibi başlayan açıklamalar etkisizleştirilir (CSV injection). 10.000 satırda kesilen rapor kullanıcıya açıkça bildirilir.
 - **Bankayla farklar yakalanır:** Günlük mutabakat banka dosyasını kayıtlarımızla karşılaştırır. Farkları raporlar ama düzeltmez, çünkü hangi tarafın doğru olduğuna insan karar vermelidir.
@@ -253,6 +254,8 @@ Başka bir platformda aynı değişkenlere ek olarak `KASA_DB_APP_USER=kasa_app`
 | POST, GET | `/api/v1/admin/accounts` | Yönetici | Yönetici hesabı oluşturur, listeler |
 | POST | `/api/v1/admin/accounts/{id}/disable` | Yönetici | Yönetici hesabını kapatır |
 | GET | `/api/v1/admin/audit-log` | Yönetici | Yönetici işlem kayıtları |
+| GET | `/api/v1/admin/merchants` | Yönetici | İşletmeleri listeler, onay bekleyenler önce (`status`) |
+| POST | `/api/v1/admin/merchants/{id}/approve`, `/suspend`, `/reactivate` | Yönetici | İşletmeyi onaylar, gerekçeyle askıya alır, yeniden açar |
 | GET | `/api/v1/me` | JWT | Oturumdaki kullanıcı, rol ve işletme |
 | GET | `/api/v1/team` | Sahip, yönetici | Üyeler ve bekleyen davetler |
 | POST | `/api/v1/team/invitations` | Sahip, yönetici | Tek kullanımlık davet oluşturur (yöneticiler yalnızca görüntüleyici davet edebilir) |
@@ -380,3 +383,4 @@ Banka simüle edilir; davranışı token belirler. Böylece her hata senaryosu i
 - [x] **Yeni iş alanları:** İtiraz (chargeback) akışı, müşteri kayıtları ve kişisel veri silme, paylaşılabilir ödeme bağlantıları
 - [x] **Abonelikler:** Planlar, tekrarlayan tahsilat, başarısız ödemede yeniden deneme, dönem ortası plan değişikliği
 - [x] **Güvenlik:** İki adımlı giriş, kurtarma kodları, parola sıfırlama, sırların şifrelenmesi, kişiye özel yönetici hesapları
+- [x] **İşletme onayı:** Yeni işletmeler yönetici onayından sonra ödeme alır; askıya alma ve yeniden açma

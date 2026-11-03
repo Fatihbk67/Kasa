@@ -2,10 +2,11 @@ import { useState, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError } from '../api';
 import { CopyButton, EmptyState, ErrorNote, FormDialog, formatDateTime, Loading, PageHeader, PaymentLinkStatusBadge } from '../components';
-import { canOperate, useMe } from '../me';
+import { canTakePayments, useMe } from '../me';
 import { formatMoney, parseAmount } from '../money';
 import type { PaymentLink, PublicPaymentLink } from '../types';
 import { useFetch } from '../useFetch';
+import { BackToDashboard } from './Checkout';
 
 function linkUrl(slug: string): string {
   return `${window.location.origin}/l/${slug}`;
@@ -68,7 +69,7 @@ export function PaymentLinks() {
   const links = useFetch(() => api<PaymentLink[]>('/payment-links'), []);
   const [creating, setCreating] = useState(false);
   const [disabling, setDisabling] = useState<PaymentLink | null>(null);
-  const operator = canOperate(me);
+  const operator = canTakePayments(me);
 
   const disable = async () => {
     await api(`/payment-links/${disabling!.id}/disable`, { method: 'POST' });
@@ -176,6 +177,7 @@ export function PublicLinkPage() {
 
   return (
     <div className="checkout-page">
+      <BackToDashboard />
       <div className="card checkout-card">
         {link.loading ? <Loading /> : !data ? (
           <div className="outcome outcome-danger" role="status">

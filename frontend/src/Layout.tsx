@@ -40,6 +40,16 @@ function Shell() {
         </div>
       </aside>
       <main className="content">
+        {me?.tenantStatus === 'PENDING' && (
+          <p className="note note-warning" role="status">
+            Hesabınız platform onayı bekliyor. Bu sürede paneli gezebilir, ekibinizi ve ayarlarınızı hazırlayabilirsiniz; onaydan sonra ödeme alabilirsiniz.
+          </p>
+        )}
+        {me?.tenantStatus === 'SUSPENDED' && (
+          <p className="note note-danger" role="alert">
+            Hesabınız askıya alındı{me.tenantStatusReason ? `: ${me.tenantStatusReason}` : '.'} Yeni ödeme alınamaz ve hesap kesimi durduruldu. İadeler ve itirazlar çalışmaya devam eder.
+          </p>
+        )}
         <Outlet />
       </main>
     </div>

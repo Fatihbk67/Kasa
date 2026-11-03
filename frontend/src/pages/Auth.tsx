@@ -249,6 +249,7 @@ export function Register() {
           <input type="password" required minLength={12} maxLength={72} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
           <span className="hint">En az 12 karakter</span>
         </label>
+        <p className="hint">Yeni işletmeler platform onayından sonra ödeme alabilir. Bu sürede panel açıktır.</p>
         <ErrorNote message={error} />
         <button type="submit" className="button button-primary button-block" disabled={busy}>
           {busy ? 'Oluşturuluyor…' : 'Hesap oluştur'}

@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -24,7 +25,8 @@ public class AuthService {
     public record TokenResponse(UUID tenantId, String accessToken, long expiresInSeconds) {
     }
 
-    public record Me(UUID userId, String email, String role, UUID tenantId, String tenantName) {
+    public record Me(UUID userId, String email, String role, UUID tenantId, String tenantName, String tenantStatus,
+                     String tenantStatusReason) {
     }
 
     /** Either a token, or with {@code twoFactorRequired} a challenge token to bring to the second step. */
@@ -45,10 +47,13 @@ public class AuthService {
     private final JwtService jwtService;
     private final AuditLog auditLog;
     private final TwoFactorService twoFactor;
+    private final boolean requireReview;
     private final String decoyHash;
 
     public AuthService(JdbcClient jdbc, TransactionTemplate tx, TenantScope tenantScope,
-                       PasswordEncoder passwordEncoder, JwtService jwtService, AuditLog auditLog, TwoFactorService twoFactor) {
+                       PasswordEncoder passwordEncoder, JwtService jwtService, AuditLog auditLog, TwoFactorService twoFactor,
+                       @Value("${kasa.onboarding.require-review}") boolean requireReview) {
+        this.requireReview = requireReview;
         this.twoFactor = twoFactor;
         this.jdbc = jdbc;
         this.tx = tx;
@@ -69,7 +74,8 @@ public class AuthService {
         try {
             UUID userId = tx.execute(status -> {
                 tenantScope.apply(tenantId);
-                jdbc.sql("INSERT INTO tenants (id, name) VALUES (:id, :name)")
+                jdbc.sql("INSERT INTO tenants (id, name, status) VALUES (:id, :name, :status)")
+                        .param("status", requireReview ? "PENDING" : "ACTIVE")
                         .param("id", tenantId)
                         .param("name", businessName)
                         .update();
@@ -138,7 +144,7 @@ public class AuthService {
         return tx.execute(status -> {
             tenantScope.apply(tenantId);
             return jdbc.sql("""
-                            SELECT u.id, u.email, u.role, t.id AS tenant_id, t.name
+                            SELECT u.id, u.email, u.role, t.id AS tenant_id, t.name, t.status, t.status_reason
                             FROM users u
                             JOIN tenants t ON t.id = u.tenant_id
                             WHERE u.id = :id
@@ -149,7 +155,9 @@ public class AuthService {
                             rs.getString("email"),
                             rs.getString("role"),
                             rs.getObject("tenant_id", UUID.class),
-                            rs.getString("name")))
+                            rs.getString("name"),
+                            rs.getString("status"),
+                            rs.getString("status_reason")))
                     .single();
         });
     }

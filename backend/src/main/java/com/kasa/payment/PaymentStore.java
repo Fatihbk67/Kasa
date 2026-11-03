@@ -78,6 +78,13 @@ class PaymentStore {
                 .update();
     }
 
+    boolean tenantIsActive() {
+        return jdbc.sql("SELECT status = 'ACTIVE' FROM tenants")
+                .query(Boolean.class)
+                .optional()
+                .orElse(false);
+    }
+
     /** Row level security hides other tenants' customers, so someone else's id reads as unknown. */
     boolean activeCustomerExists(UUID customerId) {
         return jdbc.sql("SELECT EXISTS (SELECT 1 FROM customers WHERE id = :id AND anonymized_at IS NULL)")

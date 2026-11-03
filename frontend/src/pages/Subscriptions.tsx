@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api, ApiError } from '../api';
 import { EmptyState, ErrorNote, failureMessage, FormDialog, formatDateTime, InvoiceStatusBadge, Loading, PageHeader, SubscriptionStatusBadge } from '../components';
-import { canOperate, useMe } from '../me';
+import { canOperate, canTakePayments, useMe } from '../me';
 import { formatMoney, parseAmount } from '../money';
 import type { BillingSummary, Customer, CustomerPage, Plan, Subscription, SubscriptionDetail, SubscriptionPage, SubscriptionStatus } from '../types';
 import { useFetch, usePolling } from '../useFetch';
@@ -181,7 +181,7 @@ export function Subscriptions() {
         description="Tekrarlayan ödemeler. Başarısız tahsilatlar 1, 3 ve 5 gün sonra yeniden denenir."
         actions={operator && (
           <>
-            <button type="button" className="button button-primary" disabled={activePlans.length === 0} onClick={() => setDialog('subscription')}>Yeni abonelik</button>
+            {canTakePayments(me) && <button type="button" className="button button-primary" disabled={activePlans.length === 0} onClick={() => setDialog('subscription')}>Yeni abonelik</button>}
             <button type="button" className="button" onClick={() => setDialog('plan')}>Yeni plan</button>
           </>
         )}

@@ -33,6 +33,11 @@ export function canOperate(me: Me | null): boolean {
   return me?.role === 'OWNER' || me?.role === 'ADMIN';
 }
 
+/** A business waiting for review, or suspended, can look around but not start new payments. */
+export function canTakePayments(me: Me | null): boolean {
+  return canOperate(me) && me?.tenantStatus === 'ACTIVE';
+}
+
 export function isOwner(me: Me | null): boolean {
   return me?.role === 'OWNER';
 }

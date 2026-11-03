@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { EmptyState, ErrorNote, FormDialog, Loading, PageHeader } from '../components';
-import { canOperate, useMe } from '../me';
+import { canTakePayments, useMe } from '../me';
 import { formatMoney, parseAmount } from '../money';
 import type { Balance, DisputePage, PaymentPage } from '../types';
 import { useFetch } from '../useFetch';
@@ -56,7 +56,7 @@ export function Overview() {
     <>
       <PageHeader
         title="Genel bakış"
-        actions={canOperate(me) && <button type="button" className="button button-primary" onClick={() => setCreating(true)}>Test ödemesi oluştur</button>}
+        actions={canTakePayments(me) && <button type="button" className="button button-primary" onClick={() => setCreating(true)}>Test ödemesi oluştur</button>}
       />
       {disputeCount > 0 && (
         <p className="note note-warning" role="status">
@@ -88,7 +88,9 @@ export function Overview() {
         ? <PaymentTable payments={payments.data.items} />
         : !payments.error && (
           <div className="card">
-            <EmptyState title="Henüz ödeme yok">İlk ödemenizi görmek için bir test ödemesi oluşturun.</EmptyState>
+            <EmptyState title="Henüz ödeme yok">
+              {canTakePayments(me) ? 'İlk ödemenizi görmek için bir test ödemesi oluşturun.' : 'Hesabınız onaylanınca ödemeleriniz burada görünür.'}
+            </EmptyState>
           </div>
         )}
       {creating && <NewCheckoutDialog onClose={() => setCreating(false)} />}

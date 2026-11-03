@@ -15,6 +15,7 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
+import com.kasa.admin.MerchantReviewService;
 import com.kasa.auth.AuthService;
 import com.kasa.bank.SimulatedBank;
 import com.kasa.billing.BillingService;
@@ -90,6 +91,8 @@ public final class LocalDevApplication {
         seedHistory(context, tenantId, superuser);
         seedTeam(context, tenantId, superuser);
         seedCustomersLinksAndDisputes(context, tenantId, superuser);
+        // A second business waiting for review, so the admin panel has something to approve.
+        context.getBean(AuthService.class).register("Yeni Fırın", "firin@kasa.test", DEMO_PASSWORD);
         log.info("Demo merchant ready: {} / {}", DEMO_EMAIL, DEMO_PASSWORD);
     }
 
@@ -188,6 +191,7 @@ public final class LocalDevApplication {
 
     private static UUID seedDemoData(ConfigurableApplicationContext context) {
         UUID tenantId = context.getBean(AuthService.class).register("Demo Kahve", DEMO_EMAIL, DEMO_PASSWORD).tenantId();
+        context.getBean(MerchantReviewService.class).approve("demo-kurulumu", null, tenantId);
         PaymentService payments = context.getBean(PaymentService.class);
 
         UUID captured = authorize(payments, tenantId, 125_000, "tok_success", "Çekirdek kahve aboneliği");

@@ -85,6 +85,11 @@ public class PaymentService {
             return store.findOperationByKey(key)
                     .map(existing -> replay(existing, hash))
                     .orElseGet(() -> {
+                        // Every way of taking money starts here, so this one check covers the API, the dashboard,
+                        // checkout pages, payment links and subscriptions. Refunds stay open: customers are still owed.
+                        if (!store.tenantIsActive()) {
+                            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "this merchant account is not approved to take payments");
+                        }
                         if (customerId != null && !store.activeCustomerExists(customerId)) {
                             throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, "unknown customer");
                         }

@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { api, ApiError } from '../api';
+import { useAuth } from '../auth';
 import { ErrorNote, failureMessage, Loading } from '../components';
 import { formatMoney } from '../money';
 import type { CheckoutSession } from '../types';
@@ -15,9 +16,19 @@ const TEST_CARDS = [
   { token: 'tok_timeout_lost', label: 'İstek bankaya ulaşmıyor', hint: 'Para hareketi olmaz, sonuç bir dakikayı aşkın sürede netleşir' },
 ];
 
+/**
+ * A merchant who opened a test payment from the dashboard needs a way back. A customer never sees this,
+ * because their browser holds no merchant session.
+ */
+export function BackToDashboard() {
+  const { isSignedIn } = useAuth();
+  return isSignedIn ? <Link className="checkout-back" to="/payments">← Panele dön</Link> : null;
+}
+
 function Frame({ session, children }: { session?: CheckoutSession; children: React.ReactNode }) {
   return (
     <div className="checkout-page">
+      <BackToDashboard />
       <div className="card checkout-card">
         {session && (
           <header className="checkout-header">
@@ -78,6 +89,8 @@ export function Checkout() {
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
         setError('Ödemeniz zaten işleniyor. Lütfen bekleyin.');
+      } else if (e instanceof ApiError && e.status === 403) {
+        setError('Bu işletme henüz ödeme almaya açık değil. Kartınızdan para çekilmedi.');
       } else {
         setError((e as Error).message);
       }

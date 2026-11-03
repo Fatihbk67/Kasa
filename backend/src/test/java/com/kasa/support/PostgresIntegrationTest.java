@@ -47,6 +47,8 @@ public abstract class PostgresIntegrationTest {
         registry.add("kasa.rate-limit.payment-link-session-per-ip", () -> Integer.MAX_VALUE);
         registry.add("kasa.rate-limit.password-reset-per-ip", () -> Integer.MAX_VALUE);
         registry.add("kasa.disputes.job-interval", () -> "PT1H");
+        // Most tests are about what an approved merchant can do. MerchantOnboardingApiTest turns the review back on.
+        registry.add("kasa.onboarding.require-review", () -> false);
         registry.add("kasa.billing.job-interval", () -> "PT1H");
         registry.add("kasa.settlement.cron", () -> "-");
         registry.add("kasa.settlement.recovery-interval", () -> "PT1H");

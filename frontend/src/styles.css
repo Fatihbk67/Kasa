@@ -446,6 +446,13 @@ textarea {
   resize: vertical;
 }
 
+.checkout-back {
+  display: block;
+  max-width: 460px;
+  margin: 0 auto 12px;
+  font-weight: 600;
+}
+
 .recovery-codes {
   display: block;
   white-space: pre;

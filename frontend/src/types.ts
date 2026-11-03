@@ -191,6 +191,8 @@ export interface Me {
   role: Role;
   tenantId: string;
   tenantName: string;
+  tenantStatus: 'PENDING' | 'ACTIVE' | 'SUSPENDED';
+  tenantStatusReason: string | null;
 }
 
 export interface TeamMember {

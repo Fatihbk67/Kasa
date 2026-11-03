@@ -56,6 +56,9 @@ kasa:
     checkout-pay-per-ip: 30
     payment-link-session-per-ip: 20
     password-reset-per-ip: 5
+  onboarding:
+    # New businesses wait for a platform administrator before they can take money.
+    require-review: true
   encryption:
     # Protects secrets the application must read back. Without it a key is derived from the JWT secret.
     key: ${KASA_ENCRYPTION_KEY:}
