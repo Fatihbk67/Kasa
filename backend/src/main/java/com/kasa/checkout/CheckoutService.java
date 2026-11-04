@@ -127,19 +127,23 @@ public class CheckoutService {
         UUID paymentId = null;
         String failureCode = null;
         PaymentStatus paymentStatus = null;
+        boolean held = false;
         try {
             OperationResult result = payments.create(tenantId, "checkout:" + sessionId + ":" + UUID.randomUUID(),
                     view.amount(), view.currency(), cardToken, view.description(), session.customerId());
             paymentId = result.payment().id();
             failureCode = result.payment().failureCode();
             paymentStatus = result.payment().status();
+            held = "OPEN".equals(result.payment().reviewStatus());
             if (paymentStatus != PaymentStatus.DECLINED && paymentStatus != PaymentStatus.FAILED) {
                 outcome = "COMPLETED";
             }
         } finally {
             finish(tenantId, sessionId, outcome, paymentId, failureCode);
         }
-        if (session.paymentLinkId() != null && paymentStatus == PaymentStatus.AUTHORIZED) {
+        // A held payment is collected only after a person releases it. The customer still sees success: their card
+        // was authorized, and whether to keep the money is now the business's decision.
+        if (session.paymentLinkId() != null && paymentStatus == PaymentStatus.AUTHORIZED && !held) {
             captureForLink(tenantId, sessionId, paymentId);
         }
         return load(sessionId).view();

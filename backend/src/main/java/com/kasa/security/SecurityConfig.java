@@ -60,7 +60,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/settings/**").hasAuthority(OWNER)
                         // A leaked API key must not be able to mint new keys, redirect webhooks or add members.
                         .requestMatchers("/api/v1/api-keys/**", "/api/v1/webhook-endpoints/**", "/api/v1/team/**",
-                                "/api/v1/audit-log/**").hasAnyAuthority(OWNER, MANAGER)
+                                "/api/v1/audit-log/**", "/api/v1/risk/**").hasAnyAuthority(OWNER, MANAGER)
                         // An admin token carries no tenant, so it opens nothing but the admin API.
                         .requestMatchers(HttpMethod.GET, "/api/**").hasAnyAuthority("SCOPE_" + DASHBOARD_SCOPE, "SCOPE_" + API_SCOPE)
                         // Everything that changes data: a viewer can look but never move money.

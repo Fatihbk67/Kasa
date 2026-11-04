@@ -17,6 +17,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 
 import com.kasa.admin.MerchantReviewService;
 import com.kasa.onboarding.MerchantProfileService;
+import com.kasa.risk.RiskService;
 import com.kasa.auth.AuthService;
 import com.kasa.bank.SimulatedBank;
 import com.kasa.billing.BillingService;
@@ -98,12 +99,29 @@ public final class LocalDevApplication {
         seedHistory(context, tenantId, superuser);
         seedTeam(context, tenantId, superuser);
         seedCustomersLinksAndDisputes(context, tenantId, superuser);
+        seedRisk(context, tenantId, superuser);
         // A second business waiting for review, so the admin panel has something to approve.
         UUID bakery = context.getBean(AuthService.class).register("Yeni Fırın", "firin@kasa.test", DEMO_PASSWORD).tenantId();
         context.getBean(MerchantProfileService.class).save(bakery, new MerchantProfileService.ProfileInput("SOLE_PROPRIETOR",
                 "Ali Usta Fırıncılık", "10000000146", "Beşiktaş", "FOOD", null, "+90 212 555 01 02",
                 "Sinanpaşa Mah. Çarşı Sk. No: 4", "İstanbul", "TR33 0006 1005 1978 6457 8413 26"));
         log.info("Demo merchant ready: {} / {}", DEMO_EMAIL, DEMO_PASSWORD);
+    }
+
+    /** The recommended rules, plus one payment held for review, a card stopped for too many tries, and a blocked card. */
+    private static void seedRisk(ConfigurableApplicationContext context, UUID tenantId, JdbcClient superuser) {
+        // The seed itself just used the test card many times. Moved back, so the first test payment is not
+        // blocked by the velocity rule for its first ten minutes.
+        superuser.sql("UPDATE payments SET created_at = created_at - interval '15 minutes' WHERE created_at > now() - interval '15 minutes'").update();
+        RiskService risk = context.getBean(RiskService.class);
+        risk.addRecommended(tenantId);
+        PaymentService payments = context.getBean(PaymentService.class);
+        payments.create(tenantId, key(), 1_450_000, "TRY", "tok_success_kurumsal", "Kurumsal toplu sipariş", null);
+        for (int i = 0; i < 7; i++) {
+            payments.create(tenantId, key(), 4_900, "TRY", "tok_success_deneme", "Hediye kartı", null);
+        }
+        UUID stolen = payments.create(tenantId, key(), 12_000, "TRY", "tok_success_calinti", "Espresso makinesi", null).payment().id();
+        risk.blockCardOf(tenantId, stolen, "Kart sahibi kartın çalındığını bildirdi");
     }
 
     /** A viewer account shows what limited rights look like, and an open invitation fills out the team page. */

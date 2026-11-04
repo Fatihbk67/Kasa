@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { formatDateTime, PaymentStatusBadge } from '../components';
+import { formatDateTime, PaymentStatusBadge, RiskBadge } from '../components';
 import { formatMoney } from '../money';
 import type { Payment } from '../types';
 
@@ -26,6 +26,9 @@ export function PaymentTable({ payments }: { payments: Payment[] }) {
               </td>
               <td>
                 <PaymentStatusBadge status={payment.status} />
+                {(payment.reviewStatus === 'OPEN' || payment.riskLevel === 'BLOCKED') && (
+                  <span className="row-hint"><RiskBadge level={payment.riskLevel} reviewStatus={payment.reviewStatus} /></span>
+                )}
                 {payment.disputedAmount > 0 && <span className="hint row-hint">İtiraz: {formatMoney(payment.disputedAmount, payment.currency)}</span>}
               </td>
               <td className="numeric">{formatMoney(payment.amount, payment.currency)}</td>

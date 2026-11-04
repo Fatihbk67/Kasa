@@ -1,6 +1,7 @@
 package com.kasa.payment;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.UUID;
 
 record Payment(
@@ -18,5 +19,11 @@ record Payment(
         String bankReference,
         String failureCode,
         OffsetDateTime createdAt,
-        OffsetDateTime updatedAt) {
+        OffsetDateTime updatedAt,
+        String riskLevel,
+        List<String> riskReasons,
+        String reviewStatus,
+        String reviewedBy,
+        OffsetDateTime reviewedAt,
+        String cardFingerprint) {
 }

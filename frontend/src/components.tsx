@@ -28,7 +28,31 @@ const FAILURE_CODES: Record<string, string> = {
   bank_no_record: 'İstek bankaya ulaşmadı, para hareketi olmadı.',
   account_closed: 'Alıcı banka hesabı kapalı.',
   unknown_authorization: 'Banka bu provizyonu bulamadı.',
+  risk_blocked: 'Ödeme bir risk kuralına takıldı ve bankaya gönderilmedi.',
 };
+
+export const RISK_REASONS: Record<string, string> = {
+  CARD_VELOCITY: 'Aynı kartla kısa sürede çok fazla deneme',
+  CARD_DECLINES: 'Kart bankadan art arda reddedildi',
+  AMOUNT_ABOVE: 'Tutar belirlenen sınırın üstünde',
+  CARD_BLOCKLISTED: 'Kart engelli kartlar listesinde',
+};
+
+export function RiskBadge({ level, reviewStatus }: { level: string | null; reviewStatus: string | null }) {
+  if (reviewStatus === 'OPEN') {
+    return <Badge label="İncelemede" tone="warning" />;
+  }
+  if (reviewStatus === 'REJECTED') {
+    return <Badge label="İncelemede reddedildi" tone="danger" />;
+  }
+  if (reviewStatus === 'APPROVED') {
+    return <Badge label="İncelendi, onaylandı" tone="success" />;
+  }
+  if (level === 'BLOCKED') {
+    return <Badge label="Risk nedeniyle engellendi" tone="danger" />;
+  }
+  return null;
+}
 
 export function failureMessage(code: string | null): string {
   return (code && FAILURE_CODES[code]) || 'İşlem tamamlanamadı.';

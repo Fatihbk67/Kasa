@@ -62,6 +62,8 @@ public class SimulatedBank implements BankGateway {
                 throw new BankTimeoutException();
             }
             case "tok_timeout_lost" -> throw new BankTimeoutException();
+            // "tok_success_ayse", "tok_success_2": separate cards that all pay, so card-level fraud rules can be tried.
+            case String card when card.startsWith("tok_success_") -> process(operationId, () -> approveAuthorization(cardToken, currency));
             default -> process(operationId, () -> BankResponse.declined("invalid_token"));
         };
     }

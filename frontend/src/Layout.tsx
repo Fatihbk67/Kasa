@@ -28,6 +28,7 @@ const NAV: { title: string | null; items: NavItem[] }[] = [
       { to: '/subscriptions', label: 'Abonelikler' },
       { to: '/payment-links', label: 'Ödeme bağlantıları' },
       { to: '/disputes', label: 'İtirazlar' },
+      { to: '/risk', label: 'Risk ve dolandırıcılık', operatorOnly: true },
       { to: '/payouts', label: 'Hesap kesimleri' },
     ],
   },

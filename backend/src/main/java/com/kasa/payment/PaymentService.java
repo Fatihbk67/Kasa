@@ -18,6 +18,9 @@ import com.kasa.bank.BankGateway;
 import com.kasa.bank.BankResponse;
 import com.kasa.bank.BankTimeoutException;
 import com.kasa.common.Hashes;
+import com.kasa.common.MoneyText;
+import com.kasa.notification.NotificationService;
+import com.kasa.risk.RiskEngine;
 import com.kasa.observability.BusinessMetrics;
 import com.kasa.payment.PaymentViews.OperationResult;
 import com.kasa.payment.PaymentViews.OperationView;
@@ -54,10 +57,15 @@ public class PaymentService {
     private final WebhookEvents webhookEvents;
     private final BusinessMetrics metrics;
     private final AuditLog auditLog;
+    private final RiskEngine riskEngine;
+    private final NotificationService notifications;
 
     public PaymentService(TransactionTemplate tx, TenantScope tenantScope, PaymentStore store,
                           PaymentLedger paymentLedger, BankGateway bank, PaymentProperties properties,
-                          WebhookEvents webhookEvents, BusinessMetrics metrics, AuditLog auditLog) {
+                          WebhookEvents webhookEvents, BusinessMetrics metrics, AuditLog auditLog,
+                          RiskEngine riskEngine, NotificationService notifications) {
+        this.riskEngine = riskEngine;
+        this.notifications = notifications;
         this.auditLog = auditLog;
         this.webhookEvents = webhookEvents;
         this.metrics = metrics;
@@ -76,7 +84,13 @@ public class PaymentService {
 
     public OperationResult create(UUID tenantId, String key, long amount, String currency, String cardToken,
                                   String description, UUID customerId) {
+        return create(tenantId, key, amount, currency, cardToken, description, customerId, RiskEngine.Screening.FULL);
+    }
+
+    public OperationResult create(UUID tenantId, String key, long amount, String currency, String cardToken,
+                                  String description, UUID customerId, RiskEngine.Screening screening) {
         requireValidKey(key);
+        String fingerprint = RiskEngine.fingerprint(cardToken);
         String hash = Hashes.sha256Hex(String.join("|", "CREATE", String.valueOf(amount), currency, cardToken,
                 String.valueOf(description)) + (customerId == null ? "" : "|" + customerId));
         Begun begun = tx.execute(status -> {
@@ -93,13 +107,64 @@ public class PaymentService {
                         if (customerId != null && !store.activeCustomerExists(customerId)) {
                             throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, "unknown customer");
                         }
+                        RiskEngine.Assessment risk = riskEngine.assess(tenantId, fingerprint, amount, currency, screening);
                         UUID paymentId = UUID.randomUUID();
-                        store.insertPayment(paymentId, tenantId, amount, currency, description, customerId);
-                        return new Begun(store.insertOperation(tenantId, paymentId, OperationType.AUTHORIZE, amount,
-                                key, hash), null, false);
+                        store.insertPayment(paymentId, tenantId, amount, currency, description, customerId, fingerprint, risk);
+                        PaymentOperation operation = store.insertOperation(tenantId, paymentId, OperationType.AUTHORIZE,
+                                amount, key, hash);
+                        if (risk.blocked()) {
+                            return refuse(tenantId, paymentId, operation);
+                        }
+                        return new Begun(operation, null, false);
                     });
         });
         return run(tenantId, begun, () -> bank.authorize(begun.operation().id(), cardToken, amount, currency));
+    }
+
+    /**
+     * Declined here, without asking the bank, exactly as a bank decline would read: same status, same webhook,
+     * and a retry with the same key replays it. The customer learns only that the payment did not go through.
+     */
+    private Begun refuse(UUID tenantId, UUID paymentId, PaymentOperation operation) {
+        store.completeOperation(operation.id(), OperationStatus.FAILED, null, RiskEngine.RISK_BLOCKED);
+        store.update(paymentId, PaymentStatus.DECLINED, 0, 0, 0, null, RiskEngine.RISK_BLOCKED);
+        publishOutcome(tenantId, paymentId, operation.id());
+        metrics.countAfterCommit("kasa.risk.decisions", "level", "BLOCKED");
+        return new Begun(store.getOperation(operation.id()), null, true);
+    }
+
+    public List<PaymentView> heldForReview(UUID tenantId, int limit) {
+        return tx.execute(status -> {
+            tenantScope.apply(tenantId);
+            return store.listHeld(limit).stream().map(PaymentView::of).toList();
+        });
+    }
+
+    /**
+     * Releases or rejects a held payment. A rejection cancels the authorization, so the customer's limit is freed
+     * at once rather than when the bank lets the hold lapse. The decision is final; the lock makes it so even when
+     * two people press at the same moment.
+     */
+    public PaymentView decideReview(UUID tenantId, UUID paymentId, String reviewer, boolean approve) {
+        tx.executeWithoutResult(status -> {
+            tenantScope.apply(tenantId);
+            Payment payment = store.lock(paymentId).orElseThrow(PaymentService::notFound);
+            if (!"OPEN".equals(payment.reviewStatus())) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "this payment is not waiting for review");
+            }
+            if (payment.status() != PaymentStatus.AUTHORIZED || store.hasPendingOperation(paymentId)) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "the bank has not answered for this payment yet");
+            }
+            store.decideReview(paymentId, approve, reviewer);
+            auditLog.record(tenantId, approve ? "PAYMENT_REVIEW_APPROVED" : "PAYMENT_REVIEW_REJECTED", "PAYMENT", paymentId,
+                    Map.of("amount", payment.amount(), "currency", payment.currency()));
+            webhookEvents.publish(tenantId, approve ? "payment.review_approved" : "payment.review_rejected",
+                    PaymentView.of(store.find(paymentId).orElseThrow()));
+        });
+        if (!approve) {
+            voidPayment(tenantId, paymentId, "review-reject:" + paymentId);
+        }
+        return get(tenantId, paymentId).payment();
     }
 
     public OperationResult capture(UUID tenantId, UUID paymentId, String key, Long requestedAmount) {
@@ -192,6 +257,10 @@ public class PaymentService {
         return switch (type) {
             case CAPTURE -> {
                 requireStatus(payment, type, PaymentStatus.AUTHORIZED);
+                // A rejected payment stays uncapturable even if cancelling its authorization at the bank failed.
+                if ("OPEN".equals(payment.reviewStatus()) || "REJECTED".equals(payment.reviewStatus())) {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT, "this payment is held for risk review");
+                }
                 yield withinLimit(requested, payment.amount());
             }
             case VOID -> {
@@ -273,6 +342,7 @@ public class PaymentService {
                             ? PaymentStatus.FAILED
                             : PaymentStatus.DECLINED;
                     store.update(paymentId, failed, 0, 0, 0, null, response.declineCode());
+                    store.closeReview(paymentId);
                 }
             }
             publishOutcome(tenantId, paymentId, operationId);
@@ -311,6 +381,15 @@ public class PaymentService {
         return switch (operation.type()) {
             case AUTHORIZE -> {
                 store.update(payment.id(), PaymentStatus.AUTHORIZED, 0, 0, 0, response.reference(), null);
+                // Announced only once the bank has said yes: a hold on a declined payment needs nobody's attention.
+                if ("OPEN".equals(payment.reviewStatus())) {
+                    notifications.toRoles(tenantId, NotificationService.OPERATORS, "PAYMENT_HELD", "Ödeme incelemeye alındı",
+                            MoneyText.format(payment.amount(), payment.currency())
+                                    + " tutarındaki ödeme bir risk kuralına takıldı. Onaylanana kadar tahsil edilemez.",
+                            "/risk");
+                    webhookEvents.publish(tenantId, "payment.review_opened", PaymentView.of(store.find(payment.id()).orElseThrow()));
+                    metrics.countAfterCommit("kasa.risk.decisions", "level", "REVIEW");
+                }
                 yield () -> { };
             }
             case VOID -> {

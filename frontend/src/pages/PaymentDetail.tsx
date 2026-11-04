@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { api, newIdempotencyKey } from '../api';
+import { api, ApiError, newIdempotencyKey } from '../api';
 import {
   CopyButton,
   DisputeStatusBadge,
@@ -12,6 +12,8 @@ import {
   OperationStatusBadge,
   PageHeader,
   PaymentStatusBadge,
+  RISK_REASONS,
+  RiskBadge,
 } from '../components';
 import { canOperate, useMe } from '../me';
 import { formatMoney, parseAmount } from '../money';
@@ -114,6 +116,9 @@ export function PaymentDetailPage() {
   const [simulating, setSimulating] = useState(false);
   const [action, setAction] = useState<Action | null>(null);
   const [operationFailure, setOperationFailure] = useState<string | null>(null);
+  const [blocking, setBlocking] = useState(false);
+  const [blockReason, setBlockReason] = useState('');
+  const notify = useToast();
 
   const hasPending = detail.data?.operations.some((operation) => operation.status === 'PENDING') ?? false;
   usePolling(hasPending, detail.reload);
@@ -133,7 +138,8 @@ export function PaymentDetailPage() {
   const { payment, operations } = detail.data;
   const refundable = payment.capturedAmount - payment.refundedAmount - payment.disputedAmount;
   const canAct = canOperate(me) && !hasPending;
-  const canCapture = payment.status === 'AUTHORIZED' && canAct;
+  const held = payment.reviewStatus === 'OPEN';
+  const canCapture = payment.status === 'AUTHORIZED' && canAct && !held && payment.reviewStatus !== 'REJECTED';
   const canRefund = (payment.status === 'CAPTURED' || payment.status === 'PARTIALLY_REFUNDED') && refundable > 0 && canAct;
   const dispute = disputes.data?.items[0] ?? null;
   const canDispute = (payment.status === 'CAPTURED' || payment.status === 'PARTIALLY_REFUNDED') && canAct && Boolean(disputes.data) && !dispute;
@@ -156,6 +162,7 @@ export function PaymentDetailPage() {
             {canCapture && <button type="button" className="button" onClick={() => setAction('void')}>İptal et</button>}
             {canRefund && <button type="button" className="button" onClick={() => setAction('refund')}>İade et</button>}
             {canDispute && <button type="button" className="button" onClick={() => setSimulating(true)}>İtiraz simüle et</button>}
+            {canOperate(me) && payment.riskLevel !== null && <button type="button" className="button" onClick={() => setBlocking(true)}>Kartı engelle</button>}
           </>
         )}
       />
@@ -170,6 +177,20 @@ export function PaymentDetailPage() {
         <p className="note note-warning">
           Bu ödemeye itiraz edildi: {formatMoney(dispute.amount, dispute.currency)}. <DisputeStatusBadge status={dispute.status} /> <Link to={`/disputes/${dispute.id}`}>İtirazı aç</Link>
         </p>
+      )}
+
+      {(payment.riskLevel === 'REVIEW' || payment.riskLevel === 'BLOCKED') && (
+        <section className={held ? 'note note-warning' : 'card risk-card'} aria-label="Risk değerlendirmesi">
+          <div className="section-header section-header-tight">
+            <strong>Risk değerlendirmesi <RiskBadge level={payment.riskLevel} reviewStatus={payment.reviewStatus} /></strong>
+            {held && canOperate(me) && <Link to="/risk" className="button button-small">İncelemeye git</Link>}
+          </div>
+          <ul className="risk-reasons">
+            {payment.riskReasons.map((reason) => <li key={reason}>{RISK_REASONS[reason] ?? reason}</li>)}
+          </ul>
+          {held && <p>Bu ödeme onaylanana kadar tahsil edilemez.</p>}
+          {payment.reviewedBy && payment.reviewedAt && <p className="hint">Karar: {payment.reviewedBy}, {formatDateTime(payment.reviewedAt)}</p>}
+        </section>
       )}
 
       <section className="card">
@@ -212,6 +233,25 @@ export function PaymentDetailPage() {
         </table>
       </div>
       {action && <ActionDialog action={action} payment={payment} onClose={() => setAction(null)} onDone={finish} />}
+      {blocking && (
+        <FormDialog title="Kartı engelle" submitLabel="Engelle" danger onClose={() => setBlocking(false)}
+          onSubmit={async () => {
+            try {
+              await api('/risk/blocklist', { method: 'POST', body: { paymentId: payment.id, reason: blockReason.trim() } });
+            } catch (e) {
+              throw e instanceof ApiError && e.status === 409 ? new Error('Bu kart zaten engelli.') : e;
+            }
+            setBlocking(false);
+            setBlockReason('');
+            notify('Kart engellendi. Bu karttan gelen ödemeler bankaya gönderilmeden reddedilecek.');
+          }}>
+          <p>Bu ödemede kullanılan karttan bundan sonra ödeme alınmaz. Engeli Risk sayfasından kaldırabilirsiniz.</p>
+          <label className="field">
+            Neden
+            <input required autoFocus maxLength={300} value={blockReason} onChange={(e) => setBlockReason(e.target.value)} placeholder="Müşteri kartının çalındığını bildirdi" />
+          </label>
+        </FormDialog>
+      )}
       {simulating && <SimulateDisputeDialog payment={payment} onClose={() => setSimulating(false)} onDone={(disputeId) => navigate(`/disputes/${disputeId}`)} />}
     </>
   );

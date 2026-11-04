@@ -24,6 +24,33 @@ export interface Payment {
   failureCode: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Null for payments made before screening existed. */
+  riskLevel: 'NORMAL' | 'REVIEW' | 'BLOCKED' | null;
+  riskReasons: RiskReason[];
+  reviewStatus: 'OPEN' | 'APPROVED' | 'REJECTED' | null;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+}
+
+export type RiskRuleKind = 'CARD_VELOCITY' | 'CARD_DECLINES' | 'AMOUNT_ABOVE';
+export type RiskReason = RiskRuleKind | 'CARD_BLOCKLISTED';
+
+export interface RiskRule {
+  id: string;
+  kind: RiskRuleKind;
+  threshold: number;
+  windowMinutes: number | null;
+  currency: string | null;
+  action: 'REVIEW' | 'BLOCK';
+  enabled: boolean;
+  createdAt: string;
+}
+
+export interface BlockedCard {
+  fingerprint: string;
+  reason: string;
+  sourcePayment: string | null;
+  createdAt: string;
 }
 
 export interface Operation {

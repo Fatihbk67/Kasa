@@ -133,7 +133,12 @@ export function Checkout() {
 
   return (
     <Frame session={session}>
-      {session.failureCode && <p className="note note-danger" role="alert">{failureMessage(session.failureCode)} Başka bir kart deneyebilirsiniz.</p>}
+      {/* A fraud block reads like any other refusal, so whoever is testing stolen cards learns nothing about the rules. */}
+      {session.failureCode && (
+        <p className="note note-danger" role="alert">
+          {session.failureCode === 'risk_blocked' ? 'Ödeme onaylanmadı.' : failureMessage(session.failureCode)} Başka bir kart deneyebilirsiniz.
+        </p>
+      )}
       <ErrorNote message={error} />
       <form onSubmit={submit} className="stack">
         <fieldset className="card-options">

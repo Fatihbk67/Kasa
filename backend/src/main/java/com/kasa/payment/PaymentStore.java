@@ -14,6 +14,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
 
 import com.kasa.common.BusinessCalendar;
+import com.kasa.risk.RiskEngine;
 
 /** SQL for payments. Every method except {@link #findStaleOperations} expects a transaction bound to a tenant. */
 @Component
@@ -64,10 +65,13 @@ class PaymentStore {
                 .single();
     }
 
-    void insertPayment(UUID id, UUID tenantId, long amount, String currency, String description, UUID customerId) {
+    void insertPayment(UUID id, UUID tenantId, long amount, String currency, String description, UUID customerId,
+                       String cardFingerprint, RiskEngine.Assessment risk) {
         jdbc.sql("""
-                        INSERT INTO payments (id, tenant_id, amount, currency, status, description, customer_id)
-                        VALUES (:id, :tenantId, :amount, :currency, 'PENDING', :description, :customerId)
+                        INSERT INTO payments (id, tenant_id, amount, currency, status, description, customer_id,
+                                              card_fingerprint, risk_level, risk_reasons, review_status)
+                        VALUES (:id, :tenantId, :amount, :currency, 'PENDING', :description, :customerId,
+                                :fingerprint, :riskLevel, string_to_array(:reasons, ','), :reviewStatus)
                         """)
                 .param("id", id)
                 .param("tenantId", tenantId)
@@ -75,6 +79,33 @@ class PaymentStore {
                 .param("currency", currency)
                 .param("description", description)
                 .param("customerId", customerId)
+                .param("fingerprint", cardFingerprint)
+                .param("riskLevel", risk.level().name())
+                .param("reasons", String.join(",", risk.reasons()))
+                .param("reviewStatus", risk.held() ? "OPEN" : null)
+                .update();
+    }
+
+    List<Payment> listHeld(int limit) {
+        return jdbc.sql("SELECT * FROM payments WHERE review_status = 'OPEN' ORDER BY created_at, id LIMIT :limit")
+                .param("limit", limit)
+                .query(PaymentStore::mapPayment)
+                .list();
+    }
+
+    /** Expects the payment to be locked. */
+    void decideReview(UUID paymentId, boolean approved, String reviewer) {
+        jdbc.sql("UPDATE payments SET review_status = :status, reviewed_by = :reviewer, reviewed_at = now() WHERE id = :id")
+                .param("status", approved ? "APPROVED" : "REJECTED")
+                .param("reviewer", reviewer)
+                .param("id", paymentId)
+                .update();
+    }
+
+    /** A hold on a payment the bank refused has nothing left to decide, so it leaves the review queue. */
+    void closeReview(UUID paymentId) {
+        jdbc.sql("UPDATE payments SET review_status = NULL WHERE id = :id AND review_status = 'OPEN'")
+                .param("id", paymentId)
                 .update();
     }
 
@@ -237,7 +268,17 @@ class PaymentStore {
                 rs.getString("bank_reference"),
                 rs.getString("failure_code"),
                 rs.getObject("created_at", OffsetDateTime.class),
-                rs.getObject("updated_at", OffsetDateTime.class));
+                rs.getObject("updated_at", OffsetDateTime.class),
+                rs.getString("risk_level"),
+                reasons(rs.getArray("risk_reasons")),
+                rs.getString("review_status"),
+                rs.getString("reviewed_by"),
+                rs.getObject("reviewed_at", OffsetDateTime.class),
+                rs.getString("card_fingerprint"));
+    }
+
+    private static List<String> reasons(java.sql.Array array) throws SQLException {
+        return array == null ? List.of() : List.of((String[]) array.getArray());
     }
 
     private static PaymentOperation mapOperation(ResultSet rs, int rowNum) throws SQLException {

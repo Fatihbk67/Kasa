@@ -112,6 +112,7 @@ java -Djdk.net.unixdomain.tmpdir=backend/target load-test/LoadTest.java http://l
 - **Herkes aynı kapıdan girer:** İşletme üyeleri ve platform yöneticileri aynı giriş sayfasını kullanır. E-posta ve parola ikisine de aitse kişi hangi panele gideceğini seçer. Yönetici olup olmadığını yanıt süresinden anlamak mümkün değildir, çünkü her girişte iki parola karşılaştırması yapılır.
 - **İşletme son sahibini kaybetmez:** Platform yöneticisi her rolü değiştirebilir ama son sahibi başka role alamaz veya kapatamaz. Aynı anda gelen iki değişiklik de sahipsiz bırakamaz, çünkü önce bütün sahipler kilitlenir.
 - **Kimse körlemesine onaylanmaz:** Yönetici, işletme başvuru formunu (işletme türü, yasal unvan, vergi bilgisi, adres, IBAN) görmeden onay veremez. T.C. kimlik, vergi kimlik ve TR IBAN numaralarının kontrol haneleri hem tarayıcıda hem sunucuda doğrulanır; tek hanelik bir yazım hatası kaydedilmez. IBAN şifreli saklanır, işletmeye maskeli gösterilir. Onaydan sonra başvuru değiştirilemez, çünkü ele geçirilen bir hesabın ilk işi ödemeleri kendi IBAN'ına çevirmek olurdu. Yöneticinin başvuruyu açması da kayda geçer.
+- **Dolandırıcılık kuralları bankadan önce çalışır:** Her işletme kendi kurallarını yazar: aynı kartla kısa sürede çok deneme, art arda reddedilen kart, yüksek tutar ve engelli kartlar. Kural ya ödemeyi bankaya hiç göndermeden reddeder ya da provizyonu alıp bir kişinin onayına bırakır; onaylanmayan ödeme tahsil edilemez. Bu yasağı veritabanı tetikleyicisi de uygular, unutulan bir kod yolu bile aşamaz. Aynı karttan aynı anda gelen 20 ödeme, sınırı 5 olan kuralı birlikte geçemez, çünkü sayım kart başına bir kilitle sıraya girer; yalnızca aynı işletmenin aynı kartı bekler. Engellenen ödeme müşteriye sıradan bir ret gibi görünür, böylece çalıntı kart deneyen biri kuralları öğrenemez. Abonelik yenilemelerinde bekleyen müşteri olmadığı için inceleme kuralları uygulanmaz, engelleme kuralları uygulanır. API anahtarı kuralları göremez ve değiştiremez; anahtarı çalan kişi alarmı kapatamaz.
 - **Bildirimler olayla birlikte yazılır:** İtiraz, hesap kesimi sonucu, abonelik tahsilat hatası, ekibe katılım, rol talebi kararı ve hesap durumu değişikliği, olayı kaydeden işlemin içinde ilgili rollere bildirim olarak düşer. Geri alınan bir işlem için bildirim gitmez, gerçekleşen bir olay da bildirimsiz kalmaz. Herkes yalnızca kendi bildirimini okuyabilir ve okundu sayabilir; API anahtarının gelen kutusu yoktur.
 - **Rol talebi kaybolmaz:** Üyelerin talepleri yönetici panelinde rozetle görünür, yöneticilere e-posta gider. Onay rolü aynı işlemde değiştirir; bir talebe yalnızca bir kez karar verilebilir.
 - **Raporlar defterle aynı sonucu verir:** Analiz paneli tutarları paranın gerçekten hareket ettiği güne yazar ve net kazanç işletmenin defter bakiyesiyle uyuşur.
@@ -269,6 +270,13 @@ Başka bir platformda aynı değişkenlere ek olarak `KASA_DB_APP_USER=kasa_app`
 | POST | `/api/v1/auth/login/admin` | Yok | Ortak girişten sonra yöneticinin kod adımı |
 | GET, POST, DELETE | `/api/v1/settings/role-request` | JWT | Rol talebini gösterir, gönderir, geri çeker |
 | GET, PUT | `/api/v1/settings/business-profile` | Sahip | İşletme başvurusunu gösterir (IBAN maskeli), gönderir veya onaydan önce düzeltir |
+| GET, POST | `/api/v1/risk/rules` | Sahip, yönetici | Risk kurallarını listeler, ekler |
+| POST | `/api/v1/risk/rules/recommended` | Sahip, yönetici | Boş kural setine önerilen üç kuralı ekler |
+| PUT, DELETE | `/api/v1/risk/rules/{id}` | Sahip, yönetici | Kuralı ayarlar, kapatır veya siler |
+| GET, POST | `/api/v1/risk/blocklist` | Sahip, yönetici | Engelli kartlar; bir ödemenin kartını engeller |
+| DELETE | `/api/v1/risk/blocklist/{fingerprint}` | Sahip, yönetici | Kartın engelini kaldırır |
+| GET | `/api/v1/risk/reviews` | Sahip, yönetici | İnceleme bekleyen ödemeler |
+| POST | `/api/v1/risk/reviews/{id}/approve`, `/reject` | Sahip, yönetici | Onaylar (isteğe bağlı tahsil eder) veya reddeder (provizyonu iptal eder, isteğe bağlı kartı engeller) |
 | GET | `/api/v1/notifications` | JWT | Kişinin son 30 bildirimi ve okunmamış sayısı |
 | POST | `/api/v1/notifications/{id}/read`, `/read-all` | JWT | Bildirimi veya hepsini okundu sayar |
 | GET | `/api/v1/admin/users` | Yönetici | Bütün işletmelerin bütün kullanıcıları (`q`) |
@@ -387,6 +395,7 @@ Banka simüle edilir; davranışı token belirler. Böylece her hata senaryosu i
 | Token | Davranış |
 |---|---|
 | `tok_success` | Her işlem başarılı |
+| `tok_success_<herhangi>` | Başarılı, ama her ek farklı bir kart sayılır (kart bazlı risk kurallarını denemek için) |
 | `tok_declined`, `tok_insufficient_funds` | Provizyon reddedilir |
 | `tok_timeout_processed` | Banka işlemi yapar ama yanıt gelmez; kurtarma işi `AUTHORIZED` yapar |
 | `tok_timeout_lost` | İstek bankaya ulaşmaz; kurtarma işi `FAILED` yapar |
@@ -409,4 +418,5 @@ Banka simüle edilir; davranışı token belirler. Böylece her hata senaryosu i
 - [x] **Abonelikler:** Planlar, tekrarlayan tahsilat, başarısız ödemede yeniden deneme, dönem ortası plan değişikliği
 - [x] **Güvenlik:** İki adımlı giriş, kurtarma kodları, parola sıfırlama, sırların şifrelenmesi, kişiye özel yönetici hesapları
 - [x] **İşletme onayı:** Yeni işletmeler yönetici onayından sonra ödeme alır; askıya alma ve yeniden açma
+- [x] **Dolandırıcılık önleme:** İşletmeye özel risk kuralları, engelli kartlar, inceleme kuyruğu ve veritabanı düzeyinde tahsilat kilidi
 - [x] **Başvuru ve bildirimler:** Kontrol haneli işletme başvuru formu, yönetici inceleme ekranı, olaylara bağlı bildirim merkezi

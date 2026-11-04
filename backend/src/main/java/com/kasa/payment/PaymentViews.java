@@ -12,12 +12,15 @@ public final class PaymentViews {
 
     public record PaymentView(UUID id, long amount, String currency, PaymentStatus status, long capturedAmount,
                               long refundedAmount, long feeAmount, long disputedAmount, UUID customerId,
-                              String description, String failureCode, OffsetDateTime createdAt, OffsetDateTime updatedAt) {
+                              String description, String failureCode, OffsetDateTime createdAt, OffsetDateTime updatedAt,
+                              String riskLevel, List<String> riskReasons, String reviewStatus, String reviewedBy,
+                              OffsetDateTime reviewedAt) {
 
         static PaymentView of(Payment p) {
             return new PaymentView(p.id(), p.amount(), p.currency(), p.status(), p.capturedAmount(),
                     p.refundedAmount(), p.feeAmount(), p.disputedAmount(), p.customerId(), p.description(),
-                    p.failureCode(), p.createdAt(), p.updatedAt());
+                    p.failureCode(), p.createdAt(), p.updatedAt(), p.riskLevel(), p.riskReasons(), p.reviewStatus(),
+                    p.reviewedBy(), p.reviewedAt());
         }
     }
 

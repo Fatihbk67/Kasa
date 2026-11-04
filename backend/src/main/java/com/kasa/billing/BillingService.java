@@ -588,8 +588,9 @@ public class BillingService {
 
     /** Runs with no transaction open. Each step has a fixed key, so running it again only reads the earlier result. */
     private ChargeResult charge(UUID tenantId, Attempt attempt) {
+        // No one waits on a renewal to answer a hold, so only blocking rules apply to it.
         OperationResult created = payments.create(tenantId, attempt.paymentKey(), attempt.amount(), attempt.currency(),
-                attempt.cardToken(), attempt.description(), attempt.customerId());
+                attempt.cardToken(), attempt.description(), attempt.customerId(), com.kasa.risk.RiskEngine.Screening.BLOCK_ONLY);
         UUID paymentId = created.payment().id();
         PaymentStatus status = created.payment().status();
         if (status == PaymentStatus.PENDING) {
