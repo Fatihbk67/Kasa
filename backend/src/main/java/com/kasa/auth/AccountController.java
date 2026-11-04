@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.kasa.security.CurrentTenant;
+import com.kasa.team.RoleRequestService;
 import com.kasa.security.RateLimitProperties;
 import com.kasa.security.RateLimiter;
 
@@ -41,12 +42,18 @@ public class AccountController {
     public record TwoFactorEnabled(List<String> recoveryCodes, String accessToken) {
     }
 
+    public record RoleChangeRequest(@NotBlank String role, @NotBlank @Size(max = 500) String reason) {
+    }
+
     private final AuthService authService;
     private final TwoFactorService twoFactor;
+    private final RoleRequestService roleRequests;
     private final RateLimiter rateLimiter;
     private final RateLimitProperties limits;
 
-    public AccountController(AuthService authService, TwoFactorService twoFactor, RateLimiter rateLimiter, RateLimitProperties limits) {
+    public AccountController(AuthService authService, TwoFactorService twoFactor, RoleRequestService roleRequests,
+                             RateLimiter rateLimiter, RateLimitProperties limits) {
+        this.roleRequests = roleRequests;
         this.twoFactor = twoFactor;
         this.authService = authService;
         this.rateLimiter = rateLimiter;
@@ -70,6 +77,25 @@ public class AccountController {
         rateLimiter.check("password:" + CurrentTenant.userId(authentication), limits.loginPerIpAndEmail());
         return authService.changePassword(CurrentTenant.of(authentication), CurrentTenant.userId(authentication),
                 request.currentPassword(), request.newPassword());
+    }
+
+    @GetMapping("/api/v1/settings/role-request")
+    public org.springframework.http.ResponseEntity<RoleRequestService.RoleRequest> latestRoleRequest(Authentication authentication) {
+        return roleRequests.latest(CurrentTenant.of(authentication), CurrentTenant.userId(authentication))
+                .map(org.springframework.http.ResponseEntity::ok)
+                .orElse(org.springframework.http.ResponseEntity.noContent().build());
+    }
+
+    @PostMapping("/api/v1/settings/role-request")
+    @ResponseStatus(HttpStatus.CREATED)
+    public RoleRequestService.RoleRequest requestRole(Authentication authentication, @Valid @RequestBody RoleChangeRequest request) {
+        return roleRequests.submit(CurrentTenant.of(authentication), CurrentTenant.userId(authentication), request.role(), request.reason().trim());
+    }
+
+    @org.springframework.web.bind.annotation.DeleteMapping("/api/v1/settings/role-request")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void cancelRoleRequest(Authentication authentication) {
+        roleRequests.cancel(CurrentTenant.of(authentication), CurrentTenant.userId(authentication));
     }
 
     @GetMapping("/api/v1/settings/two-factor")

@@ -55,7 +55,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/auth/**", "/api/v1/public/**", "/actuator/health", "/error").permitAll()
                         .requestMatchers("/actuator/**").hasAuthority("SCOPE_" + ADMIN_SCOPE)
                         .requestMatchers("/api/v1/admin/**").hasAuthority("SCOPE_" + ADMIN_SCOPE)
-                        .requestMatchers("/api/v1/me", "/api/v1/settings/password", "/api/v1/settings/two-factor/**").hasAnyAuthority(OWNER, MANAGER, VIEWER)
+                        .requestMatchers("/api/v1/me", "/api/v1/settings/password", "/api/v1/settings/two-factor/**",
+                                "/api/v1/settings/role-request").hasAnyAuthority(OWNER, MANAGER, VIEWER)
                         .requestMatchers("/api/v1/settings/**").hasAuthority(OWNER)
                         // A leaked API key must not be able to mint new keys, redirect webhooks or add members.
                         .requestMatchers("/api/v1/api-keys/**", "/api/v1/webhook-endpoints/**", "/api/v1/team/**",

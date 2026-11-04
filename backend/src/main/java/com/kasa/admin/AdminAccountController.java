@@ -29,9 +29,6 @@ public class AdminAccountController {
     public record CreateRequest(@NotBlank @Email @Size(max = 254) String email, @NotBlank @Size(min = 12, max = 72) String password) {
     }
 
-    public record LoginRequest(@NotBlank String email, @NotBlank String password, @NotBlank @Size(max = 16) String code) {
-    }
-
     /** A reason is required, because the merchant is shown it and must know what to fix. */
     public record SuspendRequest(@NotBlank @Size(max = 500) String reason) {
     }
@@ -47,14 +44,6 @@ public class AdminAccountController {
         this.accounts = accounts;
         this.rateLimiter = rateLimiter;
         this.limits = limits;
-    }
-
-    @PostMapping("/api/v1/public/admin-login")
-    public AdminAccountService.AdminToken login(@Valid @RequestBody LoginRequest request, HttpServletRequest http) {
-        String ip = http.getRemoteAddr();
-        rateLimiter.check("login-ip:" + ip, limits.loginPerIp());
-        rateLimiter.check("admin-login:" + ip + ":" + request.email().trim().toLowerCase(java.util.Locale.ROOT), limits.loginPerIpAndEmail());
-        return accounts.login(ip, request.email(), request.password(), request.code().trim());
     }
 
     @PostMapping("/api/v1/admin/accounts")

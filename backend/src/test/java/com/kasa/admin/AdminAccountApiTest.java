@@ -64,16 +64,61 @@ class AdminAccountApiTest extends PostgresIntegrationTest {
     }
 
     @Test
-    void guessingLocksTheAccount() {
-        for (int i = 0; i < 4; i++) {
-            assertThat(loginStatus(PASSWORD, wrongCode())).isEqualTo(401);
+    void guessingLocksTheAccountAndThenEvenTheRightCodeFails() {
+        String challenge = challenge(PASSWORD);
+        for (int i = 0; i < 5; i++) {
+            assertThat(complete(challenge, wrongCode())).isEqualTo(401);
         }
-        // The per-address limit would otherwise stop this test before the lock it is here to check.
-        owner.sql("UPDATE platform_admins SET totp_failures = 4 WHERE email = :email").param("email", email).update();
-        loginDirect(wrongCode());
 
         assertThat(owner.sql("SELECT totp_locked_until > now() FROM platform_admins WHERE email = :email")
                 .param("email", email).query(Boolean.class).single()).isTrue();
+        assertThat(complete(challenge, code())).isEqualTo(401);
+    }
+
+    @Test
+    void theSharedLoginPageOffersBothPanelsWhenTheEmailIsBoth() {
+        String shared = "ikisi-" + UUID.randomUUID() + "@kasa.test";
+        client.post().uri("/api/v1/auth/register").contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of("businessName", "İkili", "email", shared, "password", PASSWORD)).retrieve().toBodilessEntity();
+        client.post().uri("/api/v1/admin/accounts").header("X-Admin-Token", SHARED_TOKEN).contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of("email", shared, "password", PASSWORD)).retrieve().toBodilessEntity();
+
+        Map<String, Object> response = client.post().uri("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of("email", shared, "password", PASSWORD)).retrieve().body(Map.class);
+
+        assertThat(response.get("accessToken")).isNotNull();
+        assertThat(response.get("adminChallengeToken")).isNotNull();
+    }
+
+    @Test
+    void aMerchantLoginGetsNoAdminStep() {
+        String merchant = "isletme-" + UUID.randomUUID() + "@kasa.test";
+        client.post().uri("/api/v1/auth/register").contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of("businessName", "Tek", "email", merchant, "password", PASSWORD)).retrieve().toBodilessEntity();
+
+        Map<String, Object> response = client.post().uri("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of("email", merchant, "password", PASSWORD)).retrieve().body(Map.class);
+
+        assertThat(response.get("adminChallengeToken")).isNull();
+        assertThat(response.get("accessToken")).isNotNull();
+    }
+
+    @Test
+    void anAdminChallengeIsNotAMerchantChallenge() {
+        String challenge = challenge(PASSWORD);
+
+        int status = TestMerchant.statusOf(client.post().uri("/api/v1/auth/login/two-factor").contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of("challengeToken", challenge, "code", code())));
+
+        assertThat(status).isEqualTo(401);
+    }
+
+    @Test
+    void anExpiredAdminChallengeIsRefused() {
+        String challenge = challenge(PASSWORD);
+        owner.sql("UPDATE admin_login_challenges SET expires_at = now() - interval '1 second'").update();
+
+        assertThat(complete(challenge, code())).isEqualTo(401);
     }
 
     @Test
@@ -195,20 +240,33 @@ class AdminAccountApiTest extends PostgresIntegrationTest {
         }
     }
 
+    /** The password step on the shared login page. Null when the password does not open an administrator account. */
+    private String challenge(String password) {
+        return client.post().uri("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of("email", email, "password", password))
+                .exchange((request, response) -> {
+                    if (response.getStatusCode().value() != 200) {
+                        return null;
+                    }
+                    Map<String, Object> body = new tools.jackson.databind.json.JsonMapper().readValue(response.getBody().readAllBytes(), Map.class);
+                    return (String) body.get("adminChallengeToken");
+                });
+    }
+
+    private int complete(String challenge, String code) {
+        return TestMerchant.statusOf(client.post().uri("/api/v1/auth/login/admin").contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of("challengeToken", challenge, "code", code)));
+    }
+
     private String login(String code) {
-        Map<String, Object> response = client.post().uri("/api/v1/public/admin-login").contentType(MediaType.APPLICATION_JSON)
-                .body(Map.of("email", email, "password", PASSWORD, "code", code)).retrieve().body(Map.class);
+        Map<String, Object> response = client.post().uri("/api/v1/auth/login/admin").contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of("challengeToken", challenge(PASSWORD), "code", code)).retrieve().body(Map.class);
         return (String) response.get("accessToken");
     }
 
     private int loginStatus(String password, String code) {
-        return client.post().uri("/api/v1/public/admin-login").contentType(MediaType.APPLICATION_JSON)
-                .body(Map.of("email", email, "password", password, "code", code))
-                .exchange((request, response) -> response.getStatusCode().value());
-    }
-
-    private void loginDirect(String code) {
-        loginStatus(PASSWORD, code);
+        String challenge = challenge(password);
+        return challenge == null ? 401 : complete(challenge, code);
     }
 
     private int status(String path, String bearer) {

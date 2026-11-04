@@ -3,6 +3,7 @@ import { api, ApiError } from '../api';
 import { useAuth } from '../auth';
 import { CopyButton, ErrorNote, Loading, PageHeader } from '../components';
 import { isOwner, ROLE_LABELS, useMe } from '../me';
+import type { Role } from '../types';
 import { useFetch } from '../useFetch';
 
 function BusinessSettings() {
@@ -216,6 +217,102 @@ function TwoFactorSettings() {
   );
 }
 
+interface RoleRequest {
+  id: string;
+  currentRole: Role;
+  requestedRole: Role;
+  reason: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELED';
+  decisionNote: string | null;
+  decidedAt: string | null;
+  createdAt: string;
+}
+
+const REQUEST_LABELS: Record<RoleRequest['status'], string> = {
+  PENDING: 'Platform yöneticisinin kararı bekleniyor',
+  APPROVED: 'Onaylandı',
+  REJECTED: 'Reddedildi',
+  CANCELED: 'Geri çekildi',
+};
+
+/** A member asks the platform administrator for another role; the request and its answer stay visible here. */
+function RoleRequestSettings() {
+  const { me, reload } = useMe();
+  const latest = useFetch(() => api<RoleRequest | undefined>('/settings/role-request'), []);
+  const others = (Object.keys(ROLE_LABELS) as Role[]).filter((role) => role !== me?.role);
+  const [role, setRole] = useState<Role | ''>('');
+  const [reason, setReason] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const request = latest.data ?? null;
+  const pending = request?.status === 'PENDING';
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await api('/settings/role-request', { method: 'POST', body: { role: role || others[0], reason } });
+      setReason('');
+      latest.reload();
+    } catch (e) {
+      setError(e instanceof ApiError && e.status === 409 ? 'Zaten açık bir talebiniz var veya bu rol sizde.' : (e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const cancel = async () => {
+    setBusy(true);
+    try {
+      await api('/settings/role-request', { method: 'DELETE' });
+      latest.reload();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    if (request?.status === 'APPROVED') {
+      reload();
+    }
+  }, [request?.status, reload]);
+
+  return (
+    <section className="card settings-card">
+      <h2>Rol talebi</h2>
+      <p className="muted">Şu anki rolünüz: <strong>{me ? ROLE_LABELS[me.role] : '—'}</strong>. Farklı bir yetki gerekiyorsa platform yöneticisinden isteyin.</p>
+      {request && (
+        <p className={`note ${request.status === 'APPROVED' ? 'note-success' : request.status === 'REJECTED' ? 'note-danger' : 'note-warning'}`} role="status">
+          {ROLE_LABELS[request.requestedRole]} talebiniz: {REQUEST_LABELS[request.status]}.
+          {request.decisionNote && ` Not: ${request.decisionNote}`}
+        </p>
+      )}
+      {pending ? (
+        <div><button type="button" className="button" disabled={busy} onClick={cancel}>Talebi geri çek</button></div>
+      ) : (
+        <form onSubmit={submit} className="stack">
+          <label className="field">
+            İstenen rol
+            <select value={role || others[0]} onChange={(e) => setRole(e.target.value as Role)}>
+              {others.map((option) => <option key={option} value={option}>{ROLE_LABELS[option]}</option>)}
+            </select>
+          </label>
+          <label className="field">
+            Gerekçe
+            <textarea required maxLength={500} rows={3} value={reason} onChange={(e) => setReason(e.target.value)} />
+            <span className="hint">Yönetici bu metni görür ve kararını buna göre verir.</span>
+          </label>
+          <ErrorNote message={error} />
+          <div><button type="submit" className="button button-primary" disabled={busy}>{busy ? 'Gönderiliyor…' : 'Talep gönder'}</button></div>
+        </form>
+      )}
+    </section>
+  );
+}
+
 export function Settings() {
   const { me } = useMe();
   return (
@@ -225,6 +322,7 @@ export function Settings() {
         {isOwner(me) && <BusinessSettings />}
         <PasswordSettings />
         <TwoFactorSettings />
+        <RoleRequestSettings />
       </div>
     </>
   );

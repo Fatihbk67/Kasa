@@ -109,6 +109,9 @@ java -Djdk.net.unixdomain.tmpdir=backend/target load-test/LoadTest.java http://l
 - **Parola sıfırlama hesap sızdırmaz:** Kayıtlı olmayan e-postaya da aynı yanıt döner. Bağlantı tek kullanımlıktır, 30 dakika geçerlidir ve yalnızca özeti saklanır. Adresi isteğin `Host` başlığından değil ayardan üretilir, çünkü saldırgan o başlığı kendi sitesine çevirebilir. Sıfırlama tüm oturumları kapatır ama iki adımlı girişi kapatmaz.
 - **Yöneticiler kişiye özeldir:** Platform hesaplarında iki adımlı giriş zorunludur ve her işlem kimin yaptığıyla kaydedilir. Uygulama rolü bu kayıtları silemez. Yönetici token'ı hiçbir işletme verisini açmaz.
 - **Yeni işletme onaylanmadan para alamaz:** Kayıt olan işletme paneli gezebilir, ekibini ve ayarlarını hazırlayabilir; ödeme alması platform yöneticisinin onayını bekler. Kontrol, parayı başlatan tek yerde (`PaymentService.create`) yapılır, böylece API, panel, ödeme sayfası, bağlantılar ve abonelikler aynı kurala takılır. Askıya alınan işletmede yeni ödeme ve hesap kesimi durur ama iadeler ve itirazlar sürer, çünkü müşterilere borç kapanmaz.
+- **Herkes aynı kapıdan girer:** İşletme üyeleri ve platform yöneticileri aynı giriş sayfasını kullanır. E-posta ve parola ikisine de aitse kişi hangi panele gideceğini seçer. Yönetici olup olmadığını yanıt süresinden anlamak mümkün değildir, çünkü her girişte iki parola karşılaştırması yapılır.
+- **İşletme son sahibini kaybetmez:** Platform yöneticisi her rolü değiştirebilir ama son sahibi başka role alamaz veya kapatamaz. Aynı anda gelen iki değişiklik de sahipsiz bırakamaz, çünkü önce bütün sahipler kilitlenir.
+- **Rol talebi kaybolmaz:** Üyelerin talepleri yönetici panelinde rozetle görünür, yöneticilere e-posta gider. Onay rolü aynı işlemde değiştirir; bir talebe yalnızca bir kez karar verilebilir.
 - **Raporlar defterle aynı sonucu verir:** Analiz paneli tutarları paranın gerçekten hareket ettiği güne yazar ve net kazanç işletmenin defter bakiyesiyle uyuşur.
 - **Dışa aktarılan dosya saldırı aracı olamaz:** CSV'de formül gibi başlayan açıklamalar etkisizleştirilir (CSV injection). 10.000 satırda kesilen rapor kullanıcıya açıkça bildirilir.
 - **Bankayla farklar yakalanır:** Günlük mutabakat banka dosyasını kayıtlarımızla karşılaştırır. Farkları raporlar ama düzeltmez, çünkü hangi tarafın doğru olduğuna insan karar vermelidir.
@@ -261,7 +264,12 @@ Başka bir platformda aynı değişkenlere ek olarak `KASA_DB_APP_USER=kasa_app`
 | POST | `/api/v1/auth/password-reset/confirm` | Yok | Bağlantıdaki token ile yeni parola belirler |
 | GET | `/api/v1/settings/two-factor` | JWT | İki adımlı girişin durumu |
 | POST | `/api/v1/settings/two-factor/setup`, `/enable`, `/disable` | JWT | İki adımlı girişi kurar, açar, kapatır |
-| POST | `/api/v1/public/admin-login` | Yok | Yönetici girişi: parola ve kod |
+| POST | `/api/v1/auth/login/admin` | Yok | Ortak girişten sonra yöneticinin kod adımı |
+| GET, POST, DELETE | `/api/v1/settings/role-request` | JWT | Rol talebini gösterir, gönderir, geri çeker |
+| GET | `/api/v1/admin/users` | Yönetici | Bütün işletmelerin bütün kullanıcıları (`q`) |
+| POST | `/api/v1/admin/users/{id}/role`, `/disable`, `/enable` | Yönetici | Rol değiştirir, kullanıcıyı kapatır veya açar |
+| GET | `/api/v1/admin/role-requests` | Yönetici | Rol talepleri, bekleyenler önce (`status`) |
+| POST | `/api/v1/admin/role-requests/{id}/approve`, `/reject` | Yönetici | Talebi onaylar (rol hemen değişir) veya gerekçeyle reddeder |
 | POST, GET | `/api/v1/admin/accounts` | Yönetici | Yönetici hesabı oluşturur, listeler |
 | POST | `/api/v1/admin/accounts/{id}/disable` | Yönetici | Yönetici hesabını kapatır |
 | GET | `/api/v1/admin/audit-log` | Yönetici | Yönetici işlem kayıtları |
@@ -362,7 +370,7 @@ Defter kayıtları şöyledir:
 
 Yönetici API'si `KASA_ADMIN_TOKEN` ile açılır; tanımlı değilse tüm istekleri reddeder. Bu token kiracıya bağlı olmadığından işletme verilerine erişim sağlamaz.
 
-İnsanlar `/admin` ekranından kişisel hesapla (parola ve doğrulama kodu) girer. Ortak token makineler (Prometheus) ve ilk yönetici hesabını oluşturmak içindir.
+İnsanlar ortak giriş sayfasından kişisel hesapla (parola, sonra doğrulama kodu) girer. Ortak token makineler (Prometheus) ve ilk yönetici hesabını oluşturmak içindir.
 
 **Bilinen sınırlar:** Ortak token hâlâ tam yetkilidir ve işlemleri kişiye yazmaz. Dakika dakika canlı bakiye hesabı yerine günlük toplu çalışma tercih edilmiştir.
 

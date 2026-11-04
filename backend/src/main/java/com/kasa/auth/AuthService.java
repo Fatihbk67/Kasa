@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.kasa.admin.AdminAccountService;
 import com.kasa.audit.AuditLog;
 import com.kasa.security.JwtService;
 import com.kasa.tenant.TenantScope;
@@ -29,9 +30,13 @@ public class AuthService {
                      String tenantStatusReason) {
     }
 
-    /** Either a token, or with {@code twoFactorRequired} a challenge token to bring to the second step. */
+    /**
+     * Either a token, or with {@code twoFactorRequired} a challenge token to bring to the second step. When the
+     * email and password also belong to a platform administrator, {@code adminChallengeToken} opens that account's
+     * code step, so one login page serves both and the person chooses where to go.
+     */
     public record LoginResponse(UUID tenantId, String accessToken, Long expiresInSeconds, boolean twoFactorRequired,
-                                String challengeToken) {
+                                String challengeToken, String adminChallengeToken) {
     }
 
     private record LoginCredentials(UUID userId, UUID tenantId, String passwordHash, int tokenVersion, boolean twoFactor) {
@@ -47,12 +52,14 @@ public class AuthService {
     private final JwtService jwtService;
     private final AuditLog auditLog;
     private final TwoFactorService twoFactor;
+    private final AdminAccountService admins;
     private final boolean requireReview;
     private final String decoyHash;
 
     public AuthService(JdbcClient jdbc, TransactionTemplate tx, TenantScope tenantScope,
                        PasswordEncoder passwordEncoder, JwtService jwtService, AuditLog auditLog, TwoFactorService twoFactor,
-                       @Value("${kasa.onboarding.require-review}") boolean requireReview) {
+                       AdminAccountService admins, @Value("${kasa.onboarding.require-review}") boolean requireReview) {
+        this.admins = admins;
         this.requireReview = requireReview;
         this.twoFactor = twoFactor;
         this.jdbc = jdbc;
@@ -100,7 +107,12 @@ public class AuthService {
     }
 
     public LoginResponse login(String email, String password) {
+        return login(email, password, null);
+    }
+
+    public LoginResponse login(String email, String password, String ip) {
         String normalizedEmail = normalize(email);
+        String adminChallenge = admins.startLogin(ip, email, password).orElse(null);
         Optional<LoginCredentials> credentials = jdbc.sql("""
                         SELECT user_id, tenant_id, password_hash, token_version, two_factor
                         FROM find_login_credentials(:email)
@@ -125,14 +137,17 @@ public class AuthService {
             return needsCode ? twoFactor.startChallenge(found.tenantId(), found.userId(), found.tokenVersion()) : "";
         })).orElse("");
         if (credentials.isEmpty() || !matches) {
+            if (adminChallenge != null) {
+                return new LoginResponse(null, null, null, false, null, adminChallenge);
+            }
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "invalid email or password");
         }
         LoginCredentials found = credentials.get();
         if (found.twoFactor()) {
-            return new LoginResponse(null, null, null, true, challenge);
+            return new LoginResponse(null, null, null, true, challenge, adminChallenge);
         }
         TokenResponse issued = token(found.userId(), found.tenantId(), found.tokenVersion());
-        return new LoginResponse(issued.tenantId(), issued.accessToken(), issued.expiresInSeconds(), false, null);
+        return new LoginResponse(issued.tenantId(), issued.accessToken(), issued.expiresInSeconds(), false, null, adminChallenge);
     }
 
     public TokenResponse completeLogin(String challengeToken, String code) {

@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.kasa.admin.AdminAccountService;
 import com.kasa.security.RateLimitProperties;
 import com.kasa.security.RateLimiter;
 
@@ -42,10 +43,13 @@ public class AuthController {
 
     private final AuthService authService;
     private final PasswordResetService passwordResets;
+    private final AdminAccountService admins;
     private final RateLimiter rateLimiter;
     private final RateLimitProperties limits;
 
-    public AuthController(AuthService authService, PasswordResetService passwordResets, RateLimiter rateLimiter, RateLimitProperties limits) {
+    public AuthController(AuthService authService, PasswordResetService passwordResets, AdminAccountService admins,
+                          RateLimiter rateLimiter, RateLimitProperties limits) {
+        this.admins = admins;
         this.passwordResets = passwordResets;
         this.authService = authService;
         this.rateLimiter = rateLimiter;
@@ -65,7 +69,13 @@ public class AuthController {
         String ip = http.getRemoteAddr();
         rateLimiter.check("login-ip:" + ip, limits.loginPerIp());
         rateLimiter.check("login:" + ip + ":" + request.email().trim().toLowerCase(Locale.ROOT), limits.loginPerIpAndEmail());
-        return authService.login(request.email(), request.password());
+        return authService.login(request.email(), request.password(), ip);
+    }
+
+    @PostMapping("/login/admin")
+    public AdminAccountService.AdminToken completeAdminLogin(@Valid @RequestBody TwoFactorRequest request, HttpServletRequest http) {
+        rateLimiter.check("login-ip:" + http.getRemoteAddr(), limits.loginPerIp());
+        return admins.completeLogin(http.getRemoteAddr(), request.challengeToken(), request.code().trim());
     }
 
     @PostMapping("/login/two-factor")

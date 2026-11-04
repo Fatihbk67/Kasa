@@ -47,6 +47,7 @@ public class AdminAccountService {
     private static final int AUDIT_PAGE = 100;
     private static final String ISSUER = "Kasa Yonetim";
 
+    private final java.security.SecureRandom random = new java.security.SecureRandom();
     private final JdbcClient jdbc;
     private final TransactionTemplate tx;
     private final PasswordEncoder passwordEncoder;
@@ -95,22 +96,72 @@ public class AdminAccountService {
                 .list();
     }
 
-    /** One step rather than two: there is no reason to tell someone guessing that the password alone was right. */
-    public AdminToken login(String ip, String email, String password, String code) {
+    /**
+     * The password step of the shared login page. Always pays for one hash comparison, so a merchant's login is
+     * not faster or slower depending on whether their email also belongs to an administrator. A wrong password is
+     * logged only for a real account: every merchant login passes through here too.
+     */
+    public Optional<String> startLogin(String ip, String email, String password) {
         String normalized = AuthService.normalize(email);
         Optional<Stored> found = find(normalized);
         String hash = found.map(Stored::passwordHash).orElse(decoyHash);
         boolean passwordOk = AuthService.fitsBcrypt(password) && passwordEncoder.matches(password, hash);
-        if (found.isEmpty() || !passwordOk) {
-            tx.executeWithoutResult(status -> audit(normalized, ip, "ADMIN_LOGIN_FAILED", null));
-            throw rejected();
+        if (found.isEmpty()) {
+            return Optional.empty();
         }
-        UUID id = found.get().id();
-        Integer version = tx.execute(status -> checkCode(id, code, normalized, ip));
+        if (!passwordOk) {
+            tx.executeWithoutResult(status -> audit(normalized, ip, "ADMIN_LOGIN_FAILED", null));
+            return Optional.empty();
+        }
+        byte[] secret = new byte[32];
+        random.nextBytes(secret);
+        String token = java.util.HexFormat.of().formatHex(secret);
+        tx.executeWithoutResult(status -> jdbc.sql("""
+                        INSERT INTO admin_login_challenges (token_hash, admin_id, token_version, expires_at)
+                        VALUES (:hash, :id, :version, now() + interval '5 minutes')
+                        """)
+                .param("hash", com.kasa.common.Hashes.sha256Hex(token))
+                .param("id", found.get().id())
+                .param("version", found.get().tokenVersion())
+                .update());
+        return Optional.of(token);
+    }
+
+    /** The code step. A wrong code leaves the challenge usable, so a typo does not send the person back to the start. */
+    public AdminToken completeLogin(String ip, String challengeToken, String code) {
+        String hash = com.kasa.common.Hashes.sha256Hex(challengeToken);
+        record Challenge(UUID adminId, int tokenVersion, String email) {
+        }
+        Challenge challenge = jdbc.sql("""
+                        SELECT c.admin_id, c.token_version, a.email
+                        FROM admin_login_challenges c JOIN platform_admins a ON a.id = c.admin_id
+                        WHERE c.token_hash = :hash AND c.used_at IS NULL AND c.expires_at > now() AND a.disabled_at IS NULL
+                        """)
+                .param("hash", hash)
+                .query((rs, rowNum) -> new Challenge(rs.getObject("admin_id", UUID.class), rs.getInt("token_version"), rs.getString("email")))
+                .optional()
+                .orElseThrow(AdminAccountService::rejected);
+        Integer version = tx.execute(status -> {
+            // Marked used under the admin's lock, so the same code sent twice at once opens one session.
+            int claimed = jdbc.sql("UPDATE admin_login_challenges SET used_at = now() WHERE token_hash = :hash AND used_at IS NULL")
+                    .param("hash", hash)
+                    .update();
+            if (claimed == 0) {
+                return null;
+            }
+            Integer passed = checkCode(challenge.adminId(), code, challenge.email(), ip);
+            if (passed == null || passed != challenge.tokenVersion()) {
+                jdbc.sql("UPDATE admin_login_challenges SET used_at = NULL WHERE token_hash = :hash")
+                        .param("hash", hash)
+                        .update();
+                return null;
+            }
+            return passed;
+        });
         if (version == null) {
             throw rejected();
         }
-        return new AdminToken(jwtService.issueAdmin(id, version), jwtService.ttlSeconds());
+        return new AdminToken(jwtService.issueAdmin(challenge.adminId(), version), jwtService.ttlSeconds());
     }
 
     /** Raising the token version ends the account's open sessions at once. */

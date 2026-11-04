@@ -1,5 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
-import { Link, Navigate, useParams } from 'react-router-dom';
+import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
+import { asAdminSession, setAdminToken } from '../adminApi';
 import { api, ApiError } from '../api';
 import { useAuth } from '../auth';
 import { ErrorNote } from '../components';
@@ -12,6 +13,7 @@ interface LoginResponse {
   accessToken: string | null;
   twoFactorRequired: boolean;
   challengeToken: string | null;
+  adminChallengeToken: string | null;
 }
 
 function AuthCard({ title, children }: { title: string; children: ReactNode }) {
@@ -36,24 +38,38 @@ export function Login() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const [challenge, setChallenge] = useState<string | null>(null);
+  const navigate = useNavigate();
+  const [response, setResponse] = useState<LoginResponse | null>(null);
+  const [step, setStep] = useState<'password' | 'choose' | 'merchant-code' | 'admin-code'>('password');
   const [code, setCode] = useState('');
 
   if (isSignedIn) {
     return <Navigate to="/" replace />;
   }
 
+  const enterMerchant = (result: LoginResponse) => {
+    if (result.twoFactorRequired) {
+      setStep('merchant-code');
+    } else {
+      signIn(result.accessToken!);
+    }
+  };
+
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setBusy(true);
     setError(null);
     try {
-      const response = await api<LoginResponse>('/auth/login', { method: 'POST', body: { email, password } });
-      if (response.twoFactorRequired) {
-        setChallenge(response.challengeToken);
-        setBusy(false);
+      const result = await api<LoginResponse>('/auth/login', { method: 'POST', body: { email, password } });
+      setResponse(result);
+      setBusy(false);
+      const merchant = result.accessToken !== null || result.twoFactorRequired;
+      if (result.adminChallengeToken && merchant) {
+        setStep('choose');
+      } else if (result.adminChallengeToken) {
+        setStep('admin-code');
       } else {
-        signIn(response.accessToken!);
+        enterMerchant(result);
       }
     } catch (e) {
       setError(e instanceof ApiError && e.status === 401 ? 'E-posta veya parola hatalı.' : (e as Error).message);
@@ -66,7 +82,19 @@ export function Login() {
     setBusy(true);
     setError(null);
     try {
-      const { accessToken } = await api<TokenResponse>('/auth/login/two-factor', { method: 'POST', body: { challengeToken: challenge, code } });
+      if (step === 'admin-code') {
+        const { accessToken } = await api<TokenResponse>('/auth/login/admin', {
+          method: 'POST',
+          body: { challengeToken: response!.adminChallengeToken, code },
+        });
+        setAdminToken(asAdminSession(accessToken));
+        navigate('/admin');
+        return;
+      }
+      const { accessToken } = await api<TokenResponse>('/auth/login/two-factor', {
+        method: 'POST',
+        body: { challengeToken: response!.challengeToken, code },
+      });
       signIn(accessToken);
     } catch (e) {
       if (e instanceof ApiError && e.status === 429) {
@@ -79,14 +107,28 @@ export function Login() {
     }
   };
 
-  if (challenge) {
+  if (step === 'choose') {
     return (
-      <AuthCard title="Doğrulama kodu">
+      <AuthCard title="Nereye gitmek istiyorsunuz?">
+        <p className="muted">Bu e-posta hem bir işletmeye hem de platform yönetimine ait.</p>
+        <div className="stack">
+          <button type="button" className="button button-primary button-block" onClick={() => enterMerchant(response!)}>İşletme paneli</button>
+          <button type="button" className="button button-block" onClick={() => setStep('admin-code')}>Platform yönetimi</button>
+        </div>
+      </AuthCard>
+    );
+  }
+
+  if (step === 'merchant-code' || step === 'admin-code') {
+    return (
+      <AuthCard title={step === 'admin-code' ? 'Yönetici doğrulama kodu' : 'Doğrulama kodu'}>
         <form onSubmit={submitCode} className="stack">
           <label className="field">
             Kod
             <input required autoFocus autoComplete="one-time-code" maxLength={32} value={code} onChange={(e) => setCode(e.target.value)} />
-            <span className="hint">Doğrulama uygulamanızdaki 6 haneli kod veya bir kurtarma kodu.</span>
+            <span className="hint">
+              {step === 'admin-code' ? 'Doğrulama uygulamanızdaki 6 haneli yönetici kodu.' : 'Doğrulama uygulamanızdaki 6 haneli kod veya bir kurtarma kodu.'}
+            </span>
           </label>
           <ErrorNote message={error} />
           <button type="submit" className="button button-primary button-block" disabled={busy}>

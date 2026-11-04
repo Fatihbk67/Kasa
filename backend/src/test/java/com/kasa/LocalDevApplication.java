@@ -27,6 +27,7 @@ import com.kasa.dispute.DisputeService;
 import com.kasa.payment.PaymentService;
 import com.kasa.payment.PaymentViews.OperationResult;
 import com.kasa.settlement.SettlementService;
+import com.kasa.team.RoleRequestService;
 import com.kasa.team.TeamService;
 
 import io.zonky.test.db.postgres.embedded.EmbeddedPostgres;
@@ -106,6 +107,9 @@ public final class LocalDevApplication {
         TeamService team = context.getBean(TeamService.class);
         UUID ownerId = superuser.sql("SELECT id FROM users WHERE tenant_id = :t").param("t", tenantId).query(UUID.class).single();
         team.accept(team.invite(tenantId, ownerId, "izleyici@kasa.test", "VIEWER").token(), DEMO_PASSWORD);
+        // A request waiting for the platform administrator, so the admin panel's requests tab has something to decide.
+        UUID viewerId = superuser.sql("SELECT id FROM users WHERE email = 'izleyici@kasa.test'").query(UUID.class).single();
+        context.getBean(RoleRequestService.class).submit(tenantId, viewerId, "ADMIN", "Muhasebeyi ben yürütüyorum, iade yapabilmem gerekiyor.");
         team.invite(tenantId, ownerId, "yeni-yonetici@kasa.test", "ADMIN");
     }
 
