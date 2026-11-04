@@ -21,6 +21,7 @@ import org.springframework.web.server.ResponseStatusException;
 import com.kasa.audit.AuditLog;
 import com.kasa.auth.AuthService;
 import com.kasa.common.Hashes;
+import com.kasa.notification.NotificationService;
 import com.kasa.tenant.TenantScope;
 
 @Service
@@ -62,13 +63,15 @@ public class TeamService {
     private final SecureRandom random = new SecureRandom();
     private final JdbcClient jdbc;
     private final TransactionTemplate tx;
+    private final NotificationService notifications;
     private final TenantScope tenantScope;
     private final PasswordEncoder passwordEncoder;
     private final AuthService authService;
     private final AuditLog auditLog;
 
     public TeamService(JdbcClient jdbc, TransactionTemplate tx, TenantScope tenantScope, PasswordEncoder passwordEncoder,
-                       AuthService authService, AuditLog auditLog) {
+                       AuthService authService, AuditLog auditLog, NotificationService notifications) {
+        this.notifications = notifications;
         this.jdbc = jdbc;
         this.tx = tx;
         this.tenantScope = tenantScope;
@@ -203,6 +206,8 @@ public class TeamService {
                         .single();
                 auditLog.record(invitation.tenantId(), AuditLog.Actor.user(id, invitation.email()), "MEMBER_JOINED", "USER", id,
                         Map.of("role", invitation.role()));
+                notifications.toRoles(invitation.tenantId(), NotificationService.OWNERS, "MEMBER_JOINED", "Ekibe yeni üye katıldı",
+                        invitation.email() + " davetinizi kabul etti.", "/team");
                 return id;
             });
             return authService.token(userId, invitation.tenantId(), 1);

@@ -81,6 +81,7 @@ class MerchantOnboardingApiTest extends PostgresIntegrationTest {
 
     @Test
     void approvalOpensPayments() {
+        submitApplication();
         assertThat(admin("approve", null)).isEqualTo(204);
 
         assertThat(me()).containsEntry("tenantStatus", "ACTIVE");
@@ -89,6 +90,7 @@ class MerchantOnboardingApiTest extends PostgresIntegrationTest {
 
     @Test
     void suspendingStopsNewPaymentsAndPayoutsButNotRefunds() {
+        submitApplication();
         admin("approve", null);
         TestMerchant merchant = asMerchant();
         UUID payment = merchant.capturedPayment(10_000);
@@ -115,6 +117,7 @@ class MerchantOnboardingApiTest extends PostgresIntegrationTest {
     @Test
     void onlyAllowedStepsAreAccepted() {
         assertThat(admin("reactivate", null)).isEqualTo(409);
+        submitApplication();
         admin("approve", null);
         assertThat(admin("approve", null)).isEqualTo(409);
         assertThatThrownBy(() -> owner.sql("UPDATE tenants SET status = 'PENDING' WHERE id = :id").param("id", tenantId).update())
@@ -152,6 +155,7 @@ class MerchantOnboardingApiTest extends PostgresIntegrationTest {
 
     @Test
     void aSuspendedMerchantIsNotChargedOnASchedule() {
+        submitApplication();
         admin("approve", null);
         owner.sql("UPDATE tenants SET status = 'SUSPENDED' WHERE id = :id").param("id", tenantId).update();
 
@@ -163,6 +167,36 @@ class MerchantOnboardingApiTest extends PostgresIntegrationTest {
     void businessesFromBeforeReviewsExistedStayActive() {
         assertThat(owner.sql("SELECT column_default FROM information_schema.columns WHERE table_name = 'tenants' AND column_name = 'status'")
                 .query(String.class).single()).contains("ACTIVE");
+    }
+
+    @Test
+    void nobodyIsApprovedWithoutAnApplication() {
+        assertThat(admin("approve", null)).isEqualTo(409);
+        assertThat(me()).containsEntry("tenantStatus", "PENDING");
+
+        submitApplication();
+
+        assertThat(admin("approve", null)).isEqualTo(204);
+    }
+
+    @Test
+    void theReviewListShowsWhetherAnApplicationArrived() {
+        assertThat(listed().get("profileSubmittedAt")).isNull();
+
+        submitApplication();
+
+        assertThat(listed().get("profileSubmittedAt")).isNotNull();
+    }
+
+    private Map<String, Object> listed() {
+        List<Map<String, Object>> waiting = client.get().uri("/api/v1/admin/merchants?status=PENDING").header("X-Admin-Token", ADMIN)
+                .retrieve().body(List.class);
+        return waiting.stream().filter(merchant -> tenantId.toString().equals(merchant.get("id"))).findFirst().orElseThrow();
+    }
+
+    private void submitApplication() {
+        assertThat(status(client.put().uri("/api/v1/settings/business-profile").header("Authorization", bearer())
+                .contentType(MediaType.APPLICATION_JSON).body(MerchantProfileApiTest.validApplication()))).isEqualTo(200);
     }
 
     private TestMerchant asMerchant() {

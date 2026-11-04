@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { adminApi, getAdminToken, setAdminToken } from '../adminApi';
 import { ApiError } from '../api';
 import { EmptyState, ErrorNote, FormDialog, formatDate, formatDateTime, Loading, OneTimeSecret, PageHeader } from '../components';
 import { formatMoney } from '../money';
-import type { PlatformOverview, ReconciliationDetail, ReconciliationRun } from '../types';
+import { formatIban } from '../identifiers';
+import type { BusinessProfile, PlatformOverview, ReconciliationDetail, ReconciliationRun } from '../types';
+import { BUSINESS_TYPES, bankName, SECTORS } from './Onboarding';
 import { useFetch } from '../useFetch';
 
 const KIND_LABELS: Record<string, string> = {
@@ -108,6 +110,7 @@ const ADMIN_ACTIONS: Record<string, string> = {
   MERCHANT_APPROVED: 'İşletme onaylandı',
   MERCHANT_SUSPENDED: 'İşletme askıya alındı',
   MERCHANT_REACTIVATED: 'İşletme yeniden açıldı',
+  MERCHANT_APPLICATION_VIEWED: 'Başvuru görüntülendi',
   USER_ROLE_CHANGED: 'Kullanıcı rolü değişti',
   USER_DISABLED: 'Kullanıcı kapatıldı',
   USER_ENABLED: 'Kullanıcı açıldı',
@@ -128,6 +131,7 @@ interface MerchantRow {
   memberCount: number;
   paymentCount: number;
   captured: number;
+  profileSubmittedAt: string | null;
 }
 
 const MERCHANT_STATUS: Record<MerchantRow['status'], { label: string; tone: string }> = {
@@ -136,10 +140,67 @@ const MERCHANT_STATUS: Record<MerchantRow['status'], { label: string; tone: stri
   SUSPENDED: { label: 'Askıda', tone: 'danger' },
 };
 
+/** The full application, IBAN included. Opening it is recorded in the platform log, since it shows personal data. */
+function ApplicationDialog({ merchant, onClose, onApprove }: { merchant: MerchantRow; onClose: () => void; onApprove: () => Promise<void> }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const application = useFetch(() => adminApi<BusinessProfile>(`/merchants/${merchant.id}/application`), [merchant.id]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const profile = application.data;
+
+  useEffect(() => {
+    dialog.current?.showModal();
+  }, []);
+
+  const approve = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await onApprove();
+    } catch (e) {
+      setError((e as Error).message);
+      setBusy(false);
+    }
+  };
+
+  return (
+    <dialog ref={dialog} className="dialog dialog-wide" onClose={onClose}>
+      <h2>{merchant.name} · Başvuru</h2>
+      <ErrorNote message={application.error} />
+      {application.loading && !profile ? <Loading /> : profile && (
+        <>
+          <p className="hint">Gönderildi: {formatDateTime(profile.submittedAt)} · Sahip: {merchant.ownerEmail ?? '—'}</p>
+          <dl className="details">
+            <div><dt>İşletme türü</dt><dd>{BUSINESS_TYPES[profile.businessType].label}</dd></div>
+            <div><dt>Yasal unvan</dt><dd>{profile.legalName}</dd></div>
+            <div><dt>{profile.businessType === 'COMPANY' ? 'Vergi kimlik no' : 'T.C. kimlik no'}</dt><dd>{profile.taxId}</dd></div>
+            <div><dt>Vergi dairesi</dt><dd>{profile.taxOffice}</dd></div>
+            <div><dt>Sektör</dt><dd>{SECTORS[profile.sector]}</dd></div>
+            <div><dt>Telefon</dt><dd>{profile.phone}</dd></div>
+            <div><dt>Web sitesi</dt><dd>{profile.website ?? '—'}</dd></div>
+            <div><dt>Şehir</dt><dd>{profile.city}</dd></div>
+            <div className="details-id"><dt>Adres</dt><dd>{profile.address}</dd></div>
+            <div className="details-id"><dt>IBAN · {bankName(profile.bankCode)}</dt><dd><code>{formatIban(profile.iban)}</code></dd></div>
+          </dl>
+          <p className="note note-warning">Onaydan önce IBAN sahibinin yasal unvanla aynı olduğunu ve vergi numarasının etkin olduğunu doğrulayın.</p>
+        </>
+      )}
+      <ErrorNote message={error} />
+      <div className="dialog-actions">
+        <button type="button" className="button" onClick={onClose} disabled={busy}>Kapat</button>
+        {merchant.status === 'PENDING' && profile && (
+          <button type="button" className="button button-primary" onClick={approve} disabled={busy}>{busy ? 'İşleniyor…' : 'Başvuruyu onayla'}</button>
+        )}
+      </div>
+    </dialog>
+  );
+}
+
 function Merchants({ onChanged }: { onChanged: () => void }) {
   const [filter, setFilter] = useState<'' | MerchantRow['status']>('PENDING');
   const merchants = useFetch(() => adminApi<MerchantRow[]>(`/merchants${filter ? `?status=${filter}` : ''}`), [filter]);
   const [suspending, setSuspending] = useState<MerchantRow | null>(null);
+  const [viewing, setViewing] = useState<MerchantRow | null>(null);
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
 
@@ -196,6 +257,7 @@ function Merchants({ onChanged }: { onChanged: () => void }) {
                     {merchant.name}
                     <span className="hint row-hint">{merchant.ownerEmail ?? '—'} · {merchant.memberCount} üye</span>
                     {merchant.statusReason && <span className="hint row-hint">Gerekçe: {merchant.statusReason}</span>}
+                    <span className="hint row-hint">{merchant.profileSubmittedAt ? `Başvuru: ${formatDateTime(merchant.profileSubmittedAt)}` : 'Başvuru formu henüz gönderilmedi'}</span>
                   </td>
                   <td>
                     <span className={`badge badge-${MERCHANT_STATUS[merchant.status].tone}`}>{MERCHANT_STATUS[merchant.status].label}</span>
@@ -208,7 +270,12 @@ function Merchants({ onChanged }: { onChanged: () => void }) {
                   <td className="hide-narrow muted">{formatDateTime(merchant.createdAt)}</td>
                   <td className="numeric">
                     <span className="row-actions">
-                      {merchant.status === 'PENDING' && <button type="button" className="button button-small button-primary" onClick={() => act(merchant, 'approve')}>Onayla</button>}
+                      {merchant.profileSubmittedAt && (
+                        <button type="button" className={merchant.status === 'PENDING' ? 'button button-small button-primary' : 'button button-small'}
+                          onClick={() => setViewing(merchant)}>
+                          {merchant.status === 'PENDING' ? 'İncele' : 'Başvuru'}
+                        </button>
+                      )}
                       {merchant.status === 'SUSPENDED' && <button type="button" className="button button-small" onClick={() => act(merchant, 'reactivate')}>Yeniden aç</button>}
                       {merchant.status !== 'SUSPENDED' && (
                         <button type="button" className="button button-small" onClick={() => setSuspending(merchant)}>
@@ -223,6 +290,16 @@ function Merchants({ onChanged }: { onChanged: () => void }) {
           </table>
         </div>
       ) : !merchants.error && <div className="card"><EmptyState title={filter === 'PENDING' ? 'Onay bekleyen işletme yok' : 'İşletme yok'} /></div>}
+
+      {viewing && (
+        <ApplicationDialog merchant={viewing} onClose={() => setViewing(null)}
+          onApprove={async () => {
+            await adminApi(`/merchants/${viewing.id}/approve`, 'POST');
+            setViewing(null);
+            merchants.reload();
+            onChanged();
+          }} />
+      )}
 
       {suspending && (
         <FormDialog title={suspending.status === 'PENDING' ? 'Başvuruyu reddet' : 'İşletmeyi askıya al'} submitLabel="Onayla" danger

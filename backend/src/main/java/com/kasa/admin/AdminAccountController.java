@@ -72,6 +72,14 @@ public class AdminAccountController {
         return merchants.list(status);
     }
 
+    @GetMapping("/api/v1/admin/merchants/{id}/application")
+    public org.springframework.http.ResponseEntity<com.kasa.onboarding.MerchantProfileService.Profile> application(
+            Authentication authentication, @PathVariable UUID id, HttpServletRequest http) {
+        return merchants.application(authentication.getName(), http.getRemoteAddr(), id)
+                .map(org.springframework.http.ResponseEntity::ok)
+                .orElse(org.springframework.http.ResponseEntity.notFound().build());
+    }
+
     @PostMapping("/api/v1/admin/merchants/{id}/approve")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void approve(Authentication authentication, @PathVariable UUID id, HttpServletRequest http) {

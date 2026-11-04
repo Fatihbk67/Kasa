@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { Link, NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from './auth';
-import { canOperate, MeProvider, ROLE_LABELS, useMe } from './me';
+import { canOperate, isOwner, MeProvider, ROLE_LABELS, useMe } from './me';
+import { NotificationBell } from './Notifications';
 import { ToastProvider } from './toast';
 
 interface NavItem {
@@ -9,6 +10,7 @@ interface NavItem {
   label: string;
   end?: boolean;
   operatorOnly?: boolean;
+  ownerOnly?: boolean;
 }
 
 const NAV: { title: string | null; items: NavItem[] }[] = [
@@ -39,6 +41,7 @@ const NAV: { title: string | null; items: NavItem[] }[] = [
       { to: '/developers', label: 'Geliştiriciler', operatorOnly: true },
       { to: '/team', label: 'Ekip', operatorOnly: true },
       { to: '/audit', label: 'Denetim günlüğü', operatorOnly: true },
+      { to: '/onboarding', label: 'İşletme başvurusu', ownerOnly: true },
       { to: '/settings', label: 'Ayarlar' },
     ],
   },
@@ -55,6 +58,7 @@ function Shell() {
       <aside className={menuOpen ? 'sidebar sidebar-open' : 'sidebar'}>
         <div className="sidebar-top">
           <div className="brand">Kasa</div>
+          <NotificationBell />
           <button type="button" className="button button-small menu-toggle" aria-expanded={menuOpen} aria-controls="main-menu"
             onClick={() => setMenuOpen(!menuOpen)}>
             {menuOpen ? 'Kapat' : 'Menü'}
@@ -62,7 +66,7 @@ function Shell() {
         </div>
         <nav id="main-menu" aria-label="Ana menü" className="sidebar-menu">
           {NAV.map((group) => {
-            const items = group.items.filter((item) => !item.operatorOnly || canOperate(me));
+            const items = group.items.filter((item) => (!item.operatorOnly || canOperate(me)) && (!item.ownerOnly || isOwner(me)));
             if (items.length === 0) {
               return null;
             }
@@ -89,6 +93,7 @@ function Shell() {
         {me?.tenantStatus === 'PENDING' && (
           <p className="note note-warning" role="status">
             Hesabınız platform onayı bekliyor. Bu sürede paneli gezebilir, ekibinizi ve ayarlarınızı hazırlayabilirsiniz; onaydan sonra ödeme alabilirsiniz.
+            {isOwner(me) && <> <Link to="/onboarding">İşletme başvurusuna git</Link></>}
           </p>
         )}
         {me?.tenantStatus === 'SUSPENDED' && (

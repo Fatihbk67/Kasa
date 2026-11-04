@@ -144,6 +144,13 @@ public class LoadTest {
                         + "\",\"password\":\"load-test-password-1\"}")));
         String token = find(registered.body(), "\"accessToken\":\"([^\"]+)\"");
         String tenantId = find(registered.body(), "\"tenantId\":\"([^\"]+)\"");
+        // Approval needs an application. The sample identity number and IBAN are published test values.
+        send(HttpRequest.newBuilder(URI.create(baseUrl + "/api/v1/settings/business-profile"))
+                .header("Authorization", "Bearer " + token)
+                .header("Content-Type", "application/json")
+                .PUT(HttpRequest.BodyPublishers.ofString("{\"businessType\":\"INDIVIDUAL\",\"legalName\":\"Load\",\"taxId\":\"10000000146\","
+                        + "\"taxOffice\":\"Test\",\"sector\":\"OTHER\",\"phone\":\"0\",\"address\":\"Test\",\"city\":\"Test\","
+                        + "\"iban\":\"TR330006100519786457841326\"}")));
         send(HttpRequest.newBuilder(URI.create(baseUrl + "/api/v1/admin/merchants/" + tenantId + "/approve"))
                 .header("X-Admin-Token", adminToken)
                 .POST(HttpRequest.BodyPublishers.noBody()));

@@ -3,6 +3,7 @@ package com.kasa.admin;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
@@ -13,6 +14,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.kasa.audit.AuditLog;
 import com.kasa.auth.Mailer;
+import com.kasa.notification.NotificationService;
+import com.kasa.onboarding.MerchantProfileService;
 import com.kasa.tenant.TenantScope;
 
 /**
@@ -24,7 +27,7 @@ public class MerchantReviewService {
 
     public record Merchant(UUID id, String name, String status, String statusReason, OffsetDateTime createdAt,
                            OffsetDateTime reviewedAt, String reviewedBy, String ownerEmail, long memberCount,
-                           long paymentCount, long captured) {
+                           long paymentCount, long captured, OffsetDateTime profileSubmittedAt) {
     }
 
     private record Change(String to, List<String> from, String auditAction) {
@@ -41,15 +44,20 @@ public class MerchantReviewService {
     private final AuditLog auditLog;
     private final AdminAccountService accounts;
     private final Mailer mailer;
+    private final MerchantProfileService profiles;
+    private final NotificationService notifications;
 
     public MerchantReviewService(JdbcClient jdbc, TransactionTemplate tx, TenantScope tenantScope, AuditLog auditLog,
-                                 AdminAccountService accounts, Mailer mailer) {
+                                 AdminAccountService accounts, Mailer mailer, MerchantProfileService profiles,
+                                 NotificationService notifications) {
         this.jdbc = jdbc;
         this.tx = tx;
         this.tenantScope = tenantScope;
         this.auditLog = auditLog;
         this.accounts = accounts;
         this.mailer = mailer;
+        this.profiles = profiles;
+        this.notifications = notifications;
     }
 
     public List<Merchant> list(String status) {
@@ -67,8 +75,16 @@ public class MerchantReviewService {
                         rs.getString("owner_email"),
                         rs.getLong("member_count"),
                         rs.getLong("payment_count"),
-                        rs.getLong("captured")))
+                        rs.getLong("captured"),
+                        rs.getObject("profile_submitted_at", OffsetDateTime.class)))
                 .list();
+    }
+
+    /** The full application, IBAN included. Looking at it is itself recorded, since it shows personal data. */
+    public Optional<MerchantProfileService.Profile> application(String actor, String ip, UUID tenantId) {
+        Optional<MerchantProfileService.Profile> profile = profiles.forReview(tenantId);
+        profile.ifPresent(found -> accounts.audit(actor, ip, "MERCHANT_APPLICATION_VIEWED", found.legalName()));
+        return profile;
     }
 
     public void approve(String actor, String ip, UUID tenantId) {
@@ -89,6 +105,10 @@ public class MerchantReviewService {
         }
         Updated updated = tx.execute(status -> {
             tenantScope.apply(tenantId);
+            // Nobody is approved blind: without an application there is no one to pay out to and nothing to review.
+            if (change == APPROVE && !profiles.isSubmitted(tenantId)) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "the merchant has not submitted a business application yet");
+            }
             String name = jdbc.sql("""
                             UPDATE tenants
                             SET status = :to, status_reason = :reason, reviewed_at = now(), reviewed_by = :actor
@@ -106,6 +126,14 @@ public class MerchantReviewService {
             auditLog.record(tenantId, new AuditLog.Actor("SYSTEM", null, "Platform yönetimi"), change.auditAction(), "TENANT", tenantId,
                     reason == null ? Map.of() : Map.of("reason", reason));
             accounts.audit(actor, ip, change.auditAction(), name);
+            if (change == SUSPEND) {
+                notifications.toRoles(tenantId, NotificationService.EVERYONE, change.auditAction(), "Hesabınız askıya alındı",
+                        "Yeni ödeme ve aktarım alınamaz. Gerekçe: " + reason, "/");
+            } else {
+                notifications.toRoles(tenantId, NotificationService.EVERYONE, change.auditAction(),
+                        change == APPROVE ? "Başvurunuz onaylandı" : "Hesabınız yeniden açıldı",
+                        "Artık ödeme alabilirsiniz.", "/");
+            }
             String owner = jdbc.sql("SELECT email FROM users WHERE role = 'OWNER' AND disabled_at IS NULL ORDER BY created_at LIMIT 1")
                     .query(String.class)
                     .optional()

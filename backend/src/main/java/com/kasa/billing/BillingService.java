@@ -29,6 +29,7 @@ import com.kasa.payment.OperationStatus;
 import com.kasa.payment.PaymentService;
 import com.kasa.payment.PaymentStatus;
 import com.kasa.payment.PaymentViews.OperationResult;
+import com.kasa.notification.NotificationService;
 import com.kasa.tenant.TenantScope;
 import com.kasa.webhook.WebhookEvents;
 
@@ -106,6 +107,7 @@ public class BillingService {
 
     private final JdbcClient jdbc;
     private final TransactionTemplate tx;
+    private final NotificationService notifications;
     private final TenantScope tenantScope;
     private final PaymentService payments;
     private final AuditLog auditLog;
@@ -114,7 +116,8 @@ public class BillingService {
     private final BillingProperties properties;
 
     public BillingService(JdbcClient jdbc, TransactionTemplate tx, TenantScope tenantScope, PaymentService payments,
-                          AuditLog auditLog, WebhookEvents webhookEvents, BusinessMetrics metrics, BillingProperties properties) {
+                          AuditLog auditLog, WebhookEvents webhookEvents, BusinessMetrics metrics, BillingProperties properties, NotificationService notifications) {
+        this.notifications = notifications;
         this.jdbc = jdbc;
         this.tx = tx;
         this.tenantScope = tenantScope;
@@ -687,6 +690,8 @@ public class BillingService {
         if (retriesLeft) {
             if (subscription.status().equals("ACTIVE")) {
                 setStatus(subscription.id(), "PAST_DUE");
+                notifications.toRoles(tenantId, NotificationService.OPERATORS, "SUBSCRIPTION_PAST_DUE", "Abonelik tahsilatı başarısız",
+                        "Bir abonelik ödemesi alınamadı; otomatik olarak yeniden denenecek.", "/subscriptions");
                 webhookEvents.publish(tenantId, "subscription.past_due", Map.of("id", subscription.id()));
             }
         } else {

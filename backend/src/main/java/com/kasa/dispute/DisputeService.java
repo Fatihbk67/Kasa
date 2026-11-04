@@ -25,6 +25,7 @@ import com.kasa.ledger.LedgerService;
 import com.kasa.ledger.NewJournalEntry;
 import com.kasa.ledger.Posting;
 import com.kasa.observability.BusinessMetrics;
+import com.kasa.notification.NotificationService;
 import com.kasa.tenant.TenantScope;
 import com.kasa.webhook.WebhookEvents;
 
@@ -64,6 +65,7 @@ public class DisputeService {
 
     private final JdbcClient jdbc;
     private final TransactionTemplate tx;
+    private final NotificationService notifications;
     private final TenantScope tenantScope;
     private final LedgerService ledger;
     private final BankGateway bank;
@@ -74,7 +76,8 @@ public class DisputeService {
 
     public DisputeService(JdbcClient jdbc, TransactionTemplate tx, TenantScope tenantScope, LedgerService ledger,
                           BankGateway bank, WebhookEvents webhookEvents, BusinessMetrics metrics, AuditLog auditLog,
-                          DisputeProperties properties) {
+                          DisputeProperties properties, NotificationService notifications) {
+        this.notifications = notifications;
         this.jdbc = jdbc;
         this.tx = tx;
         this.tenantScope = tenantScope;
@@ -138,6 +141,11 @@ public class DisputeService {
 
             auditLog.record(tenantId, AuditLog.Actor.SYSTEM, "DISPUTE_OPENED", "DISPUTE", disputeId,
                     Map.of("amount", amount, "currency", payment.currency(), "reason", reason));
+            notifications.toRoles(tenantId, NotificationService.OPERATORS, "DISPUTE_OPENED", "Yeni itiraz açıldı",
+                    com.kasa.common.MoneyText.format(amount, payment.currency()) + " tutarında itiraz. Son yanıt: "
+                            + respondBy.atZoneSameInstant(java.time.ZoneId.of("Europe/Istanbul")).format(
+                                    java.time.format.DateTimeFormatter.ofPattern("d MMMM yyyy", java.util.Locale.forLanguageTag("tr-TR"))) + ".",
+                    "/disputes");
             DisputeView view = find(disputeId);
             webhookEvents.publish(tenantId, "dispute.opened", view);
             metrics.countAfterCommit("kasa.disputes", "status", "OPENED");

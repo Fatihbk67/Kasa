@@ -14,6 +14,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.kasa.audit.AuditLog;
 import com.kasa.auth.Mailer;
+import com.kasa.notification.NotificationService;
 import com.kasa.tenant.TenantScope;
 
 /**
@@ -43,9 +44,11 @@ public class PlatformUserService {
     private final AuditLog auditLog;
     private final AdminAccountService accounts;
     private final Mailer mailer;
+    private final NotificationService notifications;
 
     public PlatformUserService(JdbcClient jdbc, TransactionTemplate tx, TenantScope tenantScope, AuditLog auditLog,
-                               AdminAccountService accounts, Mailer mailer) {
+                               AdminAccountService accounts, Mailer mailer, NotificationService notifications) {
+        this.notifications = notifications;
         this.jdbc = jdbc;
         this.tx = tx;
         this.tenantScope = tenantScope;
@@ -165,6 +168,11 @@ public class PlatformUserService {
                     .update();
             auditLog.record(tenantId, PLATFORM, approve ? "ROLE_REQUEST_APPROVED" : "ROLE_REQUEST_REJECTED", "USER", open.userId(),
                     note == null ? Map.of("to", open.requested()) : Map.of("to", open.requested(), "note", note));
+            notifications.toUser(tenantId, open.userId(), approve ? "ROLE_REQUEST_APPROVED" : "ROLE_REQUEST_REJECTED",
+                    approve ? "Rol talebiniz onaylandı" : "Rol talebiniz reddedildi",
+                    approve ? "Yeni rolünüz: " + open.requested() + "."
+                            : (note == null ? "Talep platform yönetimi tarafından reddedildi." : "Not: " + note),
+                    "/settings");
             return new Decided(email, open.requested());
         });
         accounts.audit(actor, ip, approve ? "ROLE_REQUEST_APPROVED" : "ROLE_REQUEST_REJECTED", decided.email() + " → " + decided.role());

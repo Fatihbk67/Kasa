@@ -16,6 +16,7 @@ import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
 import com.kasa.admin.MerchantReviewService;
+import com.kasa.onboarding.MerchantProfileService;
 import com.kasa.auth.AuthService;
 import com.kasa.bank.SimulatedBank;
 import com.kasa.billing.BillingService;
@@ -98,7 +99,10 @@ public final class LocalDevApplication {
         seedTeam(context, tenantId, superuser);
         seedCustomersLinksAndDisputes(context, tenantId, superuser);
         // A second business waiting for review, so the admin panel has something to approve.
-        context.getBean(AuthService.class).register("Yeni Fırın", "firin@kasa.test", DEMO_PASSWORD);
+        UUID bakery = context.getBean(AuthService.class).register("Yeni Fırın", "firin@kasa.test", DEMO_PASSWORD).tenantId();
+        context.getBean(MerchantProfileService.class).save(bakery, new MerchantProfileService.ProfileInput("SOLE_PROPRIETOR",
+                "Ali Usta Fırıncılık", "10000000146", "Beşiktaş", "FOOD", null, "+90 212 555 01 02",
+                "Sinanpaşa Mah. Çarşı Sk. No: 4", "İstanbul", "TR33 0006 1005 1978 6457 8413 26"));
         log.info("Demo merchant ready: {} / {}", DEMO_EMAIL, DEMO_PASSWORD);
     }
 
@@ -200,6 +204,9 @@ public final class LocalDevApplication {
 
     private static UUID seedDemoData(ConfigurableApplicationContext context) {
         UUID tenantId = context.getBean(AuthService.class).register("Demo Kahve", DEMO_EMAIL, DEMO_PASSWORD).tenantId();
+        context.getBean(MerchantProfileService.class).save(tenantId, new MerchantProfileService.ProfileInput("COMPANY",
+                "Demo Kahve Gıda Ltd. Şti.", "1234567890", "Kadıköy", "ECOMMERCE", "https://demokahve.example", "+90 216 555 01 01",
+                "Caferağa Mah. Moda Cd. No: 12", "İstanbul", "TR33 0006 1005 1978 6457 8413 26"));
         context.getBean(MerchantReviewService.class).approve("demo-kurulumu", null, tenantId);
         PaymentService payments = context.getBean(PaymentService.class);
 

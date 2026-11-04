@@ -379,3 +379,38 @@ export interface PublicPaymentLink {
   currency: string;
   status: PaymentLinkStatus;
 }
+
+export type BusinessType = 'INDIVIDUAL' | 'SOLE_PROPRIETOR' | 'COMPANY';
+export type Sector = 'ECOMMERCE' | 'FOOD' | 'EDUCATION' | 'SERVICES' | 'RETAIL' | 'SOFTWARE' | 'OTHER';
+
+export interface BusinessProfile {
+  businessType: BusinessType;
+  legalName: string;
+  taxId: string;
+  taxOffice: string;
+  sector: Sector;
+  website: string | null;
+  phone: string;
+  address: string;
+  city: string;
+  /** Masked for the merchant, in full only in the platform's review. */
+  iban: string;
+  bankCode: string;
+  submittedAt: string;
+  editable: boolean;
+}
+
+export interface AppNotification {
+  id: string;
+  kind: string;
+  title: string;
+  body: string;
+  link: string | null;
+  read: boolean;
+  createdAt: string;
+}
+
+export interface Inbox {
+  items: AppNotification[];
+  unread: number;
+}

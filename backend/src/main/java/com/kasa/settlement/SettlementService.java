@@ -30,6 +30,7 @@ import com.kasa.observability.BusinessMetrics;
 import com.kasa.settlement.PayoutViews.PayoutDetail;
 import com.kasa.settlement.PayoutViews.PayoutItemView;
 import com.kasa.settlement.PayoutViews.PayoutView;
+import com.kasa.notification.NotificationService;
 import com.kasa.tenant.TenantScope;
 import com.kasa.webhook.WebhookEvents;
 
@@ -69,6 +70,7 @@ public class SettlementService {
 
     private final JdbcClient jdbc;
     private final TransactionTemplate tx;
+    private final NotificationService notifications;
     private final TenantScope tenantScope;
     private final LedgerService ledger;
     private final BankGateway bank;
@@ -76,7 +78,8 @@ public class SettlementService {
     private final BusinessMetrics metrics;
 
     public SettlementService(JdbcClient jdbc, TransactionTemplate tx, TenantScope tenantScope, LedgerService ledger,
-                             BankGateway bank, WebhookEvents webhookEvents, BusinessMetrics metrics) {
+                             BankGateway bank, WebhookEvents webhookEvents, BusinessMetrics metrics, NotificationService notifications) {
+        this.notifications = notifications;
         this.metrics = metrics;
         this.jdbc = jdbc;
         this.tx = tx;
@@ -310,6 +313,14 @@ public class SettlementService {
                     .param("id", payoutId)
                     .query(SettlementService::mapPayout)
                     .single();
+            String amount = com.kasa.common.MoneyText.format(updated.amount(), updated.currency());
+            if (response.approved()) {
+                notifications.toRoles(tenantId, NotificationService.OWNERS, "PAYOUT_PAID", "Ödeme hesabınıza aktarıldı",
+                        amount + " banka hesabınıza gönderildi.", "/payouts");
+            } else {
+                notifications.toRoles(tenantId, NotificationService.OWNERS, "PAYOUT_FAILED", "Aktarım başarısız oldu",
+                        amount + " gönderilemedi; tutar bakiyenize geri döndü ve bir sonraki aktarıma eklenecek.", "/payouts");
+            }
             webhookEvents.publish(tenantId, response.approved() ? "payout.paid" : "payout.failed", updated);
             metrics.countAfterCommit("kasa.payouts", "status", updated.status());
         });

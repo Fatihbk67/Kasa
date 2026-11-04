@@ -15,6 +15,7 @@ import { Settings } from './pages/Settings';
 import { AcceptInvitation, TeamPage } from './pages/Team';
 import { Developers } from './pages/Developers';
 import { ForgotPassword, Login, Register, ResetPassword } from './pages/Auth';
+import { Onboarding } from './pages/Onboarding';
 import { Overview } from './pages/Overview';
 import { PaymentDetailPage } from './pages/PaymentDetail';
 import { Payments } from './pages/Payments';
@@ -57,6 +58,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="developers" element={<Developers />} />
             <Route path="team" element={<TeamPage />} />
             <Route path="audit" element={<AuditPage />} />
+            <Route path="onboarding" element={<Onboarding />} />
             <Route path="settings" element={<Settings />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

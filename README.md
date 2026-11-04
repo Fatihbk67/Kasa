@@ -111,6 +111,8 @@ java -Djdk.net.unixdomain.tmpdir=backend/target load-test/LoadTest.java http://l
 - **Yeni işletme onaylanmadan para alamaz:** Kayıt olan işletme paneli gezebilir, ekibini ve ayarlarını hazırlayabilir; ödeme alması platform yöneticisinin onayını bekler. Kontrol, parayı başlatan tek yerde (`PaymentService.create`) yapılır, böylece API, panel, ödeme sayfası, bağlantılar ve abonelikler aynı kurala takılır. Askıya alınan işletmede yeni ödeme ve hesap kesimi durur ama iadeler ve itirazlar sürer, çünkü müşterilere borç kapanmaz.
 - **Herkes aynı kapıdan girer:** İşletme üyeleri ve platform yöneticileri aynı giriş sayfasını kullanır. E-posta ve parola ikisine de aitse kişi hangi panele gideceğini seçer. Yönetici olup olmadığını yanıt süresinden anlamak mümkün değildir, çünkü her girişte iki parola karşılaştırması yapılır.
 - **İşletme son sahibini kaybetmez:** Platform yöneticisi her rolü değiştirebilir ama son sahibi başka role alamaz veya kapatamaz. Aynı anda gelen iki değişiklik de sahipsiz bırakamaz, çünkü önce bütün sahipler kilitlenir.
+- **Kimse körlemesine onaylanmaz:** Yönetici, işletme başvuru formunu (işletme türü, yasal unvan, vergi bilgisi, adres, IBAN) görmeden onay veremez. T.C. kimlik, vergi kimlik ve TR IBAN numaralarının kontrol haneleri hem tarayıcıda hem sunucuda doğrulanır; tek hanelik bir yazım hatası kaydedilmez. IBAN şifreli saklanır, işletmeye maskeli gösterilir. Onaydan sonra başvuru değiştirilemez, çünkü ele geçirilen bir hesabın ilk işi ödemeleri kendi IBAN'ına çevirmek olurdu. Yöneticinin başvuruyu açması da kayda geçer.
+- **Bildirimler olayla birlikte yazılır:** İtiraz, hesap kesimi sonucu, abonelik tahsilat hatası, ekibe katılım, rol talebi kararı ve hesap durumu değişikliği, olayı kaydeden işlemin içinde ilgili rollere bildirim olarak düşer. Geri alınan bir işlem için bildirim gitmez, gerçekleşen bir olay da bildirimsiz kalmaz. Herkes yalnızca kendi bildirimini okuyabilir ve okundu sayabilir; API anahtarının gelen kutusu yoktur.
 - **Rol talebi kaybolmaz:** Üyelerin talepleri yönetici panelinde rozetle görünür, yöneticilere e-posta gider. Onay rolü aynı işlemde değiştirir; bir talebe yalnızca bir kez karar verilebilir.
 - **Raporlar defterle aynı sonucu verir:** Analiz paneli tutarları paranın gerçekten hareket ettiği güne yazar ve net kazanç işletmenin defter bakiyesiyle uyuşur.
 - **Dışa aktarılan dosya saldırı aracı olamaz:** CSV'de formül gibi başlayan açıklamalar etkisizleştirilir (CSV injection). 10.000 satırda kesilen rapor kullanıcıya açıkça bildirilir.
@@ -266,6 +268,9 @@ Başka bir platformda aynı değişkenlere ek olarak `KASA_DB_APP_USER=kasa_app`
 | POST | `/api/v1/settings/two-factor/setup`, `/enable`, `/disable` | JWT | İki adımlı girişi kurar, açar, kapatır |
 | POST | `/api/v1/auth/login/admin` | Yok | Ortak girişten sonra yöneticinin kod adımı |
 | GET, POST, DELETE | `/api/v1/settings/role-request` | JWT | Rol talebini gösterir, gönderir, geri çeker |
+| GET, PUT | `/api/v1/settings/business-profile` | Sahip | İşletme başvurusunu gösterir (IBAN maskeli), gönderir veya onaydan önce düzeltir |
+| GET | `/api/v1/notifications` | JWT | Kişinin son 30 bildirimi ve okunmamış sayısı |
+| POST | `/api/v1/notifications/{id}/read`, `/read-all` | JWT | Bildirimi veya hepsini okundu sayar |
 | GET | `/api/v1/admin/users` | Yönetici | Bütün işletmelerin bütün kullanıcıları (`q`) |
 | POST | `/api/v1/admin/users/{id}/role`, `/disable`, `/enable` | Yönetici | Rol değiştirir, kullanıcıyı kapatır veya açar |
 | GET | `/api/v1/admin/role-requests` | Yönetici | Rol talepleri, bekleyenler önce (`status`) |
@@ -274,7 +279,8 @@ Başka bir platformda aynı değişkenlere ek olarak `KASA_DB_APP_USER=kasa_app`
 | POST | `/api/v1/admin/accounts/{id}/disable` | Yönetici | Yönetici hesabını kapatır |
 | GET | `/api/v1/admin/audit-log` | Yönetici | Yönetici işlem kayıtları |
 | GET | `/api/v1/admin/merchants` | Yönetici | İşletmeleri listeler, onay bekleyenler önce (`status`) |
-| POST | `/api/v1/admin/merchants/{id}/approve`, `/suspend`, `/reactivate` | Yönetici | İşletmeyi onaylar, gerekçeyle askıya alır, yeniden açar |
+| GET | `/api/v1/admin/merchants/{id}/application` | Yönetici | Başvurunun tamamı, IBAN açık; görüntüleme kayda geçer |
+| POST | `/api/v1/admin/merchants/{id}/approve`, `/suspend`, `/reactivate` | Yönetici | İşletmeyi onaylar (başvuru şart), gerekçeyle askıya alır, yeniden açar |
 | GET | `/api/v1/me` | JWT | Oturumdaki kullanıcı, rol ve işletme |
 | GET | `/api/v1/team` | Sahip, yönetici | Üyeler ve bekleyen davetler |
 | POST | `/api/v1/team/invitations` | Sahip, yönetici | Tek kullanımlık davet oluşturur (yöneticiler yalnızca görüntüleyici davet edebilir) |
@@ -403,3 +409,4 @@ Banka simüle edilir; davranışı token belirler. Böylece her hata senaryosu i
 - [x] **Abonelikler:** Planlar, tekrarlayan tahsilat, başarısız ödemede yeniden deneme, dönem ortası plan değişikliği
 - [x] **Güvenlik:** İki adımlı giriş, kurtarma kodları, parola sıfırlama, sırların şifrelenmesi, kişiye özel yönetici hesapları
 - [x] **İşletme onayı:** Yeni işletmeler yönetici onayından sonra ödeme alır; askıya alma ve yeniden açma
+- [x] **Başvuru ve bildirimler:** Kontrol haneli işletme başvuru formu, yönetici inceleme ekranı, olaylara bağlı bildirim merkezi
