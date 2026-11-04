@@ -30,6 +30,9 @@ export interface Payment {
   reviewStatus: 'OPEN' | 'APPROVED' | 'REJECTED' | null;
   reviewedBy: string | null;
   reviewedAt: string | null;
+  threeDsMethod: 'FRICTIONLESS' | 'CHALLENGE' | null;
+  threeDsEci: string | null;
+  installments: number;
 }
 
 export type RiskRuleKind = 'CARD_VELOCITY' | 'CARD_DECLINES' | 'AMOUNT_ABOVE';
@@ -141,10 +144,41 @@ export interface CheckoutSession {
   amount: number;
   currency: string;
   description: string | null;
-  status: 'OPEN' | 'PROCESSING' | 'COMPLETED' | 'EXPIRED';
+  status: 'OPEN' | 'PROCESSING' | 'AUTHENTICATING' | 'COMPLETED' | 'EXPIRED';
   failureCode: string | null;
   paymentStatus: PaymentStatus | null;
   expiresAt: string;
+  /** Set while the customer must verify themselves on their bank's page. */
+  challengeUrl: string | null;
+  installments: number;
+}
+
+export interface BankChallenge {
+  id: string;
+  merchantName: string;
+  amount: number;
+  currency: string;
+  cardHint: string;
+  status: 'PENDING' | 'Y' | 'N' | 'EXPIRED';
+  attemptsLeft: number;
+  expiresAt: string;
+  testCode: string;
+  returnUrl: string;
+}
+
+export interface SignedBankResult {
+  authenticationId: string;
+  status: 'Y' | 'N';
+  eci: string | null;
+  issuedAt: number;
+  signature: string;
+}
+
+export interface BankAnswer {
+  status: 'PENDING' | 'Y' | 'N';
+  attemptsLeft: number;
+  result: SignedBankResult | null;
+  returnUrl: string | null;
 }
 
 export interface DayPoint {

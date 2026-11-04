@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.kasa.bank.ThreeDsSigner;
 import com.kasa.security.CurrentTenant;
 import com.kasa.security.RateLimitProperties;
 import com.kasa.security.RateLimiter;
@@ -32,7 +33,12 @@ public class CheckoutController {
             @Size(max = 500) String description) {
     }
 
-    public record PayRequest(@NotNull @Pattern(regexp = "tok_[a-z_]{1,64}") String cardToken) {
+    public record PayRequest(@NotNull @Pattern(regexp = "tok_[a-z0-9_]{1,64}") String cardToken, Integer installments) {
+    }
+
+    /** The bank's verdict as its page hands it over. Every field is covered by the signature. */
+    public record ThreeDsCallback(@NotNull UUID authenticationId, @NotNull @Pattern(regexp = "[YN]") String status,
+                                  @Size(max = 2) String eci, @NotNull Long issuedAt, @NotNull @Size(max = 128) String signature) {
     }
 
     private final CheckoutService checkout;
@@ -62,6 +68,14 @@ public class CheckoutController {
     public CheckoutService.PublicSession pay(@PathVariable UUID id, @Valid @RequestBody PayRequest request,
                                              HttpServletRequest http) {
         rateLimiter.check("checkout-pay:" + http.getRemoteAddr(), limits.checkoutPayPerIp());
-        return checkout.pay(id, request.cardToken());
+        return checkout.pay(id, request.cardToken(), request.installments() == null ? 1 : request.installments());
+    }
+
+    @PostMapping("/api/v1/public/checkout/{id}/3ds-callback")
+    public CheckoutService.PublicSession threeDsCallback(@PathVariable UUID id, @Valid @RequestBody ThreeDsCallback request,
+                                                         HttpServletRequest http) {
+        rateLimiter.check("checkout-pay:" + http.getRemoteAddr(), limits.checkoutPayPerIp());
+        return checkout.completeThreeDs(id, new ThreeDsSigner.SignedResult(request.authenticationId(), request.status(),
+                request.eci(), request.issuedAt(), request.signature()));
     }
 }

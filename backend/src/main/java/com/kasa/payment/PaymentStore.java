@@ -66,13 +66,18 @@ class PaymentStore {
     }
 
     void insertPayment(UUID id, UUID tenantId, long amount, String currency, String description, UUID customerId,
-                       String cardFingerprint, RiskEngine.Assessment risk) {
+                       String cardFingerprint, RiskEngine.Assessment risk, CardAuthentication authentication, int installments) {
         jdbc.sql("""
                         INSERT INTO payments (id, tenant_id, amount, currency, status, description, customer_id,
-                                              card_fingerprint, risk_level, risk_reasons, review_status)
+                                              card_fingerprint, risk_level, risk_reasons, review_status,
+                                              three_ds_method, three_ds_eci, installments)
                         VALUES (:id, :tenantId, :amount, :currency, 'PENDING', :description, :customerId,
-                                :fingerprint, :riskLevel, string_to_array(:reasons, ','), :reviewStatus)
+                                :fingerprint, :riskLevel, string_to_array(:reasons, ','), :reviewStatus,
+                                :threeDsMethod, :eci, :installments)
                         """)
+                .param("threeDsMethod", authentication == null ? null : authentication.method().name())
+                .param("eci", authentication == null ? null : authentication.eci())
+                .param("installments", installments)
                 .param("id", id)
                 .param("tenantId", tenantId)
                 .param("amount", amount)
@@ -274,7 +279,10 @@ class PaymentStore {
                 rs.getString("review_status"),
                 rs.getString("reviewed_by"),
                 rs.getObject("reviewed_at", OffsetDateTime.class),
-                rs.getString("card_fingerprint"));
+                rs.getString("card_fingerprint"),
+                rs.getString("three_ds_method"),
+                rs.getString("three_ds_eci"),
+                rs.getInt("installments"));
     }
 
     private static List<String> reasons(java.sql.Array array) throws SQLException {

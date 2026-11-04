@@ -201,6 +201,15 @@ export function PaymentDetailPage() {
           <div><dt>İade edilen</dt><dd>{formatMoney(payment.refundedAmount, payment.currency)}</dd></div>
           {payment.disputedAmount > 0 && <div><dt>İtirazda</dt><dd>{formatMoney(payment.disputedAmount, payment.currency)}</dd></div>}
           {payment.customerId && <div><dt>Müşteri</dt><dd><Link to={`/customers/${payment.customerId}`}>Müşteriyi aç</Link></dd></div>}
+          <div>
+            <dt>Kart doğrulaması</dt>
+            <dd>
+              {payment.threeDsMethod === 'CHALLENGE' ? `3D Secure, SMS ile (ECI ${payment.threeDsEci})`
+                : payment.threeDsMethod === 'FRICTIONLESS' ? `3D Secure, sessiz onay (ECI ${payment.threeDsEci})`
+                  : 'Yok (API ile alınan ödeme)'}
+            </dd>
+          </div>
+          <div><dt>Taksit</dt><dd>{payment.installments === 1 ? 'Tek çekim' : `${payment.installments} taksit`}</dd></div>
           <div><dt>Oluşturulma</dt><dd>{formatDateTime(payment.createdAt)}</dd></div>
           <div className="details-id"><dt>Ödeme kimliği</dt><dd><code>{payment.id}</code> <CopyButton value={payment.id} /></dd></div>
         </dl>

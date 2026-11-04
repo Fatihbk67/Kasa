@@ -89,10 +89,21 @@ public class PaymentService {
 
     public OperationResult create(UUID tenantId, String key, long amount, String currency, String cardToken,
                                   String description, UUID customerId, RiskEngine.Screening screening) {
+        return create(tenantId, key, amount, currency, cardToken, description, customerId, screening, null, 1);
+    }
+
+    /** Made on the checkout page, where the customer is present: verified by their bank, perhaps in instalments. */
+    public OperationResult create(UUID tenantId, String key, long amount, String currency, String cardToken,
+                                  String description, UUID customerId, RiskEngine.Screening screening,
+                                  CardAuthentication authentication, int installments) {
         requireValidKey(key);
+        if (!Installments.isAllowed(installments, amount)) {
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, "instalments are not available for this payment");
+        }
         String fingerprint = RiskEngine.fingerprint(cardToken);
         String hash = Hashes.sha256Hex(String.join("|", "CREATE", String.valueOf(amount), currency, cardToken,
-                String.valueOf(description)) + (customerId == null ? "" : "|" + customerId));
+                String.valueOf(description)) + (customerId == null ? "" : "|" + customerId)
+                + (installments == 1 ? "" : "|installments:" + installments));
         Begun begun = tx.execute(status -> {
             tenantScope.apply(tenantId);
             store.lockIdempotencyKey(tenantId, key);
@@ -109,7 +120,8 @@ public class PaymentService {
                         }
                         RiskEngine.Assessment risk = riskEngine.assess(tenantId, fingerprint, amount, currency, screening);
                         UUID paymentId = UUID.randomUUID();
-                        store.insertPayment(paymentId, tenantId, amount, currency, description, customerId, fingerprint, risk);
+                        store.insertPayment(paymentId, tenantId, amount, currency, description, customerId, fingerprint, risk,
+                                authentication, installments);
                         PaymentOperation operation = store.insertOperation(tenantId, paymentId, OperationType.AUTHORIZE,
                                 amount, key, hash);
                         if (risk.blocked()) {
@@ -397,7 +409,7 @@ public class PaymentService {
                 yield () -> { };
             }
             case CAPTURE -> {
-                long fee = feeFor(operation.amount());
+                long fee = feeFor(operation.amount(), payment.installments());
                 store.update(payment.id(), PaymentStatus.CAPTURED, operation.amount(), 0, fee, payment.bankReference(), null);
                 yield () -> paymentLedger.recordCapture(tenantId, payment.currency(), operation.id(), operation.amount(), fee);
             }
@@ -415,8 +427,9 @@ public class PaymentService {
     }
 
     /** Rounds half up, in integer arithmetic so no floating point error can touch money. */
-    private long feeFor(long amount) {
-        return (Math.multiplyExact(amount, properties.feeBasisPoints()) + 5_000) / 10_000;
+    private long feeFor(long amount, int installments) {
+        long basisPoints = properties.feeBasisPoints() + Installments.surchargeBasisPoints(installments);
+        return (Math.multiplyExact(amount, basisPoints) + 5_000) / 10_000;
     }
 
     private static void requireValidKey(String key) {

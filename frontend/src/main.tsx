@@ -6,6 +6,7 @@ import { Layout } from './Layout';
 import { AdminHome, AdminRunDetail } from './pages/Admin';
 import { Analytics } from './pages/Analytics';
 import { AuditPage } from './pages/Audit';
+import { BankChallenge } from './pages/BankChallenge';
 import { Checkout } from './pages/Checkout';
 import { CustomerDetailPage, Customers } from './pages/Customers';
 import { DisputeDetailPage, Disputes } from './pages/Disputes';
@@ -38,6 +39,7 @@ createRoot(document.getElementById('root')!).render(
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password/:token" element={<ResetPassword />} />
           <Route path="/pay/:id" element={<Checkout />} />
+          <Route path="/bank/3ds/:id" element={<BankChallenge />} />
           <Route path="/l/:slug" element={<PublicLinkPage />} />
           <Route path="/invite/:token" element={<AcceptInvitation />} />
           <Route path="/admin" element={<AdminHome />} />

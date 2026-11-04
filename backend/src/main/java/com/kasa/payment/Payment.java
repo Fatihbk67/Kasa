@@ -25,5 +25,8 @@ record Payment(
         String reviewStatus,
         String reviewedBy,
         OffsetDateTime reviewedAt,
-        String cardFingerprint) {
+        String cardFingerprint,
+        String threeDsMethod,
+        String threeDsEci,
+        int installments) {
 }

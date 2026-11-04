@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError } from '../api';
 import { useAuth } from '../auth';
 import { ErrorNote, failureMessage, Loading } from '../components';
@@ -9,12 +9,22 @@ import { useFetch, usePolling } from '../useFetch';
 
 // Test scenarios stand in for a card form on purpose: this project never collects real card details.
 const TEST_CARDS = [
-  { token: 'tok_success', label: 'Başarılı ödeme', hint: 'Banka onaylar' },
+  { token: 'tok_success', label: 'Başarılı ödeme', hint: 'Banka onaylar, ek doğrulama istemez' },
+  { token: 'tok_3ds', label: '3D Secure doğrulamalı kart', hint: 'Bankanızın SMS doğrulama sayfası açılır' },
   { token: 'tok_insufficient_funds', label: 'Yetersiz bakiye', hint: 'Banka reddeder, başka kart denenebilir' },
   { token: 'tok_declined', label: 'Reddedilen kart', hint: 'Banka reddeder, başka kart denenebilir' },
   { token: 'tok_timeout_processed', label: 'Banka yanıt vermiyor', hint: 'İşlem bankada gerçekleşir, sonuç bir dakikayı aşkın sürede netleşir' },
   { token: 'tok_timeout_lost', label: 'İstek bankaya ulaşmıyor', hint: 'Para hareketi olmaz, sonuç bir dakikayı aşkın sürede netleşir' },
 ];
+
+const INSTALLMENT_COUNTS = [1, 2, 3, 6, 9, 12];
+const INSTALLMENT_MINIMUM = 20_000;
+
+/** The same total split into months. Rounded up, so the monthly parts together never fall short of the price. */
+export function installmentOptions(amount: number): { count: number; monthly: number }[] {
+  const counts = amount >= INSTALLMENT_MINIMUM ? INSTALLMENT_COUNTS : [1];
+  return counts.map((count) => ({ count, monthly: Math.ceil(amount / count) }));
+}
 
 /**
  * A merchant who opened a test payment from the dashboard needs a way back. A customer never sees this,
@@ -58,6 +68,8 @@ export function Checkout() {
   const fetched = useFetch(() => api<CheckoutSession>(`/public/checkout/${id}`), [id]);
   const [paid, setPaid] = useState<CheckoutSession | null>(null);
   const [token, setToken] = useState(TEST_CARDS[0].token);
+  const [installments, setInstallments] = useState(1);
+  const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -83,7 +95,11 @@ export function Checkout() {
     setBusy(true);
     setError(null);
     try {
-      const updated = await api<CheckoutSession>(`/public/checkout/${id}/pay`, { method: 'POST', body: { cardToken: token } });
+      const updated = await api<CheckoutSession>(`/public/checkout/${id}/pay`, { method: 'POST', body: { cardToken: token, installments } });
+      if (updated.status === 'AUTHENTICATING' && updated.challengeUrl) {
+        navigate(updated.challengeUrl);
+        return;
+      }
       setPaid(updated);
       fetched.reload();
     } catch (e) {
@@ -100,6 +116,16 @@ export function Checkout() {
     }
   };
 
+  if (session.status === 'AUTHENTICATING' && session.challengeUrl) {
+    return (
+      <Frame session={session}>
+        <Outcome tone="warning" title="Bankanızın onayı bekleniyor">
+          Ödemeyi tamamlamak için kartınızın bankasındaki doğrulamayı bitirin. Kartınızdan henüz para çekilmedi.
+        </Outcome>
+        <Link className="button button-primary button-block" to={session.challengeUrl}>Doğrulama sayfasına git</Link>
+      </Frame>
+    );
+  }
   if (session.status === 'EXPIRED') {
     return (
       <Frame session={session}>
@@ -154,6 +180,23 @@ export function Checkout() {
             </label>
           ))}
         </fieldset>
+        {installmentOptions(session.amount).length > 1 && (
+          <fieldset className="card-options">
+            <legend>Taksit seçenekleri</legend>
+            <p className="hint">Toplam tutar değişmez; taksit farkını işletme karşılar.</p>
+            <div className="installments">
+              {installmentOptions(session.amount).map((option) => (
+                <label key={option.count} className={installments === option.count ? 'installment selected' : 'installment'}>
+                  <input type="radio" name="installments" checked={installments === option.count} onChange={() => setInstallments(option.count)} />
+                  <span>
+                    <strong>{option.count === 1 ? 'Tek çekim' : `${option.count} taksit`}</strong>
+                    <span className="hint">{option.count === 1 ? formatMoney(session.amount, session.currency) : `${option.count} × ${formatMoney(option.monthly, session.currency)}`}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        )}
         <button type="submit" className="button button-primary button-block" disabled={busy}>
           {busy ? 'İşleniyor…' : `${formatMoney(session.amount, session.currency)} öde`}
         </button>

@@ -112,6 +112,8 @@ java -Djdk.net.unixdomain.tmpdir=backend/target load-test/LoadTest.java http://l
 - **Herkes aynı kapıdan girer:** İşletme üyeleri ve platform yöneticileri aynı giriş sayfasını kullanır. E-posta ve parola ikisine de aitse kişi hangi panele gideceğini seçer. Yönetici olup olmadığını yanıt süresinden anlamak mümkün değildir, çünkü her girişte iki parola karşılaştırması yapılır.
 - **İşletme son sahibini kaybetmez:** Platform yöneticisi her rolü değiştirebilir ama son sahibi başka role alamaz veya kapatamaz. Aynı anda gelen iki değişiklik de sahipsiz bırakamaz, çünkü önce bütün sahipler kilitlenir.
 - **Kimse körlemesine onaylanmaz:** Yönetici, işletme başvuru formunu (işletme türü, yasal unvan, vergi bilgisi, adres, IBAN) görmeden onay veremez. T.C. kimlik, vergi kimlik ve TR IBAN numaralarının kontrol haneleri hem tarayıcıda hem sunucuda doğrulanır; tek hanelik bir yazım hatası kaydedilmez. IBAN şifreli saklanır, işletmeye maskeli gösterilir. Onaydan sonra başvuru değiştirilemez, çünkü ele geçirilen bir hesabın ilk işi ödemeleri kendi IBAN'ına çevirmek olurdu. Yöneticinin başvuruyu açması da kayda geçer.
+- **3D Secure ile kart sahibi doğrulanır:** Ödeme sayfasında kart bankası isterse müşteri bankanın doğrulama sayfasına gider, SMS kodunu girer ve bankanın imzalı cevabıyla geri döner. Kart ancak bu cevaptan sonra çekilir. Cevap müşterinin tarayıcısından geçtiği için HMAC imzasıyla doğrulanır, sabit sürede karşılaştırılır ve süresi geçmişse reddedilir. Tarayıcıda "başarısız"ı "başarılı"ya çevirmek işe yaramaz. Aynı cevap beş sekmeden aynı anda gönderilse de tek bir koşullu güncelleme yüzünden ödeme bir kez alınır. Bekleme sırasında kart token'ı şifreli saklanır. Müşteri bankadan hiç dönmezse oturum, doğrulamanın süresi dolunca yeniden açılır. Ödeme bağlantısının son yeri o sırada müşteriye ayrılmış kalır. Bankanın kendi sayfası da simüle edilir: yanlış kodlar satır kilidiyle sayılır, paralel tahminlerde bile üç denemeden fazlasına izin verilmez.
+- **Taksit:** Ödeme sayfası tutar 200 TL'yi geçince 2, 3, 6, 9 ve 12 taksit sunar. Müşterinin ödediği toplam değişmez. Taksit farkını işletme, taksit sayısına göre artan komisyonla karşılar; komisyon tahsilat anında defterde ayrılır.
 - **Dolandırıcılık kuralları bankadan önce çalışır:** Her işletme kendi kurallarını yazar: aynı kartla kısa sürede çok deneme, art arda reddedilen kart, yüksek tutar ve engelli kartlar. Kural ya ödemeyi bankaya hiç göndermeden reddeder ya da provizyonu alıp bir kişinin onayına bırakır; onaylanmayan ödeme tahsil edilemez. Bu yasağı veritabanı tetikleyicisi de uygular, unutulan bir kod yolu bile aşamaz. Aynı karttan aynı anda gelen 20 ödeme, sınırı 5 olan kuralı birlikte geçemez, çünkü sayım kart başına bir kilitle sıraya girer; yalnızca aynı işletmenin aynı kartı bekler. Engellenen ödeme müşteriye sıradan bir ret gibi görünür, böylece çalıntı kart deneyen biri kuralları öğrenemez. Abonelik yenilemelerinde bekleyen müşteri olmadığı için inceleme kuralları uygulanmaz, engelleme kuralları uygulanır. API anahtarı kuralları göremez ve değiştiremez; anahtarı çalan kişi alarmı kapatamaz.
 - **Bildirimler olayla birlikte yazılır:** İtiraz, hesap kesimi sonucu, abonelik tahsilat hatası, ekibe katılım, rol talebi kararı ve hesap durumu değişikliği, olayı kaydeden işlemin içinde ilgili rollere bildirim olarak düşer. Geri alınan bir işlem için bildirim gitmez, gerçekleşen bir olay da bildirimsiz kalmaz. Herkes yalnızca kendi bildirimini okuyabilir ve okundu sayabilir; API anahtarının gelen kutusu yoktur.
 - **Rol talebi kaybolmaz:** Üyelerin talepleri yönetici panelinde rozetle görünür, yöneticilere e-posta gider. Onay rolü aynı işlemde değiştirir; bir talebe yalnızca bir kez karar verilebilir.
@@ -232,7 +234,9 @@ Başka bir platformda aynı değişkenlere ek olarak `KASA_DB_APP_USER=kasa_app`
 | GET | `/api/v1/balances` | JWT veya `X-Api-Key` | Ödenecek ve yoldaki bakiyeyi döner |
 | POST | `/api/v1/checkout-sessions` | JWT veya `X-Api-Key` | 30 dakikalık ödeme bağlantısı oluşturur |
 | GET | `/api/v1/public/checkout/{id}` | Yok | Ödeme sayfası bilgilerini döner |
-| POST | `/api/v1/public/checkout/{id}/pay` | Yok | Test kartıyla ödeme yapar |
+| POST | `/api/v1/public/checkout/{id}/pay` | Yok | Test kartıyla ödeme yapar (`installments`: 1, 2, 3, 6, 9, 12); banka isterse `AUTHENTICATING` ve `challengeUrl` döner |
+| POST | `/api/v1/public/checkout/{id}/3ds-callback` | Bankanın imzası | Bankanın 3D Secure cevabını doğrular ve ödemeyi tamamlar |
+| GET, POST | `/api/v1/public/bank/3ds/{id}` | Yok | Simüle kart bankasının doğrulama sayfası: kodu gösterir, kodu kontrol eder, imzalı cevap üretir |
 | GET | `/api/v1/payouts` | JWT veya `X-Api-Key` | Toplu ödemeleri listeler |
 | GET | `/api/v1/payouts/{id}` | JWT veya `X-Api-Key` | Toplu ödemeyi kalemleriyle döner |
 | GET | `/api/v1/admin/overview` | `X-Admin-Token` | Platform genelinde toplamlar ve bekleyen işler |
@@ -395,6 +399,7 @@ Banka simüle edilir; davranışı token belirler. Böylece her hata senaryosu i
 | Token | Davranış |
 |---|---|
 | `tok_success` | Her işlem başarılı |
+| `tok_3ds` | Ödeme sayfasında 3D Secure SMS doğrulaması ister, sonra başarılı |
 | `tok_success_<herhangi>` | Başarılı, ama her ek farklı bir kart sayılır (kart bazlı risk kurallarını denemek için) |
 | `tok_declined`, `tok_insufficient_funds` | Provizyon reddedilir |
 | `tok_timeout_processed` | Banka işlemi yapar ama yanıt gelmez; kurtarma işi `AUTHORIZED` yapar |
@@ -418,5 +423,6 @@ Banka simüle edilir; davranışı token belirler. Böylece her hata senaryosu i
 - [x] **Abonelikler:** Planlar, tekrarlayan tahsilat, başarısız ödemede yeniden deneme, dönem ortası plan değişikliği
 - [x] **Güvenlik:** İki adımlı giriş, kurtarma kodları, parola sıfırlama, sırların şifrelenmesi, kişiye özel yönetici hesapları
 - [x] **İşletme onayı:** Yeni işletmeler yönetici onayından sonra ödeme alır; askıya alma ve yeniden açma
+- [x] **3D Secure ve taksit:** Bankanın imzalı doğrulama cevabı, tek kullanımlık geri dönüş, süre aşımı, taksite göre komisyon
 - [x] **Dolandırıcılık önleme:** İşletmeye özel risk kuralları, engelli kartlar, inceleme kuyruğu ve veritabanı düzeyinde tahsilat kilidi
 - [x] **Başvuru ve bildirimler:** Kontrol haneli işletme başvuru formu, yönetici inceleme ekranı, olaylara bağlı bildirim merkezi
