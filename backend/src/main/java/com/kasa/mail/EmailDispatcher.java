@@ -93,6 +93,8 @@ public class EmailDispatcher {
         boolean givingUp = permanent || email.attempts() >= properties.maxAttempts();
         if (givingUp) {
             log.warn("Giving up on email {} after {} attempts: {}", email.id(), email.attempts(), error);
+        } else {
+            log.warn("Email {} failed on attempt {}, will retry: {}", email.id(), email.attempts(), error);
         }
         long delay = properties.retryDelay().toSeconds() << Math.min(email.attempts() - 1, 10);
         jdbc.sql("""
