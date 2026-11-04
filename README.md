@@ -112,6 +112,8 @@ java -Djdk.net.unixdomain.tmpdir=backend/target load-test/LoadTest.java http://l
 - **Herkes aynı kapıdan girer:** İşletme üyeleri ve platform yöneticileri aynı giriş sayfasını kullanır. E-posta ve parola ikisine de aitse kişi hangi panele gideceğini seçer. Yönetici olup olmadığını yanıt süresinden anlamak mümkün değildir, çünkü her girişte iki parola karşılaştırması yapılır.
 - **İşletme son sahibini kaybetmez:** Platform yöneticisi her rolü değiştirebilir ama son sahibi başka role alamaz veya kapatamaz. Aynı anda gelen iki değişiklik de sahipsiz bırakamaz, çünkü önce bütün sahipler kilitlenir.
 - **Kimse körlemesine onaylanmaz:** Yönetici, işletme başvuru formunu (işletme türü, yasal unvan, vergi bilgisi, adres, IBAN) görmeden onay veremez. T.C. kimlik, vergi kimlik ve TR IBAN numaralarının kontrol haneleri hem tarayıcıda hem sunucuda doğrulanır; tek hanelik bir yazım hatası kaydedilmez. IBAN şifreli saklanır, işletmeye maskeli gösterilir. Onaydan sonra başvuru değiştirilemez, çünkü ele geçirilen bir hesabın ilk işi ödemeleri kendi IBAN'ına çevirmek olurdu. Yöneticinin başvuruyu açması da kayda geçer.
+- **E-posta kaybolmaz ve gerçekten gider:** E-postalar doğrudan gönderilmez, önce bir kuyruğa (outbox) yazılır. Hesap açılışı ile doğrulama e-postası aynı transaction'da kaydedilir; biri olmadan diğeri olamaz. Ayrı bir iş kuyruğu Brevo'nun HTTP API'siyle gönderir (birçok sunucu SMTP portlarını kapatır). Servis çökerse e-posta kaybolmaz; 30 sn, 1, 2, 4, 8 dakika arayla yeniden denenir. Geçersiz adres gibi kalıcı hatalarda boşuna denenmez. Birden fazla sunucu aynı anda çalışsa da `FOR UPDATE SKIP LOCKED` sayesinde her e-posta bir kez gönderilir. E-posta metni (içinde parola sıfırlama bağlantısı olabilir) kuyrukta şifreli durur ve gönderilince silinir.
+- **E-posta adresi doğrulanır:** Kayıt olan işletme sahibine tek kullanımlık, 24 saat geçerli bir bağlantı gider. Veritabanında yalnızca bağlantının özeti (hash) saklanır. Yeni bağlantı eskisini geçersiz kılar. Adresini doğrulamayan işletme başvuru yapamaz, yani ödeme alamaz. Davetle katılan üyeler de doğrular, çünkü davet bağlantısı başkasına iletilebilir.
 - **3D Secure ile kart sahibi doğrulanır:** Ödeme sayfasında kart bankası isterse müşteri bankanın doğrulama sayfasına gider, SMS kodunu girer ve bankanın imzalı cevabıyla geri döner. Kart ancak bu cevaptan sonra çekilir. Cevap müşterinin tarayıcısından geçtiği için HMAC imzasıyla doğrulanır, sabit sürede karşılaştırılır ve süresi geçmişse reddedilir. Tarayıcıda "başarısız"ı "başarılı"ya çevirmek işe yaramaz. Aynı cevap beş sekmeden aynı anda gönderilse de tek bir koşullu güncelleme yüzünden ödeme bir kez alınır. Bekleme sırasında kart token'ı şifreli saklanır. Müşteri bankadan hiç dönmezse oturum, doğrulamanın süresi dolunca yeniden açılır. Ödeme bağlantısının son yeri o sırada müşteriye ayrılmış kalır. Bankanın kendi sayfası da simüle edilir: yanlış kodlar satır kilidiyle sayılır, paralel tahminlerde bile üç denemeden fazlasına izin verilmez.
 - **Taksit:** Ödeme sayfası tutar 200 TL'yi geçince 2, 3, 6, 9 ve 12 taksit sunar. Müşterinin ödediği toplam değişmez. Taksit farkını işletme, taksit sayısına göre artan komisyonla karşılar; komisyon tahsilat anında defterde ayrılır.
 - **Dolandırıcılık kuralları bankadan önce çalışır:** Her işletme kendi kurallarını yazar: aynı kartla kısa sürede çok deneme, art arda reddedilen kart, yüksek tutar ve engelli kartlar. Kural ya ödemeyi bankaya hiç göndermeden reddeder ya da provizyonu alıp bir kişinin onayına bırakır; onaylanmayan ödeme tahsil edilemez. Bu yasağı veritabanı tetikleyicisi de uygular, unutulan bir kod yolu bile aşamaz. Aynı karttan aynı anda gelen 20 ödeme, sınırı 5 olan kuralı birlikte geçemez, çünkü sayım kart başına bir kilitle sıraya girer; yalnızca aynı işletmenin aynı kartı bekler. Engellenen ödeme müşteriye sıradan bir ret gibi görünür, böylece çalıntı kart deneyen biri kuralları öğrenemez. Abonelik yenilemelerinde bekleyen müşteri olmadığı için inceleme kuralları uygulanmaz, engelleme kuralları uygulanır. API anahtarı kuralları göremez ve değiştiremez; anahtarı çalan kişi alarmı kapatamaz.
@@ -204,6 +206,16 @@ Tek bir Docker imajı API ile arayüzü birlikte sunar. Depodaki `render.yaml`, 
 
    `KASA_JWT_SECRET` ve `KASA_ADMIN_TOKEN` otomatik üretilir. Uygulama rolü tablo sahibi veya süper kullanıcı olursa uygulama bilerek başlamaz.
 
+3. Gerçek e-posta için (isteğe bağlı) Brevo'da hesap açın, gönderici adresinizi doğrulayın ve bir API anahtarı oluşturun. Sonra Render'da şunları girin:
+
+   | Değişken | Değer |
+   |---|---|
+   | `KASA_MAIL_PROVIDER` | `brevo` |
+   | `KASA_BREVO_API_KEY` | Brevo'daki API anahtarı |
+   | `KASA_MAIL_FROM` | Brevo'da doğrulanmış gönderici adresi |
+
+   Bunlar girilmeden e-postalar yalnızca log'a yazılır ve site normal çalışır.
+
 Başka bir platformda aynı değişkenlere ek olarak `KASA_DB_APP_USER=kasa_app` tanımlayın. Ters proxy arkasında `KASA_FORWARD_HEADERS=native` gerekir; aksi halde tüm istemciler tek adres sayılır ve istek sınırı herkesi birlikte engeller.
 
 **Ücretsiz planda bilinmesi gerekenler:** Sunucu 15 dakika istek almazsa uyur ve ilk istekte yeniden başlaması bir dakikadan uzun sürebilir. Uyurken zamanlanmış işler çalışmaz, bu yüzden günlük hesap kesimi ve mutabakat güvenilir biçimde tetiklenmez. İşletme verileri ve simüle bankanın kayıtları PostgreSQL'de durduğu için yeniden başlatmada kaybolmaz. Banka kalıcı hale gelmeden önce alınan eski provizyonlar `unknown_authorization` hatası alır, mutabakat da o dönemin işlemlerini `MISSING_IN_BANK` olarak gösterir.
@@ -269,6 +281,8 @@ Başka bir platformda aynı değişkenlere ek olarak `KASA_DB_APP_USER=kasa_app`
 | POST | `/api/v1/auth/login/two-factor` | Yok | Girişin ikinci adımı: kod veya kurtarma kodu |
 | POST | `/api/v1/auth/password-reset/request` | Yok | Sıfırlama bağlantısı ister, yanıt hep `202` |
 | POST | `/api/v1/auth/password-reset/confirm` | Yok | Bağlantıdaki token ile yeni parola belirler |
+| POST | `/api/v1/auth/verify-email` | Yok | E-postadaki bağlantıyla adresi doğrular (tek kullanımlık, 24 saat) |
+| POST | `/api/v1/settings/email-verification` | JWT | Yeni doğrulama bağlantısı gönderir |
 | GET | `/api/v1/settings/two-factor` | JWT | İki adımlı girişin durumu |
 | POST | `/api/v1/settings/two-factor/setup`, `/enable`, `/disable` | JWT | İki adımlı girişi kurar, açar, kapatır |
 | POST | `/api/v1/auth/login/admin` | Yok | Ortak girişten sonra yöneticinin kod adımı |
@@ -423,6 +437,7 @@ Banka simüle edilir; davranışı token belirler. Böylece her hata senaryosu i
 - [x] **Abonelikler:** Planlar, tekrarlayan tahsilat, başarısız ödemede yeniden deneme, dönem ortası plan değişikliği
 - [x] **Güvenlik:** İki adımlı giriş, kurtarma kodları, parola sıfırlama, sırların şifrelenmesi, kişiye özel yönetici hesapları
 - [x] **İşletme onayı:** Yeni işletmeler yönetici onayından sonra ödeme alır; askıya alma ve yeniden açma
+- [x] **Gerçek e-posta:** Kuyruklu, yeniden denemeli gönderim (Brevo), kayıtta e-posta doğrulaması
 - [x] **3D Secure ve taksit:** Bankanın imzalı doğrulama cevabı, tek kullanımlık geri dönüş, süre aşımı, taksite göre komisyon
 - [x] **Dolandırıcılık önleme:** İşletmeye özel risk kuralları, engelli kartlar, inceleme kuyruğu ve veritabanı düzeyinde tahsilat kilidi
 - [x] **Başvuru ve bildirimler:** Kontrol haneli işletme başvuru formu, yönetici inceleme ekranı, olaylara bağlı bildirim merkezi

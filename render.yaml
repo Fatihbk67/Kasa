@@ -27,6 +27,14 @@ services:
         value: https://kasa-rpb3.onrender.com
       - key: KASA_FORWARD_HEADERS
         value: native
+      # Real email through Brevo. All three are entered by hand in Render; until KASA_MAIL_PROVIDER is set to
+      # "brevo", mail stays in the log and the site keeps running without a key.
+      - key: KASA_MAIL_PROVIDER
+        sync: false
+      - key: KASA_BREVO_API_KEY
+        sync: false
+      - key: KASA_MAIL_FROM
+        sync: false
       # Fits the JVM into a small instance, trading peak speed for memory.
       - key: JAVA_TOOL_OPTIONS
         value: -Xmx320m -XX:+UseSerialGC -XX:TieredStopAtLevel=1

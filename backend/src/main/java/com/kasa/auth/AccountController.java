@@ -51,8 +51,11 @@ public class AccountController {
     private final RateLimiter rateLimiter;
     private final RateLimitProperties limits;
 
+    private final EmailVerificationService emailVerification;
+
     public AccountController(AuthService authService, TwoFactorService twoFactor, RoleRequestService roleRequests,
-                             RateLimiter rateLimiter, RateLimitProperties limits) {
+                             RateLimiter rateLimiter, RateLimitProperties limits, EmailVerificationService emailVerification) {
+        this.emailVerification = emailVerification;
         this.roleRequests = roleRequests;
         this.twoFactor = twoFactor;
         this.authService = authService;
@@ -63,6 +66,14 @@ public class AccountController {
     @GetMapping("/api/v1/me")
     public AuthService.Me me(Authentication authentication) {
         return authService.me(CurrentTenant.of(authentication), CurrentTenant.userId(authentication));
+    }
+
+    /** Limited per person, so the button cannot be used to flood someone's mailbox. */
+    @PostMapping("/api/v1/settings/email-verification")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public void resendVerification(Authentication authentication) {
+        rateLimiter.check("verify-resend:" + CurrentTenant.userId(authentication), limits.passwordResetPerIp());
+        emailVerification.resend(CurrentTenant.of(authentication), CurrentTenant.userId(authentication));
     }
 
     @PutMapping("/api/v1/settings/tenant")

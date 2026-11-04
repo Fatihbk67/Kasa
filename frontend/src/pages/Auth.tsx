@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { asAdminSession, setAdminToken } from '../adminApi';
 import { api, ApiError } from '../api';
@@ -23,7 +23,7 @@ function AuthCard({ title, children }: { title: string; children: ReactNode }) {
         <div className="brand">Kasa</div>
         <h1>{title}</h1>
         <p className="note note-warning auth-notice">
-          Bu bir portföy demosudur. Gerçek e-posta veya başka yerde kullandığınız bir parola girmeyin.
+          Bu bir portföy demosudur. Doğrulama e-postası girdiğiniz adrese gönderilir; başka yerde kullandığınız bir parola girmeyin.
         </p>
         {children}
       </div>
@@ -298,6 +298,53 @@ export function Register() {
         </button>
       </form>
       <p className="muted auth-switch">Hesabınız var mı? <Link to="/login">Giriş yapın</Link></p>
+    </AuthCard>
+  );
+}
+
+/**
+ * Opened from the link in the verification email. React's development mode runs effects twice, and a link works
+ * only once, so the request is guarded to go out a single time.
+ */
+export function VerifyEmail() {
+  const { token } = useParams();
+  const { isSignedIn } = useAuth();
+  const [state, setState] = useState<'checking' | 'done' | 'used' | 'error'>('checking');
+  const [error, setError] = useState<string | null>(null);
+  const sent = useRef(false);
+
+  useEffect(() => {
+    if (sent.current) {
+      return;
+    }
+    sent.current = true;
+    api('/auth/verify-email', { method: 'POST', body: { token } })
+      .then(() => setState('done'))
+      .catch((e: unknown) => {
+        if (e instanceof ApiError && e.status === 410) {
+          setState('used');
+        } else {
+          setState('error');
+          setError((e as Error).message);
+        }
+      });
+  }, [token]);
+
+  return (
+    <AuthCard title="E-posta doğrulama">
+      {state === 'checking' && <p className="muted" role="status">Bağlantınız kontrol ediliyor…</p>}
+      {state === 'done' && (
+        <p className="note note-success" role="status">
+          E-posta adresiniz doğrulandı. {isSignedIn ? <Link to="/onboarding">İşletme başvurusuna devam edin</Link> : <Link to="/login">Giriş yapın</Link>}
+        </p>
+      )}
+      {state === 'used' && (
+        <p className="note note-warning">
+          Bu bağlantı kullanılmış veya süresi dolmuş. Adresiniz zaten doğrulanmış olabilir; değilse panelden yeni bir bağlantı isteyin.
+          {' '}<Link to={isSignedIn ? '/' : '/login'}>{isSignedIn ? 'Panele dön' : 'Giriş yapın'}</Link>
+        </p>
+      )}
+      {state === 'error' && <ErrorNote message={error} />}
     </AuthCard>
   );
 }

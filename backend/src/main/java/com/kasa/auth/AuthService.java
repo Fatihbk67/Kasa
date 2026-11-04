@@ -27,7 +27,7 @@ public class AuthService {
     }
 
     public record Me(UUID userId, String email, String role, UUID tenantId, String tenantName, String tenantStatus,
-                     String tenantStatusReason) {
+                     String tenantStatusReason, boolean emailVerified) {
     }
 
     /**
@@ -55,10 +55,13 @@ public class AuthService {
     private final AdminAccountService admins;
     private final boolean requireReview;
     private final String decoyHash;
+    private final EmailVerificationService emailVerification;
 
     public AuthService(JdbcClient jdbc, TransactionTemplate tx, TenantScope tenantScope,
                        PasswordEncoder passwordEncoder, JwtService jwtService, AuditLog auditLog, TwoFactorService twoFactor,
-                       AdminAccountService admins, @Value("${kasa.onboarding.require-review}") boolean requireReview) {
+                       AdminAccountService admins, @Value("${kasa.onboarding.require-review}") boolean requireReview,
+                       EmailVerificationService emailVerification) {
+        this.emailVerification = emailVerification;
         this.admins = admins;
         this.requireReview = requireReview;
         this.twoFactor = twoFactor;
@@ -98,6 +101,7 @@ public class AuthService {
                         .single();
                 auditLog.record(tenantId, AuditLog.Actor.user(id, normalizedEmail), "TENANT_REGISTERED", "TENANT", tenantId,
                         Map.of("businessName", businessName));
+                emailVerification.issue(tenantId, id, normalizedEmail);
                 return id;
             });
             return token(userId, tenantId, INITIAL_TOKEN_VERSION);
@@ -159,7 +163,8 @@ public class AuthService {
         return tx.execute(status -> {
             tenantScope.apply(tenantId);
             return jdbc.sql("""
-                            SELECT u.id, u.email, u.role, t.id AS tenant_id, t.name, t.status, t.status_reason
+                            SELECT u.id, u.email, u.role, t.id AS tenant_id, t.name, t.status, t.status_reason,
+                                   u.email_verified_at IS NOT NULL AS email_verified
                             FROM users u
                             JOIN tenants t ON t.id = u.tenant_id
                             WHERE u.id = :id
@@ -172,7 +177,8 @@ public class AuthService {
                             rs.getObject("tenant_id", UUID.class),
                             rs.getString("name"),
                             rs.getString("status"),
-                            rs.getString("status_reason")))
+                            rs.getString("status_reason"),
+                            rs.getBoolean("email_verified")))
                     .single();
         });
     }

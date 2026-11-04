@@ -3,7 +3,8 @@ import { Link, NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from './auth';
 import { canOperate, isOwner, MeProvider, ROLE_LABELS, useMe } from './me';
 import { NotificationBell } from './Notifications';
-import { ToastProvider } from './toast';
+import { api, ApiError } from './api';
+import { ToastProvider, useToast } from './toast';
 
 interface NavItem {
   to: string;
@@ -48,6 +49,36 @@ const NAV: { title: string | null; items: NavItem[] }[] = [
   },
 ];
 
+/** Shown until the address is confirmed. Resending is limited on the server, so a busy button cannot flood a mailbox. */
+function VerifyEmailBanner({ email }: { email: string }) {
+  const notify = useToast();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const resend = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api('/settings/email-verification', { method: 'POST' });
+      notify(`${email} adresine yeni bir doğrulama bağlantısı gönderildi.`);
+    } catch (e) {
+      setError(e instanceof ApiError && e.status === 429 ? 'Çok sık istendi. Biraz sonra yeniden deneyin.' : (e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="note note-warning verify-banner" role="status">
+      <span>
+        <strong>E-posta adresinizi doğrulayın.</strong> {email} adresine bir doğrulama bağlantısı gönderdik. Doğrulamadan işletme başvurusu yapılamaz.
+        {error && <> {error}</>}
+      </span>
+      <button type="button" className="button button-small" onClick={resend} disabled={busy}>{busy ? 'Gönderiliyor…' : 'Yeniden gönder'}</button>
+    </div>
+  );
+}
+
 function Shell() {
   const { signOut } = useAuth();
   const { me } = useMe();
@@ -91,6 +122,7 @@ function Shell() {
         </div>
       </aside>
       <main className="content">
+        {me && !me.emailVerified && <VerifyEmailBanner email={me.email} />}
         {me?.tenantStatus === 'PENDING' && (
           <p className="note note-warning" role="status">
             Hesabınız platform onayı bekliyor. Bu sürede paneli gezebilir, ekibinizi ve ayarlarınızı hazırlayabilirsiniz; onaydan sonra ödeme alabilirsiniz.

@@ -45,7 +45,11 @@ public class MerchantProfileService {
     private final SecretCipher cipher;
     private final AuditLog auditLog;
 
-    public MerchantProfileService(JdbcClient jdbc, TransactionTemplate tx, TenantScope tenantScope, SecretCipher cipher, AuditLog auditLog) {
+    private final com.kasa.auth.EmailVerificationService emailVerification;
+
+    public MerchantProfileService(JdbcClient jdbc, TransactionTemplate tx, TenantScope tenantScope, SecretCipher cipher, AuditLog auditLog,
+                                  com.kasa.auth.EmailVerificationService emailVerification) {
+        this.emailVerification = emailVerification;
         this.jdbc = jdbc;
         this.tx = tx;
         this.tenantScope = tenantScope;
@@ -69,6 +73,10 @@ public class MerchantProfileService {
             tenantScope.apply(tenantId);
             if (isActive()) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "an approved application cannot be changed; contact support");
+            }
+            // The platform writes to this address about the money; an address nobody reads is no way to reach a business.
+            if (!emailVerification.ownerVerified()) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "verify the owner's email address before applying");
             }
             jdbc.sql("""
                             INSERT INTO merchant_profiles (tenant_id, business_type, legal_name, tax_id, tax_office, sector, website,

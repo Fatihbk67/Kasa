@@ -167,7 +167,9 @@ export function Onboarding() {
       profile.reload();
       reloadMe();
     } catch (e) {
-      setError(e instanceof ApiError && e.status === 409
+      setError(e instanceof ApiError && e.status === 403
+        ? 'Başvuru göndermeden önce e-posta adresinizi doğrulayın. Bağlantıyı sayfanın üstünden yeniden isteyebilirsiniz.'
+        : e instanceof ApiError && e.status === 409
         ? 'Onaylanmış bir başvuru değiştirilemez. Bilgileriniz değiştiyse destek ekibine yazın.'
         : e instanceof ApiError && e.status === 422
           ? 'Kimlik, vergi numarası veya IBAN doğrulanamadı. Lütfen kontrol edin.'
@@ -286,7 +288,8 @@ export function Onboarding() {
               <ErrorNote message={error} />
               <div className="form-actions">
                 {editing && <button type="button" className="button" onClick={() => { setEditing(false); setError(null); }} disabled={busy}>Vazgeç</button>}
-                <button type="submit" className="button button-primary" disabled={busy}>
+                <button type="submit" className="button button-primary" disabled={busy || me?.emailVerified === false}
+                  title={me?.emailVerified === false ? 'Önce e-posta adresinizi doğrulayın' : undefined}>
                   {busy ? 'Gönderiliyor…' : saved ? 'Güncellemeyi gönder' : 'Başvuruyu gönder'}
                 </button>
               </div>

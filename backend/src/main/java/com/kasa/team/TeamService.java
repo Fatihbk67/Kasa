@@ -64,13 +64,15 @@ public class TeamService {
     private final JdbcClient jdbc;
     private final TransactionTemplate tx;
     private final NotificationService notifications;
+    private final com.kasa.auth.EmailVerificationService emailVerification;
     private final TenantScope tenantScope;
     private final PasswordEncoder passwordEncoder;
     private final AuthService authService;
     private final AuditLog auditLog;
 
     public TeamService(JdbcClient jdbc, TransactionTemplate tx, TenantScope tenantScope, PasswordEncoder passwordEncoder,
-                       AuthService authService, AuditLog auditLog, NotificationService notifications) {
+                       AuthService authService, AuditLog auditLog, NotificationService notifications, com.kasa.auth.EmailVerificationService emailVerification) {
+        this.emailVerification = emailVerification;
         this.notifications = notifications;
         this.jdbc = jdbc;
         this.tx = tx;
@@ -206,6 +208,8 @@ public class TeamService {
                         .single();
                 auditLog.record(invitation.tenantId(), AuditLog.Actor.user(id, invitation.email()), "MEMBER_JOINED", "USER", id,
                         Map.of("role", invitation.role()));
+                // An invitation link can be forwarded, so it proves nothing about the mailbox: the new member confirms it too.
+                emailVerification.issue(invitation.tenantId(), id, invitation.email());
                 notifications.toRoles(invitation.tenantId(), NotificationService.OWNERS, "MEMBER_JOINED", "Ekibe yeni üye katıldı",
                         invitation.email() + " davetinizi kabul etti.", "/team");
                 return id;

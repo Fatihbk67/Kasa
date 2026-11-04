@@ -9,7 +9,8 @@ public class FrontendController {
 
     @GetMapping({"/login", "/register", "/forgot-password", "/reset-password/{token}", "/pay/{id}", "/analytics", "/payments", "/payments/{id}", "/payouts", "/payouts/{id}",
             "/subscriptions", "/subscriptions/{id}", "/disputes", "/disputes/{id}", "/customers", "/customers/{id}", "/payment-links", "/l/{slug}",
-            "/developers", "/team", "/audit", "/settings", "/invite/{token}", "/admin", "/admin/reconciliation/{id}"})
+            "/developers", "/team", "/audit", "/settings", "/invite/{token}", "/admin", "/admin/reconciliation/{id}",
+            "/verify-email/{token}", "/onboarding", "/risk", "/bank/3ds/{id}"})
     public String frontendRoute() {
         return "forward:/index.html";
     }

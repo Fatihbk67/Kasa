@@ -254,6 +254,7 @@ export interface Me {
   tenantName: string;
   tenantStatus: 'PENDING' | 'ACTIVE' | 'SUSPENDED';
   tenantStatusReason: string | null;
+  emailVerified: boolean;
 }
 
 export interface TeamMember {

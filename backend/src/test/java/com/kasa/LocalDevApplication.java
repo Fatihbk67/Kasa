@@ -95,17 +95,23 @@ public final class LocalDevApplication {
             log.info("Kept the data from the last run in {}", dataDirectory);
             return;
         }
-        UUID tenantId = seedDemoData(context);
+        UUID tenantId = seedDemoData(context, superuser);
         seedHistory(context, tenantId, superuser);
         seedTeam(context, tenantId, superuser);
         seedCustomersLinksAndDisputes(context, tenantId, superuser);
         seedRisk(context, tenantId, superuser);
         // A second business waiting for review, so the admin panel has something to approve.
         UUID bakery = context.getBean(AuthService.class).register("Yeni Fırın", "firin@kasa.test", DEMO_PASSWORD).tenantId();
+        markVerified(superuser, "firin@kasa.test");
         context.getBean(MerchantProfileService.class).save(bakery, new MerchantProfileService.ProfileInput("SOLE_PROPRIETOR",
                 "Ali Usta Fırıncılık", "10000000146", "Beşiktaş", "FOOD", null, "+90 212 555 01 02",
                 "Sinanpaşa Mah. Çarşı Sk. No: 4", "İstanbul", "TR33 0006 1005 1978 6457 8413 26"));
         log.info("Demo merchant ready: {} / {}", DEMO_EMAIL, DEMO_PASSWORD);
+    }
+
+    /** The demo accounts' addresses do not exist, so nobody could click their links; they start verified. */
+    private static void markVerified(JdbcClient superuser, String email) {
+        superuser.sql("UPDATE users SET email_verified_at = now() WHERE email = :email").param("email", email).update();
     }
 
     /** The recommended rules, plus one payment held for review, a card stopped for too many tries, and a blocked card. */
@@ -220,8 +226,9 @@ public final class LocalDevApplication {
         context.getBean(ReconciliationService.class).reconcile(today);
     }
 
-    private static UUID seedDemoData(ConfigurableApplicationContext context) {
+    private static UUID seedDemoData(ConfigurableApplicationContext context, JdbcClient superuser) {
         UUID tenantId = context.getBean(AuthService.class).register("Demo Kahve", DEMO_EMAIL, DEMO_PASSWORD).tenantId();
+        markVerified(superuser, DEMO_EMAIL);
         context.getBean(MerchantProfileService.class).save(tenantId, new MerchantProfileService.ProfileInput("COMPANY",
                 "Demo Kahve Gıda Ltd. Şti.", "1234567890", "Kadıköy", "ECOMMERCE", "https://demokahve.example", "+90 216 555 01 01",
                 "Caferağa Mah. Moda Cd. No: 12", "İstanbul", "TR33 0006 1005 1978 6457 8413 26"));

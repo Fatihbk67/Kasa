@@ -15,7 +15,7 @@ import { SubscriptionDetailPage, Subscriptions } from './pages/Subscriptions';
 import { Settings } from './pages/Settings';
 import { AcceptInvitation, TeamPage } from './pages/Team';
 import { Developers } from './pages/Developers';
-import { ForgotPassword, Login, Register, ResetPassword } from './pages/Auth';
+import { ForgotPassword, Login, Register, ResetPassword, VerifyEmail } from './pages/Auth';
 import { Onboarding } from './pages/Onboarding';
 import { RiskPage } from './pages/Risk';
 import { Overview } from './pages/Overview';
@@ -38,6 +38,7 @@ createRoot(document.getElementById('root')!).render(
           <Route path="/register" element={<Register />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password/:token" element={<ResetPassword />} />
+          <Route path="/verify-email/:token" element={<VerifyEmail />} />
           <Route path="/pay/:id" element={<Checkout />} />
           <Route path="/bank/3ds/:id" element={<BankChallenge />} />
           <Route path="/l/:slug" element={<PublicLinkPage />} />

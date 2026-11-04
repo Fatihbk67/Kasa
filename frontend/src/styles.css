@@ -1454,3 +1454,11 @@ form.toolbar {
 .installment.selected {
   border-color: var(--accent);
 }
+
+.verify-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}

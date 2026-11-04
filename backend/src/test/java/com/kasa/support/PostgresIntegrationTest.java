@@ -50,6 +50,9 @@ public abstract class PostgresIntegrationTest {
         // Most tests are about what an approved merchant can do. MerchantOnboardingApiTest turns the review back on.
         registry.add("kasa.onboarding.require-review", () -> false);
         registry.add("kasa.billing.job-interval", () -> "PT1H");
+        // Tests send mail when they choose, and most do not need a verified owner. EmailApiTest switches both on.
+        registry.add("kasa.mail.dispatch-interval", () -> "PT1H");
+        registry.add("kasa.auth.require-email-verification", () -> false);
         registry.add("kasa.settlement.cron", () -> "-");
         registry.add("kasa.settlement.recovery-interval", () -> "PT1H");
         registry.add("kasa.reconciliation.cron", () -> "-");

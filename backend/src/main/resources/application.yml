@@ -56,6 +56,9 @@ kasa:
     checkout-pay-per-ip: 30
     payment-link-session-per-ip: 20
     password-reset-per-ip: 5
+  auth:
+    # A business must confirm its owner's email address before it can apply to take payments.
+    require-email-verification: true
   onboarding:
     # New businesses wait for a platform administrator before they can take money.
     require-review: true
@@ -65,8 +68,20 @@ kasa:
   # Links in emails are built from this, never from the request's Host header.
   public-url: ${KASA_PUBLIC_URL:http://localhost:8080}
   mail:
-    # No email provider is connected. A reset link in a log works as a password, so this stays off in production.
+    # "log" keeps mail on this machine; "brevo" sends real email (needs KASA_BREVO_API_KEY and KASA_MAIL_FROM).
+    provider: ${KASA_MAIL_PROVIDER:log}
+    # A reset link in a log works as a password, so this stays off in production.
     log-body: ${KASA_MAIL_LOG_BODY:false}
+    from-address: ${KASA_MAIL_FROM:}
+    from-name: ${KASA_MAIL_FROM_NAME:Kasa}
+    brevo-api-key: ${KASA_BREVO_API_KEY:}
+    brevo-base-url: https://api.brevo.com
+    dispatch-interval: PT5S
+    batch-size: 20
+    max-attempts: 6
+    # Doubles after each failure: 30 seconds, 1, 2, 4, 8 minutes.
+    retry-delay: PT30S
+    retention: P30D
   disputes:
     # Charged only when the merchant loses, in minor units.
     loss-fee: 15000

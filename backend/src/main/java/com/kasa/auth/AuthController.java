@@ -41,14 +41,19 @@ public class AuthController {
     public record ResetConfirmRequest(@NotBlank @Size(max = 128) String token, @NotBlank @Size(min = 12, max = 72) String newPassword) {
     }
 
+    public record VerifyEmailRequest(@NotBlank @Size(max = 128) String token) {
+    }
+
     private final AuthService authService;
     private final PasswordResetService passwordResets;
     private final AdminAccountService admins;
     private final RateLimiter rateLimiter;
     private final RateLimitProperties limits;
+    private final EmailVerificationService emailVerification;
 
     public AuthController(AuthService authService, PasswordResetService passwordResets, AdminAccountService admins,
-                          RateLimiter rateLimiter, RateLimitProperties limits) {
+                          RateLimiter rateLimiter, RateLimitProperties limits, EmailVerificationService emailVerification) {
+        this.emailVerification = emailVerification;
         this.admins = admins;
         this.passwordResets = passwordResets;
         this.authService = authService;
@@ -92,6 +97,13 @@ public class AuthController {
         // Also per email, so a stranger cannot flood someone's mailbox from many addresses.
         rateLimiter.check("reset-email:" + request.email().trim().toLowerCase(Locale.ROOT), limits.passwordResetPerIp());
         passwordResets.request(request.email());
+    }
+
+    @PostMapping("/verify-email")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void verifyEmail(@Valid @RequestBody VerifyEmailRequest request, HttpServletRequest http) {
+        rateLimiter.check("reset-ip:" + http.getRemoteAddr(), limits.passwordResetPerIp());
+        emailVerification.confirm(request.token());
     }
 
     @PostMapping("/password-reset/confirm")
