@@ -63,6 +63,8 @@ public abstract class PostgresIntegrationTest {
         registry.add("kasa.webhooks.connect-timeout", () -> "PT1S");
         // The test receiver runs on localhost; WebhookUrlGuardTest covers the guard with this turned off.
         registry.add("kasa.webhooks.allow-insecure-targets", () -> true);
+        // The built web app is not part of a backend-only build; FrontendRoutesTest needs an entry page to serve.
+        registry.add("kasa.frontend-index", () -> "classpath:frontend-test-index.html");
     }
 
     private static EmbeddedPostgres startPostgres() {

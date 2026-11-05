@@ -1139,6 +1139,188 @@ form.toolbar {
 .outcome-danger h1 { color: var(--danger); }
 .outcome-warning h1 { color: var(--warning); }
 
+/* 404 */
+.not-found {
+  align-items: flex-start;
+}
+
+.not-found-code {
+  margin: 8px 0 -6px;
+  font-size: 3.5rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: var(--accent);
+}
+
+.not-found code {
+  overflow-wrap: anywhere;
+}
+
+/* Quick search */
+kbd {
+  display: inline-block;
+  min-width: 1.6em;
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--surface-muted);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.search-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.search-trigger:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.command-palette {
+  width: min(560px, calc(100vw - 32px));
+  margin-top: 12vh;
+  padding: 0;
+  overflow: hidden;
+}
+
+.command-input {
+  width: 100%;
+  padding: 16px 18px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 1rem;
+}
+
+.command-input:focus {
+  outline: none;
+}
+
+.command-list {
+  max-height: min(360px, 50vh);
+  margin: 0;
+  padding: 6px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.command-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.command-item.active {
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+.command-empty {
+  margin: 0;
+  padding: 18px;
+}
+
+.command-help {
+  margin: 0;
+  padding: 8px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-muted);
+}
+
+/* Payment timeline */
+.timeline {
+  margin: 0;
+  padding: 18px 20px;
+  list-style: none;
+}
+
+.timeline-item {
+  position: relative;
+  display: flex;
+  gap: 14px;
+  padding-bottom: 18px;
+}
+
+.timeline-item:last-child {
+  padding-bottom: 0;
+}
+
+/* The line joining one step to the next, drawn from below each dot. */
+.timeline-item:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  top: 16px;
+  bottom: 0;
+  left: 5px;
+  width: 2px;
+  background: var(--border);
+}
+
+.timeline-dot {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  box-shadow: 0 0 0 3px var(--surface);
+}
+
+.timeline-success .timeline-dot { background: var(--success); }
+.timeline-danger .timeline-dot { background: var(--danger); }
+.timeline-warning .timeline-dot { background: var(--warning); }
+
+.timeline-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.timeline-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+
+.timeline-row strong {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.timeline-failure {
+  color: var(--danger);
+  font-size: 0.875rem;
+}
+
 @media (max-width: 760px) {
   .shell {
     grid-template-columns: minmax(0, 1fr);

@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
+import { CommandPalette, useCommandShortcut, type Command } from './CommandPalette';
 import { Link, NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from './auth';
 import { canOperate, isOwner, MeProvider, ROLE_LABELS, useMe } from './me';
@@ -98,11 +99,22 @@ function ThemePicker() {
   );
 }
 
+const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
+
 function Shell() {
   const { signOut } = useAuth();
   const { me } = useMe();
   // Only matters on a phone, where the menu would otherwise push every page below the fold.
   const [menuOpen, setMenuOpen] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const openSearch = useCallback(() => setSearching(true), []);
+  useCommandShortcut(openSearch);
+
+  const visible = NAV.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => (!item.operatorOnly || canOperate(me)) && (!item.ownerOnly || isOwner(me))),
+  }));
+  const pages: Command[] = visible.flatMap((group) => group.items.map((item) => ({ to: item.to, label: item.label, group: group.title ?? 'Panel' })));
 
   return (
     <div className="shell">
@@ -115,16 +127,19 @@ function Shell() {
             {menuOpen ? 'Kapat' : 'Menü'}
           </button>
         </div>
+        <button type="button" className="search-trigger sidebar-menu" onClick={openSearch} aria-keyshortcuts={IS_MAC ? 'Meta+K' : 'Control+K'}>
+          <span>Ara…</span>
+          <kbd>{IS_MAC ? '⌘K' : 'Ctrl K'}</kbd>
+        </button>
         <nav id="main-menu" aria-label="Ana menü" className="sidebar-menu">
-          {NAV.map((group) => {
-            const items = group.items.filter((item) => (!item.operatorOnly || canOperate(me)) && (!item.ownerOnly || isOwner(me)));
-            if (items.length === 0) {
+          {visible.map((group) => {
+            if (group.items.length === 0) {
               return null;
             }
             return (
               <div className="nav-group" key={group.title ?? 'start'}>
                 {group.title && <span className="nav-title">{group.title}</span>}
-                {items.map((item) => (
+                {group.items.map((item) => (
                   <NavLink key={item.to} to={item.to} end={item.end} className="nav-link" onClick={() => setMenuOpen(false)}>
                     {item.label}
                   </NavLink>
@@ -156,6 +171,7 @@ function Shell() {
         )}
         <Outlet />
       </main>
+      {searching && <CommandPalette pages={pages} onClose={() => setSearching(false)} />}
     </div>
   );
 }

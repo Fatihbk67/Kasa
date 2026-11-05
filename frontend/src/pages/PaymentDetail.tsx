@@ -34,6 +34,49 @@ const OPERATION_LABELS: Record<Operation['type'], string> = {
   DISPUTE_FEE: 'İtiraz ücreti',
 };
 
+/** Money leaving the merchant's balance, shown with a minus so the story reads like a statement. */
+const OUTGOING: Operation['type'][] = ['REFUND', 'DISPUTE_WITHDRAWAL', 'DISPUTE_FEE'];
+
+const STATUS_TONE: Record<Operation['status'], string> = { SUCCEEDED: 'success', FAILED: 'danger', PENDING: 'warning' };
+
+/** Oldest first, starting from the payment itself, so each step reads as what happened next. */
+export function timelineOrder(operations: Operation[]): Operation[] {
+  return [...operations].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
+}
+
+function Timeline({ payment, operations }: { payment: Payment; operations: Operation[] }) {
+  const source = payment.processor === 'IYZICO' ? `iyzico${payment.cardLabel ? ` · ${payment.cardLabel}` : ''}` : 'Simüle banka';
+  return (
+    <ol className="card timeline">
+      <li className="timeline-item timeline-neutral">
+        <span className="timeline-dot" aria-hidden="true" />
+        <div className="timeline-body">
+          <div className="timeline-row">
+            <strong>Ödeme oluşturuldu</strong>
+            <span className="numeric">{formatMoney(payment.amount, payment.currency)}</span>
+          </div>
+          <span className="hint">{source} · {payment.installments === 1 ? 'Tek çekim' : `${payment.installments} taksit`} · {formatDateTime(payment.createdAt)}</span>
+        </div>
+      </li>
+      {timelineOrder(operations).map((operation) => (
+        <li key={operation.id} className={`timeline-item timeline-${STATUS_TONE[operation.status]}`}>
+          <span className="timeline-dot" aria-hidden="true" />
+          <div className="timeline-body">
+            <div className="timeline-row">
+              <strong>{OPERATION_LABELS[operation.type]} <OperationStatusBadge status={operation.status} /></strong>
+              <span className="numeric">
+                {OUTGOING.includes(operation.type) && operation.status === 'SUCCEEDED' ? '−' : ''}{formatMoney(operation.amount, payment.currency)}
+              </span>
+            </div>
+            {operation.failureCode && <span className="timeline-failure">{failureMessage(operation.failureCode)}</span>}
+            <span className="hint"><time dateTime={operation.createdAt}>{formatDateTime(operation.createdAt)}</time></span>
+          </div>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 function SimulateDisputeDialog({ payment, onClose, onDone }: { payment: Payment; onClose: () => void; onDone: (disputeId: string) => void }) {
   const [reason, setReason] = useState<DisputeReason>('PRODUCT_NOT_RECEIVED');
 
@@ -222,31 +265,7 @@ export function PaymentDetailPage() {
       </section>
 
       <div className="section-header"><h2>İşlem geçmişi</h2></div>
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th scope="col">İşlem</th>
-              <th scope="col">Sonuç</th>
-              <th scope="col" className="numeric">Tutar</th>
-              <th scope="col" className="hide-narrow">Tarih</th>
-            </tr>
-          </thead>
-          <tbody>
-            {operations.map((operation) => (
-              <tr key={operation.id}>
-                <td>
-                  {OPERATION_LABELS[operation.type]}
-                  {operation.failureCode && <span className="hint row-hint">{failureMessage(operation.failureCode)}</span>}
-                </td>
-                <td><OperationStatusBadge status={operation.status} /></td>
-                <td className="numeric">{formatMoney(operation.amount, payment.currency)}</td>
-                <td className="hide-narrow muted">{formatDateTime(operation.createdAt)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <Timeline payment={payment} operations={operations} />
       {action && <ActionDialog action={action} payment={payment} onClose={() => setAction(null)} onDone={finish} />}
       {blocking && (
         <FormDialog title="Kartı engelle" submitLabel="Engelle" danger onClose={() => setBlocking(false)}

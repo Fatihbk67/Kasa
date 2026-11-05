@@ -16,6 +16,7 @@ import { Settings } from './pages/Settings';
 import { AcceptInvitation, TeamPage } from './pages/Team';
 import { Developers } from './pages/Developers';
 import { ForgotPassword, Login, Register, ResetPassword, VerifyEmail } from './pages/Auth';
+import { NotFound } from './pages/NotFound';
 import { Onboarding } from './pages/Onboarding';
 import { RiskPage } from './pages/Risk';
 import { Overview } from './pages/Overview';
@@ -66,7 +67,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="risk" element={<RiskPage />} />
             <Route path="settings" element={<Settings />} />
           </Route>
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
