@@ -97,6 +97,8 @@ class ShowcaseApiTest extends PostgresIntegrationTest {
         assertThat(policy).contains("script-src 'self' https://accounts.google.com/gsi/client;");
         assertThat(policy.split("script-src")[1].split(";")[0]).doesNotContain("unsafe");
         assertThat(response.getHeaders().getFirst("X-Content-Type-Options")).isEqualTo("nosniff");
+        // Google sign-in needs the origin; a path (which may hold a reset token) must still never leave the site.
+        assertThat(response.getHeaders().getFirst("Referrer-Policy")).isEqualTo("strict-origin-when-cross-origin");
     }
 
     private ResponseEntity<Map> login(String email) {

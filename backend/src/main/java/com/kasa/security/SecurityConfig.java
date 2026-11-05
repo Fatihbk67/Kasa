@@ -73,10 +73,11 @@ public class SecurityConfig {
                         .requestMatchers("/api/**").hasAnyAuthority(OWNER, MANAGER, "SCOPE_" + API_SCOPE)
                         // Everything else is the public web interface, which holds no data of its own.
                         .anyRequest().permitAll())
-                // A password reset link holds its token in the path, which must not leak to other sites in a Referer header.
+                // Other sites get the origin alone, never the path: a password reset link holds its token there.
+                // Google sign-in checks that origin, so sending nothing at all (same-origin) makes its popup give up.
                 .headers(headers -> headers
                         .contentSecurityPolicy(csp -> csp.policyDirectives(CONTENT_SECURITY_POLICY))
-                        .referrerPolicy(referrer -> referrer.policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.SAME_ORIGIN)))
+                        .referrerPolicy(referrer -> referrer.policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN)))
                 .addFilterBefore(adminTokenFilter, BearerTokenAuthenticationFilter.class)
                 .addFilterBefore(apiKeyFilter, BearerTokenAuthenticationFilter.class)
                 .oauth2ResourceServer(server -> server.jwt(jwt -> jwt.jwtAuthenticationConverter(userAccess)))
