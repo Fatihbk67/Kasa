@@ -90,7 +90,9 @@ public final class LocalDevApplication {
         System.setProperty("management.endpoint.shutdown.access", "unrestricted");
 
         ConfigurableApplicationContext context = SpringApplication.run(KasaApplication.class, args);
-        boolean alreadySeeded = superuser.sql("SELECT EXISTS (SELECT 1 FROM tenants)").query(Boolean.class).single();
+        // Looks for its own account, not any business: the public demo business is created during start-up.
+        boolean alreadySeeded = superuser.sql("SELECT EXISTS (SELECT 1 FROM users WHERE email = :email)")
+                .param("email", DEMO_EMAIL).query(Boolean.class).single();
         if (alreadySeeded) {
             log.info("Kept the data from the last run in {}", dataDirectory);
             return;
@@ -118,6 +120,10 @@ public final class LocalDevApplication {
     private static void seedRisk(ConfigurableApplicationContext context, UUID tenantId, JdbcClient superuser) {
         // The seed itself just used the test card many times. Moved back, so the first test payment is not
         // blocked by the velocity rule for its first ten minutes.
+        superuser.sql("""
+                UPDATE payment_operations SET created_at = created_at - interval '15 minutes', updated_at = updated_at - interval '15 minutes'
+                WHERE payment_id IN (SELECT id FROM payments WHERE created_at > now() - interval '15 minutes')
+                """).update();
         superuser.sql("UPDATE payments SET created_at = created_at - interval '15 minutes' WHERE created_at > now() - interval '15 minutes'").update();
         RiskService risk = context.getBean(RiskService.class);
         risk.addRecommended(tenantId);
@@ -210,9 +216,13 @@ public final class LocalDevApplication {
                     }
                 }
                 int hours = 8 + random.nextInt(12);
-                superuser.sql("UPDATE payments SET created_at = now() - make_interval(days => :d, hours => :h), updated_at = now() - make_interval(days => :d, hours => :h) WHERE id = :id")
+                // One shift for the payment and all its steps, so the steps keep their order on the payment page.
+                // To that local day and hour, so "yesterday" is the merchant's yesterday even when the demo starts at night.
+                String shift = "((((now() AT TIME ZONE 'Europe/Istanbul')::date - :d)::timestamp + make_interval(hours => :h))"
+                        + " AT TIME ZONE 'Europe/Istanbul') - (SELECT created_at FROM payments WHERE id = :id)";
+                superuser.sql("UPDATE payment_operations SET created_at = created_at + (" + shift + "), updated_at = updated_at + (" + shift + ") WHERE payment_id = :id")
                         .param("d", daysAgo).param("h", hours).param("id", id).update();
-                superuser.sql("UPDATE payment_operations SET created_at = now() - make_interval(days => :d, hours => :h), updated_at = now() - make_interval(days => :d, hours => :h) WHERE payment_id = :id")
+                superuser.sql("UPDATE payments SET created_at = created_at + (" + shift + "), updated_at = updated_at + (" + shift + ") WHERE id = :id")
                         .param("d", daysAgo).param("h", hours).param("id", id).update();
             }
         }
@@ -227,7 +237,7 @@ public final class LocalDevApplication {
     }
 
     private static UUID seedDemoData(ConfigurableApplicationContext context, JdbcClient superuser) {
-        UUID tenantId = context.getBean(AuthService.class).register("Demo Kahve", DEMO_EMAIL, DEMO_PASSWORD).tenantId();
+        UUID tenantId = context.getBean(AuthService.class).register("Moda Kahve Atölyesi", DEMO_EMAIL, DEMO_PASSWORD).tenantId();
         markVerified(superuser, DEMO_EMAIL);
         context.getBean(MerchantProfileService.class).save(tenantId, new MerchantProfileService.ProfileInput("COMPANY",
                 "Demo Kahve Gıda Ltd. Şti.", "1234567890", "Kadıköy", "ECOMMERCE", "https://demokahve.example", "+90 216 555 01 01",

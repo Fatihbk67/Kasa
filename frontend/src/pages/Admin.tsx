@@ -809,7 +809,7 @@ function PlatformHome({ overview, pendingRequests, onGoTo }: {
             </Kpi>
           </>
         )}
-        <Kpi label={t('İşletme')} value={overview ? overview.tenantCount.toLocaleString(locale()) : '—'}>
+        <Kpi label={t('İşletme sayısı')} value={overview ?overview.tenantCount.toLocaleString(locale()) : '—'}>
           <span className="hint">
             {data ? t('Son 30 günde {count} yeni kayıt', { count: newMerchants }) : ' '}
           </span>

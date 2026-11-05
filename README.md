@@ -1,165 +1,177 @@
+<div align="center">
+
 # Kasa
 
+**A multi-tenant payment platform: card payments, refunds, disputes, subscriptions and daily payouts,<br/>with every kuruş recorded in a double-entry ledger that the database itself keeps balanced.**
+
 [![CI](https://github.com/Fatihbk67/Kasa/actions/workflows/ci.yml/badge.svg)](https://github.com/Fatihbk67/Kasa/actions/workflows/ci.yml)
+![Java 21](https://img.shields.io/badge/Java-21-007396?logo=openjdk&logoColor=white)
+![Spring Boot 4](https://img.shields.io/badge/Spring%20Boot-4-6DB33F?logo=springboot&logoColor=white)
+![PostgreSQL 18](https://img.shields.io/badge/PostgreSQL-18-4169E1?logo=postgresql&logoColor=white)
+![React 19](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
+![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
 
-Çok kiracılı (multi-tenant) ödeme altyapısı platformu. İşletmeler API anahtarıyla sisteme bağlanır, ödeme alır, iade yapar ve kazançlarını çeker. Her para hareketi çift taraflı muhasebe defterine (double-entry ledger) yazılır.
+[**Live demo**](https://kasa-rpb3.onrender.com) · [**Try it in one click**](https://kasa-rpb3.onrender.com/login) · [Architecture](#architecture) · [Engineering highlights](#engineering-highlights) · [Run it locally](#run-it-locally) · [Türkçe](README.tr.md)
 
-> Eğitim ve portföy projesidir. Ödemeler iki yoldan geçebilir: her hata senaryosunu tekrar üretebilen simüle banka veya **iyzico'nun gerçek test ortamı (sandbox)**. Kart bilgisi bu uygulamaya hiç gelmez; iyzico'da kart, iyzico'nun kendi sayfasında girilir.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/dashboard-dark.png">
+  <img alt="The merchant dashboard: balance, today's and this week's volume against the previous period, approval rate, a 30-day chart, a to-do list and recent payments" src="docs/screenshots/dashboard.png" width="100%">
+</picture>
 
-**Canlı demo:** [kasa-rpb3.onrender.com](https://kasa-rpb3.onrender.com). Ücretsiz sunucu uykudaysa ilk açılış bir dakikadan uzun sürebilir. Kayıt olurken gerçek e-posta veya başka yerde kullandığınız bir parola girmeyin.
+</div>
 
-## Mimari
+## What it is
+
+Kasa does what a payment service provider does for an online business, from start to finish:
+
+- A merchant signs up, applies with its legal details and IBAN, and is approved by a platform administrator.
+- The merchant takes payments through an API key, a hosted checkout page or a shareable payment link.
+- Payments are authorised, captured, voided or refunded.
+- The merchant answers chargebacks, bills customers on subscriptions and screens payments with its own fraud rules.
+- Each day, what the merchant earned is paid out and checked against the bank's statement.
+
+It is a portfolio project and moves no real money. Payments go either to a **simulated bank** that can reproduce every failure on demand, or to **iyzico's real sandbox**, where card details are typed on iyzico's own page and never reach this server.
+
+> **See it without signing up.** On the [sign-in page](https://kasa-rpb3.onrender.com/login), press **Try the demo**. It opens a read-only sample business with 45 days of payments, refunds, declines, disputes and a payout. The free server sleeps when idle, so the first visit can take about a minute.
+
+## Engineering highlights
+
+The interesting part of a payment system is what happens when things go wrong. Each of these behaviours is covered by integration tests against a real PostgreSQL.
+
+| Problem | How Kasa handles it |
+|---|---|
+| **Money must never appear or vanish** | Every movement is a double-entry journal entry. A deferred constraint trigger rejects any transaction whose debits and credits differ, and the journal is append-only: no `UPDATE`, `DELETE` or `TRUNCATE`, even for a buggy code path. |
+| **A retried request must not charge twice** | Every money-moving `POST` takes an `Idempotency-Key`. A uniqueness constraint plus a stored request hash makes a concurrent retry return the original result, and the same key with a different body is rejected. |
+| **The bank times out mid-payment** | The operation is written as `PENDING` *before* the bank call, which happens outside the database transaction. A timeout is never guessed as success or failure: a recovery job asks the bank what actually happened and finishes the payment. |
+| **One merchant's data must never leak to another** | Isolation is enforced by PostgreSQL row-level security, not by remembering a `WHERE tenant_id = ?`. The application connects as a role that cannot bypass RLS, and refuses to start if it could. |
+| **Concurrent capture, void and refund** | Row locks and a "one pending operation per payment" constraint allow a single bank call at a time; status transitions are validated by a database trigger. |
+| **Webhooks must not be lost, duplicated or abused** | A transactional outbox writes the event with the payment. Workers claim rows with `FOR UPDATE SKIP LOCKED` under a lease, retry with exponential back-off and sign each delivery with HMAC-SHA256 and a timestamp. Private, loopback and cloud-metadata addresses are refused at registration *and* on every send (SSRF). |
+| **Paying a merchant twice** | A payout item can belong to only one live payout, with one payout per merchant per day, enforced by constraints so it holds even with several workers. A bank rejection returns the money and the items for the next run. |
+| **Detecting drift from the bank** | Daily reconciliation compares the bank's statement with our operations and stored balances with the sum of the journal. It reports differences but never "fixes" them, since a person has to decide which side is right. |
+| **Fraud** | Each merchant writes its own rules (velocity per card, repeated declines, amount limits, blocked cards). A rule can decline before the bank is ever called, or authorise and hold for review. A database trigger stops a held payment from being captured even if a code path forgets to check. 20 simultaneous payments with one card cannot slip past a limit of 5: the count is serialised by a per-card advisory lock. |
+| **Tampering with the past** | The audit log is append-only and hash-chained, so even a superuser's edit or deletion is caught by `GET /audit-log/verify`. |
+| **Revoking access now, not when a token expires** | JWTs cannot be recalled, so role and token version are read from the database on every request. A removed member is locked out on their next click; a password change ends other sessions. |
+
+There are more, with the reasoning behind each, in [the Turkish README](README.tr.md#çözülen-mühendislik-problemleri): 3-D Secure with a signed bank response, instalments, subscription proration with `BigInteger`, month-end billing that does not drift, TOTP two-step sign-in, AES-GCM-encrypted secrets bound to their owner, an email outbox, CSV-injection-safe exports and more.
+
+## Screenshots
+
+| | |
+|:---:|:---:|
+| <img src="docs/screenshots/payment.png" alt="A payment's detail page with its timeline: created, authorised, captured, partially refunded"> | <img src="docs/screenshots/risk.png" alt="Risk and fraud: a payment held for review, the merchant's rules and blocked cards"> |
+| **Payment timeline.** Every bank operation, its outcome and amount. | **Risk and fraud.** A held payment, per-merchant rules, blocked cards. |
+| <img src="docs/screenshots/analytics.png" alt="Analytics: captured volume, net revenue, fees, refunds, disputes, approval rate, a daily chart and decline reasons"> | <img src="docs/screenshots/checkout.png" alt="The hosted checkout page with test cards for success, 3-D Secure, declines and bank timeouts, and instalment options"> |
+| **Analytics.** Net revenue agrees with the ledger to the kuruş. | **Hosted checkout.** Test cards for each failure mode, plus instalments. |
+
+<img src="docs/screenshots/admin.png" alt="The platform administrator's overview: volume across all merchants, approval rate, a 30-day chart, a to-do list of applications and role requests, and the top merchants" width="100%">
+
+**Platform administration.** Volume across every merchant, applications and role requests to decide, top merchants and system health. The admin sees totals, never a merchant's individual payments.
+
+The whole interface is available in Turkish and English, in light and dark themes, and works on a phone.
+
+## Architecture
+
+A modular monolith: one deployable, with packages that own their tables and talk through services. That is enough to show the hard problems without the operational cost of microservices.
 
 ```mermaid
 flowchart LR
-    C[Müşteri tarayıcısı] -->|ödeme bağlantısı| API
-    M[İşletme paneli] -->|JWT| API
-    S[İşletme sunucusu] -->|API anahtarı| API
-    subgraph Kasa [Modüler monolit]
-        API[REST API] --> P[Ödeme servisi]
-        P --> L[Çift taraflı defter]
-        J[Zamanlanmış işler] --> R[Kurtarma]
-        J --> D[Webhook göndericisi]
-        J --> SE[Hesap kesimi]
-        J --> MU[Mutabakat]
+    C[Customer's browser] -->|checkout / payment link| API
+    M[Merchant dashboard] -->|JWT| API
+    S[Merchant's server] -->|API key| API
+    subgraph Kasa [Kasa · Spring Boot]
+        API[REST API] --> P[Payments]
+        P --> L[Double-entry ledger]
+        J[Scheduled jobs] --> R[Recovery]
+        J --> D[Webhook dispatcher]
+        J --> SE[Settlement]
+        J --> MU[Reconciliation]
     end
-    P -->|transaction dışında| RB{Yönlendirici}
-    RB -->|tok_*| B[Simüle banka]
-    RB -->|iyzico:*| IY[iyzico sandbox API]
-    C -->|kart bilgisi| IY
-    R --> B
-    SE --> B
-    MU -->|gün sonu dosyası| B
-    Kasa --> DB[(PostgreSQL<br/>RLS, trigger, kısıtlar)]
-    D -->|HMAC imzalı| S
-    PR[Prometheus] -->|metrikler| Kasa
+    P -->|outside the DB transaction| RB{Gateway router}
+    RB -->|tok_*| B[Simulated bank]
+    RB -->|iyzico:*| IY[iyzico sandbox]
+    C -->|card details| IY
+    Kasa --> DB[(PostgreSQL<br/>RLS · triggers · constraints)]
+    D -->|HMAC-signed| S
+    PR[Prometheus] -->|/actuator/prometheus| Kasa
     G[Grafana] --> PR
 ```
 
-## Ölçülen performans
+### Taking a payment when the bank may not answer
 
-Tek dizüstü bilgisayarda (Intel i7-13650HX, 16 GB RAM) yük istemcisi, uygulama ve PostgreSQL aynı makinede çalışırken 30 saniyelik ölçümler. Bağlantı havuzu varsayılan 10 bağlantıdır, kalıcı commit (`synchronous_commit=on`) açıktır. Bir akış provizyon, tahsilat ve okumadan oluşur; tahsilat defter kaydı ve webhook kuyruğunu da yazar.
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Client
+    participant Kasa
+    participant DB as PostgreSQL
+    participant Bank
+    Client->>Kasa: POST /payments (Idempotency-Key)
+    Kasa->>DB: insert payment + operation PENDING (commit)
+    Kasa->>Bank: authorise (no DB transaction or connection held)
+    alt bank answers
+        Bank-->>Kasa: approved / declined
+        Kasa->>DB: record outcome, ledger entry, webhook in outbox (one commit)
+        Kasa-->>Client: 201 with the result
+    else timeout
+        Kasa-->>Client: 202, outcome not known yet
+        Note over Kasa,Bank: the recovery job asks the bank<br/>using the operation id and finishes the payment
+    end
+```
 
-| Senaryo | Akış/sn | Provizyon p95 | Tahsilat p95 | Beklenmeyen yanıt |
-|---|---|---:|---:|---:|
-| 50 eşzamanlı istemci, 20 işletme | 826 | 39 ms | 47 ms | 0 |
-| 50 eşzamanlı istemci, tek işletme | 712 | 45 ms | 55 ms | 0 |
-| Tek işletme, 20 işletmelik veri dolduktan sonra | 619 | 50 ms | 66 ms | 0 |
+### Who can do what
 
-Ölçüm sonunda her işletmenin bakiyesi istemcinin bağımsız hesabıyla kuruşu kuruşuna eşleşti. Mutabakat ürettiği bütün banka satırlarını eşleştirdi; kalan iki fark, demo verisine bilerek konan banka hatalarıdır.
+Merchants have three roles, and API keys a fourth, deliberately narrow set of rights. The platform administrator is a separate kind of account that sees totals, never a merchant's records.
 
-### Tek işletme darboğazı nasıl bulundu
+| Action | Owner | Manager | Viewer | API key | Platform admin |
+|---|:---:|:---:|:---:|:---:|:---:|
+| View payments, analytics, payouts | ✅ | ✅ | ✅ | ✅ | — |
+| Take payments, refund, answer disputes | ✅ | ✅ | — | ✅ | — |
+| Risk rules, API keys, webhooks, audit log | ✅ | ✅ | — | — | — |
+| Invite viewers | ✅ | ✅ | — | — | — |
+| Invite managers, change roles, business details | ✅ | — | — | — | — |
+| Approve merchants, run settlement and reconciliation | — | — | — | — | ✅ |
 
-Tek işletmenin bütün ödemeleri aynı bakiye satırlarını günceller, bu yüzden o satırların kilitli kaldığı süre işletmenin kapasite sınırıdır. `pg_stat_statements` ile ölçüldüğünde zamanın büyük kısmı tek tek sorgularda değil, bakiye satırlarını `FOR UPDATE` ile kilitlemeyi beklerken geçiyordu. Kilit işlemin başında alınıyor, sonrasındaki bütün iş (hareket satırları, webhook kuyruğu, okumalar) boyunca tutuluyordu.
+A leaked API key cannot create keys, redirect webhooks or add people. Every cell above was checked end to end against a running instance.
 
-Şimdi bakiye en sonda, eksi bakiye kuralını da kendi içinde uygulayan tek bir koşullu `UPDATE` ile değişir ve ondan sonra commit'ten başka iş yapılmaz. Aynı gün ve aynı makinede, önce eski sonra yeni kodla ölçüldü:
+## Measured performance
 
-| Senaryo | Eski kod | Yeni kod |
-|---|---:|---:|
-| Tek işletme, temiz veritabanı | 514 akış/sn | 712 akış/sn (+%38) |
-| Tek işletme, dolu veritabanı | 432 akış/sn | 619 akış/sn (+%43) |
-| 20 işletme | 814 akış/sn | 826 akış/sn |
+These numbers come from one laptop (Intel i7-13650HX, 16 GB) running the load generator, the application and PostgreSQL at once. Each run lasted 30 seconds with a 10-connection pool and durable commits (`synchronous_commit=on`). A *flow* is an authorisation, a capture (which also writes the ledger and the webhook outbox) and a read.
 
-20 işletmede fark çıkmaz, çünkü orada ödemeler farklı satırlara yazar ve kilit beklenmez. Dolu veritabanında hâlâ yaklaşık %13 kayıp var. Checkpoint'ten kaynaklanmadığı, sorgu süreleri değişmediği ölçüldü; asıl nedeni henüz bulunmadı. Ölçmek için yerel demoyu `KASA_LOCAL_QUERY_STATS=true` ile başlatın; konsol veritabanı adresini yazar.
+| Scenario | Flows/s | Authorise p95 | Capture p95 | Unexpected responses |
+|---|---:|---:|---:|---:|
+| 50 concurrent clients, 20 merchants | 826 | 39 ms | 47 ms | 0 |
+| 50 concurrent clients, 1 merchant | 712 | 45 ms | 55 ms | 0 |
+| 1 merchant, after 20 merchants' data | 619 | 50 ms | 66 ms | 0 |
 
-Simüle bankanın kayıtları da aynı PostgreSQL'e yazılır; gerçek bir bankanın disk yazmaları bizim veritabanımıza yük bindirmez ama ağ gecikmesi ekler. Hash zincirli denetim günlüğünün bedeli çok işletmeli senaryoda yaklaşık %8 ölçülmüştü.
+At the end of every run, each merchant's balance matched the load generator's independent tally to the kuruş.
 
-Sınırlar: Banka simüle edildiği için gerçek ağ gecikmesi yoktur. Rakamlar üretim kapasitesi değildir; sistemin bu makinedeki davranışını gösterir. Yeniden üretmek için sunucu çalışırken:
+**Finding the single-merchant bottleneck.** All of one merchant's payments update the same balance rows. `pg_stat_statements` showed the time was going into waiting for the `FOR UPDATE` lock on those rows, which was taken at the start of the transaction and held through every later write. Now the balance changes last, in one conditional `UPDATE` that also enforces the no-overdraft rule, and nothing but the commit follows it. Measured before and after on the same day and machine, this raised single-merchant throughput by **38%** (514 → 712 flows/s) on a clean database and by **43%** (432 → 619 flows/s) on a full one. With 20 merchants the change makes no difference, because their payments do not wait on each other's locks.
+
+These numbers describe this machine, not production capacity: the bank is simulated, so there is no network latency. To reproduce them, start the server and run:
 
 ```bash
 java -Djdk.net.unixdomain.tmpdir=backend/target load-test/LoadTest.java http://localhost:8080 50 30 20
 ```
 
-## Çözülen mühendislik problemleri
+## Tech stack
 
-- **Para kaybolmaz:** Her kayıtta borç ve alacak toplamı eşittir. Bu kural yalnızca uygulamada değil, veritabanında da zorunludur.
-- **Geçmiş değiştirilemez:** Defter kayıtları güncellenemez ve silinemez. Hatalar ters kayıtla düzeltilir.
-- **Çift işlem olmaz:** Aynı istek eşzamanlı olarak tekrar gönderilse bile idempotency anahtarı sayesinde bir kez işlenir.
-- **Bakiye aşılamaz:** Eşzamanlı para çekme istekleri satır kilitleriyle sıraya girer. Hesaplar sabit sırada kilitlendiği için deadlock oluşmaz.
-- **Tutarsızlık yakalanır:** Mutabakat sorgusu, saklanan bakiyeleri defter kayıtlarının toplamıyla karşılaştırır.
-- **Kiracılar birbirinin verisini göremez:** İzolasyonu PostgreSQL Row Level Security uygular. Bir sorguda `tenant_id` filtresi unutulsa bile başka işletmenin verisi dönmez; kiracı bağlanmamışsa hiçbir satır görünmez.
-- **Uygulama en az yetkiyle çalışır:** `kasa_app` rolü defter kayıtlarını değiştiremez. Bu rol RLS'i aşabilecek yetkilere sahipse uygulama hiç başlamaz.
-- **Kimlik bilgileri korunur:** Parolalar BCrypt ile saklanır. API anahtarlarının yalnızca SHA-256 özeti tutulur ve anahtarın tamamı bir kez gösterilir. Sızan bir API anahtarı yeni anahtar üretemez.
-- **Banka yanıt vermese de para kaybolmaz:** Her banka çağrısından önce işlem `PENDING` olarak kaydedilir. Zaman aşımında sonuç tahmin edilmez; kurtarma işi bankaya sorup işlemi sonuçlandırır.
-- **Banka beklenirken veritabanı bağlantısı tutulmaz:** Akış üç adımdır: işlemi kaydet, transaction dışında bankayı çağır, sonucu kaydet.
-- **Capture ve void yarışamaz:** Satır kilidi ve "ödeme başına tek `PENDING` işlem" kısıtı, aynı anda tek banka çağrısına izin verir.
-- **Geçersiz durum geçişi imkânsızdır:** Örneğin `CAPTURED` bir ödeme yeniden `AUTHORIZED` olamaz. Bu kuralı veritabanı trigger'ı uygular.
-- **Kart numarası sisteme giremez:** API yalnızca token kabul eder.
-- **Bildirim kaybolmaz:** Webhook, ödeme sonucuyla aynı transaction'da kuyruğa yazılır (transactional outbox). Teslim edilemezse üstel geri çekilmeyle yeniden denenir.
-- **Birden çok sunucu aynı bildirimi almaz:** `FOR UPDATE SKIP LOCKED` ile her gönderici farklı satırları alır. Gönderici çökerse lease süresi dolunca teslimat başkası tarafından devralınır.
-- **Sahte bildirim ayırt edilir:** Her webhook, zaman damgasıyla birlikte HMAC-SHA256 ile imzalanır.
-- **Webhook URL'si iç ağa saldırı aracı olamaz (SSRF):** Özel ağ, loopback ve bulut metadata adresleri hem kayıtta hem her gönderimde engellenir; yönlendirmeler izlenmez.
-- **İşletmeye iki kez ödeme yapılmaz:** Bir işlem yalnızca tek bir canlı toplu ödemeye girebilir ve işletme başına günde tek ödeme oluşur. Bu kuralları veritabanı kısıtları uygular, iş aynı anda birden çok sunucuda çalışsa da geçerlidir.
-- **Reddedilen ödemede para kaybolmaz:** Para önce "yolda" hesabına alınır. Banka reddederse tutar ve kalemler geri döner, sonraki çalıştırma yeniden dener.
-- **Parola denemeleri yavaşlatılır:** Giriş, kayıt ve herkese açık ödeme uçlarında istek sınırı vardır; aşılınca `429` ve `Retry-After` döner. Sayaçlar sunucu başınadır, birden çok sunucuda ortak depo gerekir.
-- **Sistem gözlemlenebilir:** Sonucu bilinmeyen banka işlemleri, webhook kuyruğu ve mutabakat farkları Prometheus metriği olarak yayımlanır. Metrik ucu yalnızca yönetici token'ıyla açılır.
-- **Yetki değişikliği anında geçerli olur:** İmzalı token geri alınamaz, bu yüzden rol ve erişim her istekte veritabanından okunur. Çıkarılan üye bir sonraki istekte dışarıda kalır; parola değişince diğer oturumlar kapanır.
-- **İşletme sahipsiz kalamaz:** İki sahip aynı anda birbirinin yetkisini alsa bile satır kilitleri sayesinde biri sahip kalır.
-- **Geçmişle oynanırsa anlaşılır:** Denetim günlüğü değiştirilemez ve hash zinciriyle bağlıdır. Süper kullanıcı yetkisiyle yapılan bir değişiklik veya silme bile zincir doğrulamasında yakalanır. En yeni kayıtların silinmesini fark etmek için son hash'in veritabanı dışında saklanması gerekir; bu henüz yok.
-- **İtiraz, ödeme kesintisini kilitlemez:** Banka parayı geri alınca işletmenin bakiyesi eksiye düşebilir. İtiraz hareketleri de ödeme işlemi olduğu için bir sonraki hesap kesiminden düşülür, banka dosyasıyla da otomatik karşılaştırılır.
-- **Aynı para iki kez geri verilmez:** İtirazdaki tutar iade edilemez, iade edilen tutara itiraz açılamaz. İkisi aynı anda gelse bile satır kilidi sıraya koyar, veritabanı kısıtı da toplamı tahsilatla sınırlar.
-- **Son dakika kanıtı ezilmez:** Süre dolumu işi bir itirazı listeledikten sonra kanıt gelirse, iş durumu kilit altında yeniden okur ve itirazı kaybettirmez.
-- **Son kontenjan bir kez satılır:** 20 kişi aynı anda son yeri ödemeye çalışsa da tek çekim olur. Kontenjan sayaçta tutulmaz, oturumlardan sayılır; yarıda kalan bir ödeme yeri kalıcı olarak kapatamaz.
-- **Kişisel veri silinebilir, mali kayıt kalır:** Müşteri silinince ad ve e-posta boşaltılır, ödemeler kişiyle bağlantısız olarak durur. Değiştirilemeyen denetim günlüğüne müşteri bilgisi hiç yazılmaz, yoksa silinemezdi.
-- **Ziyaretçi müşteri bilgisini değiştiremez:** Herkese açık formda var olan bir e-posta girilirse kayıtlı ad korunur.
-- **Yeniden başlatma bankayı unutturmaz:** Simüle banka da kayıtlarını veritabanında tutar. Kapatmadan önce alınan provizyon, açılınca tahsil edilebilir ve mutabakat eşleşir. Aynı işlem kimliğiyle gelen eşzamanlı çağrılar kilit sayesinde parayı bir kez hareket ettirir.
-- **Bir dönem iki kez faturalanmaz:** Abonelik başına dönem başına tek fatura kuralını veritabanı uygular, birden çok iş aynı anda çalışsa da geçerlidir.
-- **Tahsilat yarıda kesilirse kart ikinci kez çekilmez:** Her deneme, sonucu kesinleşene kadar numarasını ve kartını korur. Sunucu çökse bile aynı idempotency anahtarı aynı ödemeyi döndürür, yeni ödeme başlamaz. Kart bu arada değişse de bekleyen deneme eski kartla sonuçlanır.
-- **Ay sonu kaymaz:** 31 Ocak'ta başlayan abonelik 28 Şubat'ta, sonra 31 Mart'ta yenilenir. Her dönem bir öncekinden değil başlangıç tarihinden hesaplanır.
-- **Plan değişikliği hakkaniyetlidir:** Kalan süreye göre kuruş hesabı `BigInteger` ile yapılır, çünkü tutar çarpı saniye `long` sınırını aşabilir. Ucuz plana geçişte fark karta iade edilmez, sonraki faturadan düşülür.
-- **Parola çalınsa da hesaba girilemez:** İki adımlı giriş RFC 6238 ile yazıldı. Bir kod iki kez kullanılamaz, aynı kod aynı anda gelse de tek istek geçer. 10 hatalı denemede hesap 15 dakika kilitlenir; sayaç veritabanında olduğu için yeni giriş denemesi veya sunucu değişimi sıfırlamaz.
-- **Geri okunması gereken sırlar şifrelidir:** Webhook anahtarları ve doğrulama sırları AES-256-GCM ile saklanır, veritabanı yedeği çalınsa da açılmaz. Her değer sahibine bağlıdır; başka işletmenin satırına kopyalanırsa çözülmez. Eski düz metin değerler uygulama açılışında şifrelenir.
-- **Parola sıfırlama hesap sızdırmaz:** Kayıtlı olmayan e-postaya da aynı yanıt döner. Bağlantı tek kullanımlıktır, 30 dakika geçerlidir ve yalnızca özeti saklanır. Adresi isteğin `Host` başlığından değil ayardan üretilir, çünkü saldırgan o başlığı kendi sitesine çevirebilir. Sıfırlama tüm oturumları kapatır ama iki adımlı girişi kapatmaz.
-- **Yöneticiler kişiye özeldir:** Platform hesaplarında iki adımlı giriş zorunludur ve her işlem kimin yaptığıyla kaydedilir. Uygulama rolü bu kayıtları silemez. Yönetici token'ı hiçbir işletme verisini açmaz.
-- **Yeni işletme onaylanmadan para alamaz:** Kayıt olan işletme paneli gezebilir, ekibini ve ayarlarını hazırlayabilir; ödeme alması platform yöneticisinin onayını bekler. Kontrol, parayı başlatan tek yerde (`PaymentService.create`) yapılır, böylece API, panel, ödeme sayfası, bağlantılar ve abonelikler aynı kurala takılır. Askıya alınan işletmede yeni ödeme ve hesap kesimi durur ama iadeler ve itirazlar sürer, çünkü müşterilere borç kapanmaz.
-- **Herkes aynı kapıdan girer:** İşletme üyeleri ve platform yöneticileri aynı giriş sayfasını kullanır. E-posta ve parola ikisine de aitse kişi hangi panele gideceğini seçer. Yönetici olup olmadığını yanıt süresinden anlamak mümkün değildir, çünkü her girişte iki parola karşılaştırması yapılır.
-- **İşletme son sahibini kaybetmez:** Platform yöneticisi her rolü değiştirebilir ama son sahibi başka role alamaz veya kapatamaz. Aynı anda gelen iki değişiklik de sahipsiz bırakamaz, çünkü önce bütün sahipler kilitlenir.
-- **Kimse körlemesine onaylanmaz:** Yönetici, işletme başvuru formunu (işletme türü, yasal unvan, vergi bilgisi, adres, IBAN) görmeden onay veremez. T.C. kimlik, vergi kimlik ve TR IBAN numaralarının kontrol haneleri hem tarayıcıda hem sunucuda doğrulanır; tek hanelik bir yazım hatası kaydedilmez. IBAN şifreli saklanır, işletmeye maskeli gösterilir. Onaydan sonra başvuru değiştirilemez, çünkü ele geçirilen bir hesabın ilk işi ödemeleri kendi IBAN'ına çevirmek olurdu. Yöneticinin başvuruyu açması da kayda geçer.
-- **E-posta kaybolmaz ve gerçekten gider:** E-postalar doğrudan gönderilmez, önce bir kuyruğa (outbox) yazılır. Hesap açılışı ile doğrulama e-postası aynı transaction'da kaydedilir; biri olmadan diğeri olamaz. Ayrı bir iş kuyruğu Brevo'nun HTTP API'siyle gönderir (birçok sunucu SMTP portlarını kapatır). Servis çökerse e-posta kaybolmaz; 30 sn, 1, 2, 4, 8 dakika arayla yeniden denenir. Geçersiz adres gibi kalıcı hatalarda boşuna denenmez. Birden fazla sunucu aynı anda çalışsa da `FOR UPDATE SKIP LOCKED` sayesinde her e-posta bir kez gönderilir. E-posta metni (içinde parola sıfırlama bağlantısı olabilir) kuyrukta şifreli durur ve gönderilince silinir.
-- **E-posta adresi doğrulanır:** Kayıt olan işletme sahibine tek kullanımlık, 24 saat geçerli bir bağlantı gider. Veritabanında yalnızca bağlantının özeti (hash) saklanır. Yeni bağlantı eskisini geçersiz kılar. Adresini doğrulamayan işletme başvuru yapamaz, yani ödeme alamaz. Davetle katılan üyeler de doğrular, çünkü davet bağlantısı başkasına iletilebilir.
-- **3D Secure ile kart sahibi doğrulanır:** Ödeme sayfasında kart bankası isterse müşteri bankanın doğrulama sayfasına gider, SMS kodunu girer ve bankanın imzalı cevabıyla geri döner. Kart ancak bu cevaptan sonra çekilir. Cevap müşterinin tarayıcısından geçtiği için HMAC imzasıyla doğrulanır, sabit sürede karşılaştırılır ve süresi geçmişse reddedilir. Tarayıcıda "başarısız"ı "başarılı"ya çevirmek işe yaramaz. Aynı cevap beş sekmeden aynı anda gönderilse de tek bir koşullu güncelleme yüzünden ödeme bir kez alınır. Bekleme sırasında kart token'ı şifreli saklanır. Müşteri bankadan hiç dönmezse oturum, doğrulamanın süresi dolunca yeniden açılır. Ödeme bağlantısının son yeri o sırada müşteriye ayrılmış kalır. Bankanın kendi sayfası da simüle edilir: yanlış kodlar satır kilidiyle sayılır, paralel tahminlerde bile üç denemeden fazlasına izin verilmez.
-- **Gerçek ödeme altyapısı (iyzico sandbox):** Müşteri ödeme sayfasında "iyzico ile öde"yi seçerse iyzico'nun barındırdığı ödeme sayfasına (Checkout Form) gider, kartını ve 3D Secure doğrulamasını orada yapar. Kart bilgisi sunucumuza hiç gelmez (PCI kapsamı küçülür). İstekler iyzico'nun IYZWSv2 şemasıyla HMAC-SHA256 imzalanır. iyzico müşteriyi bir token ile geri gönderdiğinde sonucu tarayıcıya değil iyzico'ya sorarız ve yalnızca iyzico'nun imzası tutan, bu satışa ait (aynı ziyaret, tutar, para birimi) sonucu kabul ederiz. Aynı geri dönüş beş kez gelse de ödeme bir kez kaydedilir; bir iyzico tahsilatı tek bir ödememize bağlanabilir. Dolandırıcılık kuralımız ödemeyi engellerse veya oturum bu arada başka yolla ödenmişse para iyzico'da otomatik iptal edilir. İadeler, kısmi tahsilat ve incelemede reddedilen ödemeler iyzico'nun iade/iptal API'sine gider. Her iyzico çağrısı önce "gönderildi" diye kaydedilir; sonucu bilinmeyen bir iade asla tahmin edilmez, çift iade riskine karşı kişinin kontrolüne bırakılır. Ödeme mantığı hangi altyapının kullanıldığını bilmez: bir yönlendirici kart token'ına veya banka referansına bakarak simüle bankayı ya da iyzico'yu seçer.
-- **Taksit:** Ödeme sayfası tutar 200 TL'yi geçince 2, 3, 6, 9 ve 12 taksit sunar. Müşterinin ödediği toplam değişmez. Taksit farkını işletme, taksit sayısına göre artan komisyonla karşılar; komisyon tahsilat anında defterde ayrılır.
-- **Dolandırıcılık kuralları bankadan önce çalışır:** Her işletme kendi kurallarını yazar: aynı kartla kısa sürede çok deneme, art arda reddedilen kart, yüksek tutar ve engelli kartlar. Kural ya ödemeyi bankaya hiç göndermeden reddeder ya da provizyonu alıp bir kişinin onayına bırakır; onaylanmayan ödeme tahsil edilemez. Bu yasağı veritabanı tetikleyicisi de uygular, unutulan bir kod yolu bile aşamaz. Aynı karttan aynı anda gelen 20 ödeme, sınırı 5 olan kuralı birlikte geçemez, çünkü sayım kart başına bir kilitle sıraya girer; yalnızca aynı işletmenin aynı kartı bekler. Engellenen ödeme müşteriye sıradan bir ret gibi görünür, böylece çalıntı kart deneyen biri kuralları öğrenemez. Abonelik yenilemelerinde bekleyen müşteri olmadığı için inceleme kuralları uygulanmaz, engelleme kuralları uygulanır. API anahtarı kuralları göremez ve değiştiremez; anahtarı çalan kişi alarmı kapatamaz.
-- **Bildirimler olayla birlikte yazılır:** İtiraz, hesap kesimi sonucu, abonelik tahsilat hatası, ekibe katılım, rol talebi kararı ve hesap durumu değişikliği, olayı kaydeden işlemin içinde ilgili rollere bildirim olarak düşer. Geri alınan bir işlem için bildirim gitmez, gerçekleşen bir olay da bildirimsiz kalmaz. Herkes yalnızca kendi bildirimini okuyabilir ve okundu sayabilir; API anahtarının gelen kutusu yoktur.
-- **Rol talebi kaybolmaz:** Üyelerin talepleri yönetici panelinde rozetle görünür, yöneticilere e-posta gider. Onay rolü aynı işlemde değiştirir; bir talebe yalnızca bir kez karar verilebilir.
-- **Raporlar defterle aynı sonucu verir:** Analiz paneli tutarları paranın gerçekten hareket ettiği güne yazar ve net kazanç işletmenin defter bakiyesiyle uyuşur.
-- **Dışa aktarılan dosya saldırı aracı olamaz:** CSV'de formül gibi başlayan açıklamalar etkisizleştirilir (CSV injection). 10.000 satırda kesilen rapor kullanıcıya açıkça bildirilir.
-- **Bankayla farklar yakalanır:** Günlük mutabakat banka dosyasını kayıtlarımızla karşılaştırır. Farkları raporlar ama düzeltmez, çünkü hangi tarafın doğru olduğuna insan karar vermelidir.
+| | |
+|---|---|
+| **Backend** | Java 21, Spring Boot 4, Spring Security (JWT resource server), JDBC with hand-written SQL, Flyway (21 migrations) |
+| **Database** | PostgreSQL 18: row-level security, triggers, deferred constraints, `SKIP LOCKED` queues, advisory locks |
+| **Frontend** | React 19, TypeScript, Vite, React Router; no UI library, accessible native dialogs, a hand-built chart, Turkish/English i18n |
+| **Integrations** | iyzico sandbox (Checkout Form, signed `IYZWSv2` requests), Brevo transactional email, Google Identity Services |
+| **Operations** | Docker, GitHub Actions (test, build, image), Render + Neon, Prometheus metrics and a provisioned Grafana dashboard |
+| **Testing** | 500+ backend integration tests on an embedded PostgreSQL (no Docker needed), concurrency tests with real threads, Vitest for the frontend |
 
-## Teknolojiler
+## Run it locally
 
-**Backend:** Java 21, Spring Boot 4, Spring Security, JWT, PostgreSQL 18, Flyway, JUnit, embedded PostgreSQL. Mimari modüler monolittir.
-
-**Frontend:** React 19, TypeScript, Vite, React Router, Vitest. İşletme paneli ve herkese açık ödeme sayfasından oluşur.
-
-## Testleri çalıştırma
-
-Testler gerçek bir PostgreSQL üzerinde çalışır ve Docker gerektirmez. İlk çalıştırmada bağımlılıkların inmesi birkaç dakikadan uzun sürebilir.
-
-```bash
-cd backend
-mvn test
-```
-
-```bash
-cd frontend
-npm install
-npm test
-```
-
-## Hızlı başlangıç (Docker gerekmez)
-
-Java, Maven ve Node.js yeterlidir. Backend geçici bir PostgreSQL başlatır ve demo verisi yükler; her başlatmada veriler sıfırlanır.
-
-İlk terminalde:
+You need Java 21, Maven and Node.js. No Docker and no database installation are required: the backend starts a throwaway PostgreSQL and fills it with 60 days of sample data.
 
 ```bash
 cd backend
 mvn spring-boot:test-run
 ```
-
-İkinci terminalde:
 
 ```bash
 cd frontend
@@ -167,315 +179,95 @@ npm install
 npm run dev
 ```
 
-Ardından `http://localhost:5173` adresini açın. Demo hesabı `demo@kasa.test`, parolası `demo-parola-12345`'tir. Bu bilgiler yalnızca yerel demo içindir. Yönetici API'sinin yerel token'ı `local-dev-admin-token`'dır.
+Open <http://localhost:5173> and sign in as `demo@kasa.test` with the password `demo-parola-12345`. These credentials exist only in the local demo. The admin panel is at `/admin`; open it with the local admin key `local-dev-admin-token`.
 
-Demo verisi 60 günlük geçmiş içerir. Görüntüleyici rolünü denemek için `izleyici@kasa.test` hesabı aynı parolayla açılır. Davet bağlantıları e-postayla gitmez; panelde gösterilir ve elle paylaşılır. Yönetici paneli `/admin` adresindedir ve yerelde yukarıdaki token ile açılır; demo için iki banka hatası hazır gelir. Canlı ortamda yönetici token'ı Render'daki `KASA_ADMIN_TOKEN` değeridir.
+Something worth trying: press **Create test payment**, then choose **Bank does not respond**. The page waits, and within about a minute and a half the recovery job asks the bank and the page updates by itself.
 
-Sunucuyu kapatırken terminalde `Ctrl+C` kullanın. Zorla sonlandırılırsa geçici PostgreSQL süreçleri açık kalabilir.
+<details>
+<summary><b>With Docker</b>: PostgreSQL, the app, Prometheus and Grafana</summary>
 
-Yerel demo her açılışta sıfırdan kurulur. Verilerin kalması için sunucuyu başlatmadan önce `KASA_LOCAL_DATA_DIR` ortam değişkenine bir klasör yolu verin; demo verisi yalnızca ilk açılışta yüklenir.
-
-İtirazın her aşaması, müşteriler ve iki ödeme bağlantısı da demo verisinde hazır gelir. Kendiniz denemek için tahsil edilmiş bir ödemeyi açıp **İtiraz simüle et** deyin.
-
-Denemeye değer akış: **Test ödemesi oluştur** ile ödeme sayfasını açın ve "Banka yanıt vermiyor" kartını seçin. Sayfa bekleme durumuna geçer, yaklaşık bir buçuk dakika içinde kurtarma işi bankaya sorar ve sonuç kendiliğinden güncellenir. Ardından panelden ödemeyi tahsil edip iade edin.
-
-## Docker ile çalıştırma
-
-Canlıya en yakın kurulum budur: kalıcı bir PostgreSQL 18, uygulama imajı, Prometheus ve Grafana birlikte açılır. `.env.example` dosyasını `.env` olarak kopyalayıp her değeri uzun ve rastgele bir metinle değiştirin, ardından:
+Copy `.env.example` to `.env`, replace every value with a long random string, then run:
 
 ```bash
 docker compose up --build
 ```
 
-İlk derleme bağımlılıklar indiği için birkaç dakika sürer. Uygulama `http://localhost:8080`, Prometheus `http://localhost:9090`, Grafana `http://localhost:3000` adresindedir. Grafana'ya `admin` kullanıcısı ve `.env` dosyasındaki `GRAFANA_ADMIN_PASSWORD` ile girilir; "Kasa" panosu hazır gelir.
+The app is at <http://localhost:8080>, Prometheus at <http://localhost:9090> and Grafana at <http://localhost:3000> (user `admin`, with the password from `.env`; the "Kasa" dashboard is ready). This setup starts empty, like production. Sign up, and you will find the email verification link with `docker compose logs app`. Fill in the business application, then approve it at `/admin` with `KASA_ADMIN_TOKEN` from `.env`.
 
-Bu kurulumda demo verisi yoktur, canlı sitedeki gibi sıfırdan başlanır:
+</details>
 
-1. `http://localhost:8080` adresinde hesap açın. E-posta servisi bağlı olmadığı için doğrulama bağlantısı uygulama logunda yazar:
+<details>
+<summary><b>Tests</b></summary>
 
-   ```bash
-   docker compose logs app
-   ```
-
-2. Panelde işletme başvurusunu doldurun.
-3. `http://localhost:8080/admin` adresinde `.env` dosyasındaki `KASA_ADMIN_TOKEN` ile yönetici paneline girip başvuruyu onaylayın.
-4. Artık test ödemesi alabilirsiniz.
-
-Veriler Docker volume'larında kalır. Durdurmak için `docker compose down`, verileri de silmek için `docker compose down -v` kullanın.
-
-## Yayına alma
-
-Tek bir Docker imajı API ile arayüzü birlikte sunar. Depodaki `render.yaml`, Render için hazırdır; veritabanı olarak Neon gibi yönetilen bir PostgreSQL kullanılır.
-
-1. Neon'da Frankfurt bölgesinde bir proje açın. SQL editöründe kendi güçlü parolanızla uygulama rolünü oluşturun:
-
-   ```sql
-   CREATE ROLE kasa_app LOGIN PASSWORD 'kendi-guclu-parolaniz';
-   ```
-
-2. Render'da **New → Blueprint** ile bu depoyu bağlayın ve istenen değerleri girin:
-
-   | Değişken | Değer |
-   |---|---|
-   | `KASA_DB_URL` | `jdbc:postgresql://<neon-host>/<veritabanı>?sslmode=require` (host adında `-pooler` olmayan doğrudan bağlantı) |
-   | `KASA_DB_APP_PASSWORD` | 1. adımdaki parola |
-   | `KASA_DB_OWNER_USER` | Neon'un sahip rolü, örneğin `neondb_owner` |
-   | `KASA_DB_OWNER_PASSWORD` | Sahip rolünün parolası |
-
-   `KASA_JWT_SECRET` ve `KASA_ADMIN_TOKEN` otomatik üretilir. Uygulama rolü tablo sahibi veya süper kullanıcı olursa uygulama bilerek başlamaz.
-
-3. Gerçek e-posta için (isteğe bağlı) Brevo'da hesap açın, gönderici adresinizi doğrulayın ve bir API anahtarı oluşturun. Sonra Render'da şunları girin:
-
-   | Değişken | Değer |
-   |---|---|
-   | `KASA_MAIL_PROVIDER` | `brevo` |
-   | `KASA_BREVO_API_KEY` | Brevo'daki API anahtarı |
-   | `KASA_MAIL_FROM` | Brevo'da doğrulanmış gönderici adresi |
-
-   Bunlar girilmeden e-postalar yalnızca log'a yazılır ve site normal çalışır.
-
-4. iyzico ile gerçek test ödemesi için (isteğe bağlı) [sandbox-merchant.iyzipay.com](https://sandbox-merchant.iyzipay.com) adresinde hesap açın, **Ayarlar → Firma Ayarları**'ndaki anahtarları Render'a girin:
-
-   | Değişken | Değer |
-   |---|---|
-   | `KASA_IYZICO_API_KEY` | iyzico sandbox API anahtarı |
-   | `KASA_IYZICO_SECRET_KEY` | iyzico sandbox güvenlik anahtarı |
-
-   Anahtarlar girilmezse ödeme sayfası yalnızca simüle bankayı gösterir. Test kartı: `5528 7900 0000 0008`, ileri bir son kullanma tarihi, herhangi üç haneli güvenlik kodu.
-
-5. "Google ile giriş" için (isteğe bağlı) [Google Cloud Console](https://console.cloud.google.com/apis/credentials)'da **OAuth istemci kimliği** oluşturun (uygulama türü: Web). **Yetkili JavaScript kaynakları**na sitenizin adresini (`https://kasa-rpb3.onrender.com`) ve yerelde denemek için `http://localhost:8080` ekleyin. Oluşan istemci kimliğini Render'a girin:
-
-   | Değişken | Değer |
-   |---|---|
-   | `KASA_GOOGLE_CLIENT_ID` | `….apps.googleusercontent.com` ile biten istemci kimliği |
-
-   İstemci kimliği gizli değildir; Google'ın düğmesi onu zaten sayfaya yazar. Gizli anahtar (client secret) gerekmez: sunucu, Google'ın imzaladığı kimlik kartını Google'ın açık anahtarlarıyla doğrular.
-
-Başka bir platformda aynı değişkenlere ek olarak `KASA_DB_APP_USER=kasa_app` tanımlayın. Ters proxy arkasında `KASA_FORWARD_HEADERS=native` gerekir; aksi halde tüm istemciler tek adres sayılır ve istek sınırı herkesi birlikte engeller.
-
-**Ücretsiz planda bilinmesi gerekenler:** Sunucu 15 dakika istek almazsa uyur ve ilk istekte yeniden başlaması bir dakikadan uzun sürebilir. Uyurken zamanlanmış işler çalışmaz, bu yüzden günlük hesap kesimi ve mutabakat güvenilir biçimde tetiklenmez. İşletme verileri ve simüle bankanın kayıtları PostgreSQL'de durduğu için yeniden başlatmada kaybolmaz. Banka kalıcı hale gelmeden önce alınan eski provizyonlar `unknown_authorization` hatası alır, mutabakat da o dönemin işlemlerini `MISSING_IN_BANK` olarak gösterir.
-
-## API
-
-| Metot | Yol | Kimlik doğrulama | Açıklama |
-|---|---|---|---|
-| POST | `/api/v1/auth/register` | Yok | İşletme ve kullanıcı oluşturur, JWT döner |
-| POST | `/api/v1/auth/login` | Yok | JWT döner |
-| GET | `/api/v1/tenant` | JWT veya `X-Api-Key` | Geçerli işletmeyi döner |
-| POST | `/api/v1/api-keys` | JWT | API anahtarı üretir |
-| GET | `/api/v1/api-keys` | JWT | Anahtarları gizli kısımları olmadan listeler |
-| DELETE | `/api/v1/api-keys/{id}` | JWT | Anahtarı iptal eder |
-| POST | `/api/v1/payments` | JWT veya `X-Api-Key` | Ödeme oluşturur ve provizyon alır |
-| GET | `/api/v1/payments` | JWT veya `X-Api-Key` | Ödemeleri arar ve listeler (`q`, `status`, `from`, `to`, `minAmount`, `maxAmount`, `limit`, `before`) |
-| GET | `/api/v1/payments/export` | JWT veya `X-Api-Key` | Filtrelenen ödemeleri Excel uyumlu CSV olarak indirir (en fazla 10.000 satır) |
-| GET | `/api/v1/analytics/summary` | JWT veya `X-Api-Key` | Hacim, net kazanç, onay oranı ve reddedilme nedenleri (`days`: 7, 30, 90) |
-| GET | `/api/v1/payments/{id}` | JWT veya `X-Api-Key` | Ödemeyi işlem geçmişiyle döner |
-| POST | `/api/v1/payments/{id}/capture` | JWT veya `X-Api-Key` | Tutarın tamamını veya bir kısmını tahsil eder |
-| POST | `/api/v1/payments/{id}/void` | JWT veya `X-Api-Key` | Provizyonu iptal eder |
-| POST | `/api/v1/payments/{id}/refunds` | JWT veya `X-Api-Key` | Tam veya kısmi iade yapar |
-| POST | `/api/v1/webhook-endpoints` | JWT | Endpoint ekler, imza anahtarını bir kez gösterir |
-| GET | `/api/v1/webhook-endpoints` | JWT | Endpoint'leri listeler |
-| DELETE | `/api/v1/webhook-endpoints/{id}` | JWT | Devre dışı bırakır, bekleyen teslimatları iptal eder |
-| GET | `/api/v1/webhook-endpoints/{id}/deliveries` | JWT | Son teslimatları gösterir |
-| POST | `/api/v1/webhook-endpoints/deliveries/{id}/retry` | JWT | Başarısız teslimatı yeniden sıraya alır |
-| GET | `/api/v1/balances` | JWT veya `X-Api-Key` | Ödenecek ve yoldaki bakiyeyi döner |
-| POST | `/api/v1/checkout-sessions` | JWT veya `X-Api-Key` | 30 dakikalık ödeme bağlantısı oluşturur |
-| GET | `/api/v1/public/checkout/{id}` | Yok | Ödeme sayfası bilgilerini döner |
-| POST | `/api/v1/public/checkout/{id}/pay` | Yok | Test kartıyla ödeme yapar (`installments`: 1, 2, 3, 6, 9, 12); banka isterse `AUTHENTICATING` ve `challengeUrl` döner |
-| POST | `/api/v1/public/checkout/{id}/3ds-callback` | Bankanın imzası | Bankanın 3D Secure cevabını doğrular ve ödemeyi tamamlar |
-| POST | `/api/v1/public/checkout/{id}/iyzico` | Yok | iyzico ödeme sayfasını açar, adresini (`pageUrl`) döner |
-| POST | `/api/v1/public/checkout/{id}/iyzico/callback` | iyzico token'ı | iyzico'nun geri dönüşü: sonucu iyzico'dan sorar, imzasını doğrular, ödemeyi kaydeder ve tahsil eder |
-| GET, POST | `/api/v1/public/bank/3ds/{id}` | Yok | Simüle kart bankasının doğrulama sayfası: kodu gösterir, kodu kontrol eder, imzalı cevap üretir |
-| GET | `/api/v1/payouts` | JWT veya `X-Api-Key` | Toplu ödemeleri listeler |
-| GET | `/api/v1/payouts/{id}` | JWT veya `X-Api-Key` | Toplu ödemeyi kalemleriyle döner |
-| GET | `/api/v1/admin/overview` | `X-Admin-Token` | Platform genelinde toplamlar ve bekleyen işler |
-| POST | `/api/v1/admin/settlements/run` | `X-Admin-Token` | Hesap kesimini hemen çalıştırır |
-| POST | `/api/v1/admin/reconciliation/runs?date=` | `X-Admin-Token` | Tarih için mutabakat çalıştırır |
-| GET | `/api/v1/admin/reconciliation/runs` | `X-Admin-Token` | Mutabakat geçmişini listeler |
-| GET | `/api/v1/admin/reconciliation/runs/{id}` | `X-Admin-Token` | Çalıştırmayı farklarıyla döner |
-| POST, GET | `/api/v1/plans` | JWT veya `X-Api-Key` | Plan oluşturur ve listeler |
-| POST | `/api/v1/plans/{id}/archive` | JWT veya `X-Api-Key` | Planı yeni aboneliğe kapatır |
-| POST, GET | `/api/v1/subscriptions` | JWT veya `X-Api-Key` | Abonelik başlatır, listeler (`status`, `customerId`, `limit`, `before`) |
-| GET | `/api/v1/subscriptions/{id}` | JWT veya `X-Api-Key` | Aboneliği faturalarıyla döner |
-| POST | `/api/v1/subscriptions/{id}/change-plan` | JWT veya `X-Api-Key` | Planı değiştirir, farkı kalan süreye göre hesaplar |
-| POST | `/api/v1/subscriptions/{id}/cancel` | JWT veya `X-Api-Key` | Hemen veya dönem sonunda iptal eder (`atPeriodEnd`) |
-| POST | `/api/v1/subscriptions/{id}/resume` | JWT veya `X-Api-Key` | Planlanan iptali geri alır |
-| PUT | `/api/v1/subscriptions/{id}/card` | JWT veya `X-Api-Key` | Kartı değiştirir, ödenmemiş faturayı hemen dener |
-| POST | `/api/v1/subscriptions/{id}/simulate-renewal` | JWT veya `X-Api-Key` | Sonraki dönemi şimdi faturalar (demo için) |
-| GET | `/api/v1/billing/summary` | JWT veya `X-Api-Key` | Aylık tekrarlayan gelir ve abonelik sayıları |
-| POST | `/api/v1/disputes/simulate` | JWT veya `X-Api-Key` | Bankanın itiraz açmasını simüle eder |
-| GET | `/api/v1/disputes` | JWT veya `X-Api-Key` | İtirazları listeler (`status`, `paymentId`, `limit`, `before`) |
-| GET | `/api/v1/disputes/{id}` | JWT veya `X-Api-Key` | İtirazı kanıtıyla döner |
-| POST | `/api/v1/disputes/{id}/evidence` | JWT veya `X-Api-Key` | Kanıt gönderir, bir kez yapılabilir |
-| POST | `/api/v1/disputes/{id}/accept` | JWT veya `X-Api-Key` | İtirazı kabul eder |
-| POST, GET | `/api/v1/customers` | JWT veya `X-Api-Key` | Müşteri ekler, arar ve listeler (`q`, `limit`, `before`) |
-| GET, PUT | `/api/v1/customers/{id}` | JWT veya `X-Api-Key` | Müşteriyi harcamasıyla döner veya günceller |
-| DELETE | `/api/v1/customers/{id}` | JWT veya `X-Api-Key` | Kişisel veriyi siler, ödeme kayıtlarını korur |
-| POST, GET | `/api/v1/payment-links` | JWT veya `X-Api-Key` | Paylaşılabilir ödeme bağlantısı oluşturur ve listeler |
-| POST | `/api/v1/payment-links/{id}/disable` | JWT veya `X-Api-Key` | Bağlantıyı kapatır |
-| GET | `/api/v1/public/links/{slug}` | Yok | Bağlantı bilgilerini döner |
-| POST | `/api/v1/public/links/{slug}/sessions` | Yok | Ziyaretçi için ödeme oturumu açar |
-| POST | `/api/v1/auth/login/two-factor` | Yok | Girişin ikinci adımı: kod veya kurtarma kodu |
-| POST | `/api/v1/auth/password-reset/request` | Yok | Sıfırlama bağlantısı ister, yanıt hep `202` |
-| POST | `/api/v1/auth/password-reset/confirm` | Yok | Bağlantıdaki token ile yeni parola belirler |
-| POST | `/api/v1/auth/verify-email` | Yok | E-postadaki bağlantıyla adresi doğrular (tek kullanımlık, 24 saat) |
-| POST | `/api/v1/settings/email-verification` | JWT | Yeni doğrulama bağlantısı gönderir |
-| GET | `/api/v1/settings/two-factor` | JWT | İki adımlı girişin durumu |
-| POST | `/api/v1/settings/two-factor/setup`, `/enable`, `/disable` | JWT | İki adımlı girişi kurar, açar, kapatır |
-| POST | `/api/v1/auth/login/admin` | Yok | Ortak girişten sonra yöneticinin kod adımı |
-| GET, POST, DELETE | `/api/v1/settings/role-request` | JWT | Rol talebini gösterir, gönderir, geri çeker |
-| GET, PUT | `/api/v1/settings/business-profile` | Sahip | İşletme başvurusunu gösterir (IBAN maskeli), gönderir veya onaydan önce düzeltir |
-| GET, POST | `/api/v1/risk/rules` | Sahip, yönetici | Risk kurallarını listeler, ekler |
-| POST | `/api/v1/risk/rules/recommended` | Sahip, yönetici | Boş kural setine önerilen üç kuralı ekler |
-| PUT, DELETE | `/api/v1/risk/rules/{id}` | Sahip, yönetici | Kuralı ayarlar, kapatır veya siler |
-| GET, POST | `/api/v1/risk/blocklist` | Sahip, yönetici | Engelli kartlar; bir ödemenin kartını engeller |
-| DELETE | `/api/v1/risk/blocklist/{fingerprint}` | Sahip, yönetici | Kartın engelini kaldırır |
-| GET | `/api/v1/risk/reviews` | Sahip, yönetici | İnceleme bekleyen ödemeler |
-| POST | `/api/v1/risk/reviews/{id}/approve`, `/reject` | Sahip, yönetici | Onaylar (isteğe bağlı tahsil eder) veya reddeder (provizyonu iptal eder, isteğe bağlı kartı engeller) |
-| GET | `/api/v1/notifications` | JWT | Kişinin son 30 bildirimi ve okunmamış sayısı |
-| POST | `/api/v1/notifications/{id}/read`, `/read-all` | JWT | Bildirimi veya hepsini okundu sayar |
-| GET | `/api/v1/admin/users` | Yönetici | Bütün işletmelerin bütün kullanıcıları (`q`) |
-| POST | `/api/v1/admin/users/{id}/role`, `/disable`, `/enable` | Yönetici | Rol değiştirir, kullanıcıyı kapatır veya açar |
-| GET | `/api/v1/admin/role-requests` | Yönetici | Rol talepleri, bekleyenler önce (`status`) |
-| POST | `/api/v1/admin/role-requests/{id}/approve`, `/reject` | Yönetici | Talebi onaylar (rol hemen değişir) veya gerekçeyle reddeder |
-| POST, GET | `/api/v1/admin/accounts` | Yönetici | Yönetici hesabı oluşturur, listeler |
-| POST | `/api/v1/admin/accounts/{id}/disable` | Yönetici | Yönetici hesabını kapatır |
-| GET | `/api/v1/admin/audit-log` | Yönetici | Yönetici işlem kayıtları |
-| GET | `/api/v1/admin/merchants` | Yönetici | İşletmeleri listeler, onay bekleyenler önce (`status`) |
-| GET | `/api/v1/admin/merchants/{id}/application` | Yönetici | Başvurunun tamamı, IBAN açık; görüntüleme kayda geçer |
-| POST | `/api/v1/admin/merchants/{id}/approve`, `/suspend`, `/reactivate` | Yönetici | İşletmeyi onaylar (başvuru şart), gerekçeyle askıya alır, yeniden açar |
-| GET | `/api/v1/me` | JWT | Oturumdaki kullanıcı, rol ve işletme |
-| GET | `/api/v1/team` | Sahip, yönetici | Üyeler ve bekleyen davetler |
-| POST | `/api/v1/team/invitations` | Sahip, yönetici | Tek kullanımlık davet oluşturur (yöneticiler yalnızca görüntüleyici davet edebilir) |
-| PUT, DELETE | `/api/v1/team/members/{id}` | Sahip | Rol değiştirir veya üyeyi çıkarır |
-| POST | `/api/v1/public/invitations/{token}/accept` | Yok | Daveti kabul eder |
-| GET | `/api/v1/audit-log` | Sahip, yönetici | Denetim kayıtlarını listeler |
-| GET | `/api/v1/audit-log/verify` | Sahip, yönetici | Hash zincirini baştan sona doğrular |
-| PUT | `/api/v1/settings/tenant` | Sahip | İşletme adını değiştirir |
-| POST | `/api/v1/settings/password` | JWT | Parolayı değiştirir, diğer oturumları kapatır |
-| GET | `/actuator/health` | Yok | Sağlık kontrolü |
-
-Roller: **Sahip** her şeyi yönetir. **Yönetici** ödemeleri işler, API anahtarlarını ve webhook'ları yönetir. **Görüntüleyici** yalnızca okur. API anahtarları ödeme işleyebilir ama ekip, denetim ve ayarlara erişemez.
-
-Ödeme endpoint'lerindeki tüm `POST` istekleri `Idempotency-Key` başlığı ister. `202` yanıtı, bankadan henüz sonuç alınamadığını gösterir; ödemeyi daha sonra sorgulamak gerekir.
-
-## Ödeme durumları
-
-```text
-PENDING ──> AUTHORIZED ──> CAPTURED ──> PARTIALLY_REFUNDED ──> REFUNDED
-   │             │             └──────────────────────────────────^
-   ├──> DECLINED └──> VOIDED
-   └──> FAILED
+```bash
+cd backend && mvn test        # integration tests on a real, embedded PostgreSQL
+cd frontend && npm test       # Vitest
 ```
 
-## Abonelikler
+</details>
 
-İlk dönem hemen tahsil edilir; kart reddedilirse abonelik başlamaz. Başarısız yenileme 1, 3 ve 5 gün sonra yeniden denenir, dördüncü başarısızlıkta fatura `UNCOLLECTIBLE` olur ve abonelik biter. Kart güncellenince ödenmemiş fatura hemen denenir.
+<details>
+<summary><b>Deploying</b></summary>
 
-```text
-INCOMPLETE ──> ACTIVE <──> PAST_DUE
-     │            │            │
-     └────────────┴────────────┴──> CANCELED
+One Docker image serves both the API and the interface. `render.yaml` is a ready Render blueprint, and the database can be any managed PostgreSQL, such as Neon. The application connects as a restricted role (`kasa_app`), and migrations run as the schema owner. The full checklist, including email, iyzico and Google sign-in, is in [the Turkish README](README.tr.md#yayına-alma).
+
+</details>
+
+## API at a glance
+
+```bash
+curl -X POST https://kasa-rpb3.onrender.com/api/v1/payments \
+  -H "X-Api-Key: $KASA_API_KEY" \
+  -H "Idempotency-Key: $(uuidgen)" \
+  -H "Content-Type: application/json" \
+  -d '{"amount": 14990, "currency": "TRY", "cardToken": "tok_success", "description": "Order #1042"}'
 ```
 
-Tahsilat, ödeme servisinin bankayla kullandığı kuralı izler: denemeyi kaydet, transaction dışında tahsil et, sonucu kaydet. Para `PaymentService` üzerinden geçtiği için defter, hesap kesimi ve mutabakat abonelik ödemelerini ayrıca bir kural gerekmeden kapsar.
+- Amounts are in minor units (kuruş).
+- A `201` response carries the outcome. A `202` means the bank has not answered yet; read the payment again later.
+- Test tokens choose the bank's behaviour:
+  - `tok_success` succeeds.
+  - `tok_declined` is declined.
+  - `tok_timeout_processed` succeeds at the bank, but the answer never arrives.
+  - `tok_timeout_lost` never reaches the bank.
 
-**Bilinen sınırlar:** Deneme süresi (trial), kupon, vergi ve kullanıma göre ücretlendirme yoktur. Plan değişikliği yalnızca aynı para birimi ve dönem arasında yapılır. Hemen iptalde ödenmiş tutar ve kalan kredi iade edilmez. Kart token'ı veritabanında düz metindir; gerçek sistemde kartlar sağlayıcının kasasında durur.
+Webhooks are signed as `X-Kasa-Signature: t=<unix time>,v1=<hex>`, an HMAC-SHA256 of `<t>.<raw body>`. Delivery is at least once, so deduplicate with `X-Kasa-Event-Id`.
 
-## İtirazlar
+There are over 120 endpoints in all, covering payments, refunds, disputes, subscriptions, payment links, customers, payouts, risk, team, audit and administration. An endpoint table with authentication and query parameters is in [the Turkish README](README.tr.md#api).
 
-Müşteri bankasına başvurunca banka tutarı hemen geri alır. İşletmenin yanıt vermek için 7 günü vardır.
+## Known limitations
+
+They are listed honestly, because knowing them is part of the design.
+
+- **Rate limits are per instance.** Several servers would need a shared store such as Redis.
+- **The audit chain proves edits but not truncation of the newest rows.** That needs the latest hash anchored outside the database.
+- **Secrets are encrypted with a key from the environment.** A real deployment would use a KMS.
+- **The free hosting plan sleeps.** While it sleeps, scheduled settlement and reconciliation do not run reliably.
+- **No trials, coupons, taxes or metered billing for subscriptions.** There is one dispute per payment, with no pre-arbitration stage.
+
+## Project layout
 
 ```text
-NEEDS_RESPONSE ──> UNDER_REVIEW ──> WON
-      │                  └────────> LOST
-      └──> LOST (kabul edildi veya süre doldu)
+backend/src/main/java/com/kasa/
+  ledger/          double-entry accounts, journal and balances
+  payment/         payment state machine, idempotency, recovery
+  bank/  iyzico/   simulated bank with 3-D Secure, iyzico sandbox, gateway router
+  checkout/        hosted checkout and payment links
+  settlement/  reconciliation/   daily payouts and bank statement matching
+  dispute/  billing/  risk/      chargebacks, subscriptions, fraud rules
+  webhook/  mail/  notification/ outboxes and in-app notifications
+  auth/  security/  team/  admin/  tenant/  audit/   identity, roles, RLS, audit chain
+  demo/            the read-only sample business behind "Try the demo"
+backend/src/main/resources/db/migration/   21 Flyway migrations
+frontend/src/                               React app: dashboard, checkout, admin
+load-test/LoadTest.java                     single-file load generator
+infra/                                      Prometheus and Grafana provisioning
 ```
 
-| Adım | Borç | Alacak |
-|---|---|---|
-| İtiraz açıldı | `merchant_payable` | `psp_clearing` |
-| Kazanıldı | `psp_clearing` | `merchant_payable` |
-| Kaybedildi (ücret) | `merchant_payable` | `fee_revenue` |
+---
 
-Simüle banka basit bir kural izler: kargo takip numarası varsa işletme kazanır, yoksa kaybeder. Karar birkaç dakikada verilir; gerçekte haftalar sürer. Kaybedilen itirazda ₺150 ücret kesilir.
+<div align="center">
 
-**Bilinen sınırlar:** Ödeme başına tek itiraz vardır. İki aşamalı itiraz (pre-arbitration) ve kanıt dosyası yükleme yoktur. Gerçek bankada itiraz bildirimle gelir; simülasyonda bu adımı `/disputes/simulate` temsil eder.
+Built by [Fatih](https://github.com/Fatihbk67), a software engineering student. Questions and feedback are welcome by email at fatihbk67@gmail.com or through [an issue](https://github.com/Fatihbk67/Kasa/issues).
 
-## Webhook'lar
-
-Olaylar: `payment.authorized`, `payment.declined`, `payment.failed`, `payment.captured`, `payment.voided`, `payment.refunded`, `payment.operation_failed`, `payout.paid`, `payout.failed`, `dispute.opened`, `dispute.under_review`, `dispute.won`, `dispute.lost`, `invoice.paid`, `invoice.payment_failed`, `subscription.past_due`, `subscription.canceled`.
-
-Teslimat **en az bir kez** garantilidir ve sıra garantisi yoktur. Alıcı `X-Kasa-Event-Id` ile tekrarları ayıklamalı, sıralama için gövdedeki `createdAt` alanını kullanmalıdır. 2xx dışındaki her yanıt başarısız sayılır; 8 denemeden sonra teslimat `FAILED` olur ve elle yeniden denenebilir.
-
-İmza `X-Kasa-Signature: t=<unix-zaman>,v1=<hex>` biçimindedir. Alıcı, `<t>.<ham gövde>` metninin imza anahtarıyla HMAC-SHA256 değerini hesaplayıp `v1` ile sabit zamanlı karşılaştırmalı, eski `t` değerlerini de reddetmelidir.
-
-Yerelde `localhost` hedefine göndermek için `KASA_WEBHOOKS_ALLOW_INSECURE_TARGETS=true` tanımlanır. Bu ayar canlıda kapalı kalmalıdır.
-
-**Bilinen sınırlar:** İmza anahtarları şifreli tutulur ama anahtar uygulamanın ortam değişkenindedir; gerçek sistemde KMS gerekir. URL kontrolü ile bağlantı arasında DNS yanıtı değişebilir; bunu tamamen kapatmak için çıkış proxy'si gerekir.
-
-## Hesap kesimi ve mutabakat
-
-**Hesap kesimi** her gün 02:00 UTC'de çalışır. Dünün başlangıcından önce tamamlanan tahsilat ve iadeleri işletme ve para birimi bazında toplar. Tahsilatlar ücret düşülerek eklenir, iadeler ve itiraz kesintileri çıkarılır, kazanılan itirazlar geri eklenir; işlem ücreti iade edilmez. Net tutar sıfır veya negatifse kalemler sonraki güne devreder.
-
-Defter kayıtları şöyledir:
-
-| Adım | Borç | Alacak |
-|---|---|---|
-| Ödeme oluşturuldu | `merchant_payable` | `payout_in_transit` |
-| Banka ödedi | `payout_in_transit` | `psp_clearing` |
-| Banka reddetti | `payout_in_transit` | `merchant_payable` |
-
-**Mutabakat** her gün 03:00 UTC'de bir önceki günün banka dosyasını karşılaştırır. Bozuk bir dosya kısmen işlenmez, tamamen reddedilir. Gece yarısına yakın işlemler komşu günlere yazılabildiği için `MISSING_IN_BANK` kontrolü önceki ve sonraki günün dosyalarına da bakar.
-
-| Fark | Anlamı |
-|---|---|
-| `MISSING_IN_BANK` | Bizde var, bankada yok |
-| `MISSING_IN_KASA` | Bankada var, bizde yok |
-| `AMOUNT_MISMATCH` | Tutar farklı |
-| `DETAILS_MISMATCH` | İşlem türü veya para birimi farklı |
-| `DUPLICATE_IN_BANK` | Aynı referans dosyada birden çok kez geçiyor |
-| `LEDGER_DRIFT` | Saklanan bakiye defter kayıtlarının toplamıyla uyuşmuyor |
-
-Yönetici API'si `KASA_ADMIN_TOKEN` ile açılır; tanımlı değilse tüm istekleri reddeder. Bu token kiracıya bağlı olmadığından işletme verilerine erişim sağlamaz.
-
-İnsanlar ortak giriş sayfasından kişisel hesapla (parola, sonra doğrulama kodu) girer. Ortak token makineler (Prometheus) ve ilk yönetici hesabını oluşturmak içindir.
-
-**Bilinen sınırlar:** Ortak token hâlâ tam yetkilidir ve işlemleri kişiye yazmaz. Dakika dakika canlı bakiye hesabı yerine günlük toplu çalışma tercih edilmiştir.
-
-## Test kart token'ları
-
-Banka simüle edilir; davranışı token belirler. Böylece her hata senaryosu istenildiği an tekrar üretilebilir.
-
-| Token | Davranış |
-|---|---|
-| `tok_success` | Her işlem başarılı |
-| `tok_3ds` | Ödeme sayfasında 3D Secure SMS doğrulaması ister, sonra başarılı |
-| `tok_success_<herhangi>` | Başarılı, ama her ek farklı bir kart sayılır (kart bazlı risk kurallarını denemek için) |
-| `tok_declined`, `tok_insufficient_funds` | Provizyon reddedilir |
-| `tok_timeout_processed` | Banka işlemi yapar ama yanıt gelmez; kurtarma işi `AUTHORIZED` yapar |
-| `tok_timeout_lost` | İstek bankaya ulaşmaz; kurtarma işi `FAILED` yapar |
-| `tok_capture_declined` | Provizyon başarılı, capture reddedilir |
-| `tok_capture_timeout`, `tok_refund_timeout` | İşlem bankada yapılır ama yanıt gelmez; kurtarma işi tamamlar |
-
-## Yol haritası
-
-- [x] **Defter çekirdeği:** Hesaplar, çift taraflı kayıtlar, idempotency, mutabakat
-- [x] **İşletme ve kimlik doğrulama:** Kayıt, JWT, API anahtarları, PostgreSQL Row Level Security
-- [x] **Ödeme akışı:** Durum makinesi (authorize, capture, void, refund), simüle banka, hata senaryoları
-- [x] **Webhook:** Transactional outbox, `FOR UPDATE SKIP LOCKED`, üstel geri çekilmeli yeniden deneme, HMAC imzası
-- [x] **Hesap kesimi ve mutabakat:** İşletmelere toplu ödeme, banka dosyasıyla karşılaştırma, zamanlanmış işler
-- [x] **Frontend:** Ödeme sayfası ve işletme paneli (React, TypeScript)
-- [x] **Vitrin:** İstek sınırı, yük testi, Prometheus metrikleri, Grafana panosu, GitHub Actions, Docker imajı
-- [x] **Canlı demo:** Render üzerinde uygulama, Neon üzerinde PostgreSQL
-- [x] **Analiz ve yönetim:** Grafikli analiz paneli, gelişmiş arama ve filtreler, CSV dışa aktarma, platform yönetim paneli
-- [x] **Ekip ve denetim:** Ekip üyeleri, rol bazlı yetkiler, değiştirilemez denetim günlüğü, ayarlar
-- [x] **Yeni iş alanları:** İtiraz (chargeback) akışı, müşteri kayıtları ve kişisel veri silme, paylaşılabilir ödeme bağlantıları
-- [x] **Abonelikler:** Planlar, tekrarlayan tahsilat, başarısız ödemede yeniden deneme, dönem ortası plan değişikliği
-- [x] **Güvenlik:** İki adımlı giriş, kurtarma kodları, parola sıfırlama, sırların şifrelenmesi, kişiye özel yönetici hesapları
-- [x] **İşletme onayı:** Yeni işletmeler yönetici onayından sonra ödeme alır; askıya alma ve yeniden açma
-- [x] **Gerçek e-posta:** Kuyruklu, yeniden denemeli gönderim (Brevo), kayıtta e-posta doğrulaması
-- [x] **3D Secure ve taksit:** Bankanın imzalı doğrulama cevabı, tek kullanımlık geri dönüş, süre aşımı, taksite göre komisyon
-- [x] **Dolandırıcılık önleme:** İşletmeye özel risk kuralları, engelli kartlar, inceleme kuyruğu ve veritabanı düzeyinde tahsilat kilidi
-- [x] **Gerçek ödeme altyapısı:** iyzico sandbox (Checkout Form), imzalı istek ve cevaplar, iyzico üzerinden iade ve iptal
-- [x] **Başvuru ve bildirimler:** Kontrol haneli işletme başvuru formu, yönetici inceleme ekranı, olaylara bağlı bildirim merkezi
+</div>

@@ -113,6 +113,7 @@ export const ADMIN: Record<string, string> = {
   'hesap kesimi bankada başarısız oldu': 'payout failed at the bank|payouts failed at the bank',
   'webhook teslim edilemedi': 'webhook could not be delivered|webhooks could not be delivered',
   'Bugünkü işlem hacmi': 'Volume today',
+  'İşletme sayısı': 'Businesses',
   'Son 30 günde {count} yeni kayıt': '1 new sign-up in the last 30 days|{count} new sign-ups in the last 30 days',
   'Platform hacmi · son 30 gün': 'Platform volume · last 30 days',
   'Bütün işletmelerin {currency} tahsilatı: {captured} · {count} işlem':

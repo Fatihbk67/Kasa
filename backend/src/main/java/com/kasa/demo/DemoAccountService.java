@@ -219,12 +219,18 @@ public class DemoAccountService {
         return id;
     }
 
-    /** To that local day at that hour, so "yesterday" means the merchant's yesterday whatever time the seed runs. */
+    /**
+     * Moves the payment and its steps to that local day and hour, so "yesterday" is the merchant's yesterday whatever
+     * time the seed runs. Everything shifts by the same amount, so the steps keep their order and spacing.
+     */
     private void backdate(UUID paymentId, int days, int hour) {
-        String at = "(((now() AT TIME ZONE 'Europe/Istanbul')::date - :d)::timestamp + make_interval(hours => :h)) AT TIME ZONE 'Europe/Istanbul'";
-        owner.sql("UPDATE payments SET created_at = " + at + ", updated_at = " + at + " WHERE id = :id")
+        String shift = "((((now() AT TIME ZONE 'Europe/Istanbul')::date - :d)::timestamp + make_interval(hours => :h))"
+                + " AT TIME ZONE 'Europe/Istanbul') - (SELECT created_at FROM payments WHERE id = :id)";
+        // The steps first: the shift is measured from the payment's own time, which the second update changes.
+        owner.sql("UPDATE payment_operations SET created_at = created_at + (" + shift + "), updated_at = updated_at + (" + shift + ")"
+                        + " WHERE payment_id = :id")
                 .param("d", days).param("h", hour).param("id", paymentId).update();
-        owner.sql("UPDATE payment_operations SET created_at = " + at + ", updated_at = " + at + " WHERE payment_id = :id")
+        owner.sql("UPDATE payments SET created_at = created_at + (" + shift + "), updated_at = updated_at + (" + shift + ") WHERE id = :id")
                 .param("d", days).param("h", hour).param("id", paymentId).update();
     }
 
