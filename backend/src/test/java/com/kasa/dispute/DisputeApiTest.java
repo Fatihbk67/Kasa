@@ -276,6 +276,42 @@ class DisputeApiTest extends PostgresIntegrationTest {
     }
 
     @Test
+    void aMerchantWhoAcceptedADisputeIsStillPaidTheRest() {
+        merchant.capturedPayment(50_000);
+        UUID lost = merchant.capturedPayment(15_000);
+        assertThat(post("/api/v1/disputes/" + id(open(lost, null)) + "/accept", null)).isEqualTo(200);
+
+        settlement.settleAll(soon());
+
+        assertThat(payouts()).hasSize(1);
+        assertThat(number(payouts().getFirst(), "amount")).isEqualTo(48_750 + 14_625 - 15_000 - LOSS_FEE);
+        assertThat(balance("merchant_payable")).isZero();
+        assertBooksBalance();
+    }
+
+    /**
+     * A loss that lands after the cutoff has already left the merchant's balance but is not an item of this payout.
+     * Paying the items would overdraw the balance, so the whole payout waits a day, and then everything is paid.
+     */
+    @Test
+    void aLossAfterTheCutoffDelaysThePayoutByOneRunAndIsNotLost() throws InterruptedException {
+        merchant.capturedPayment(50_000);
+        UUID lost = merchant.capturedPayment(15_000);
+        Instant cutoff = soon();
+        Thread.sleep(1_100);
+        assertThat(post("/api/v1/disputes/" + id(open(lost, null)) + "/accept", null)).isEqualTo(200);
+
+        settlement.settleAll(cutoff);
+        assertThat(payouts()).isEmpty();
+
+        settlement.settleAll(soon().plus(1, ChronoUnit.DAYS));
+        assertThat(payouts()).hasSize(1);
+        assertThat(number(payouts().getFirst(), "amount")).isEqualTo(48_750 + 14_625 - 15_000 - LOSS_FEE);
+        assertThat(balance("merchant_payable")).isZero();
+        assertBooksBalance();
+    }
+
+    @Test
     void aBalancePushedNegativeCarriesForward() {
         UUID payment = merchant.capturedPayment(10_000);
         settlement.settleAll(soon());
