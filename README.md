@@ -74,26 +74,35 @@ The whole interface is available in Turkish and English, in light and dark theme
 A modular monolith: one deployable, with packages that own their tables and talk through services. That is enough to show the hard problems without the operational cost of microservices.
 
 ```mermaid
-flowchart LR
-    C[Customer's browser] -->|checkout / payment link| API
-    M[Merchant dashboard] -->|JWT| API
-    S[Merchant's server] -->|API key| API
-    subgraph Kasa [Kasa · Spring Boot]
-        API[REST API] --> P[Payments]
-        P --> L[Double-entry ledger]
-        J[Scheduled jobs] --> R[Recovery]
-        J --> D[Webhook dispatcher]
-        J --> SE[Settlement]
-        J --> MU[Reconciliation]
+flowchart TB
+    subgraph callers ["Callers"]
+        direction LR
+        C["Customer's browser<br/>checkout · payment links"]
+        M["Merchant dashboard<br/>JWT"]
+        S["Merchant's server<br/>API key · receives webhooks"]
     end
-    P -->|outside the DB transaction| RB{Gateway router}
-    RB -->|tok_*| B[Simulated bank]
-    RB -->|iyzico:*| IY[iyzico sandbox]
-    C -->|card details| IY
-    Kasa --> DB[(PostgreSQL<br/>RLS · triggers · constraints)]
-    D -->|HMAC-signed| S
-    PR[Prometheus] -->|/actuator/prometheus| Kasa
-    G[Grafana] --> PR
+
+    subgraph kasa ["Kasa (Spring Boot)"]
+        API["REST API"] --> P["Payments"]
+        J["Scheduled jobs<br/>recovery · settlement<br/>reconciliation · webhooks"]
+        P --> L["Double-entry ledger"]
+        J --> L
+        P -->|"outside the DB transaction"| RB{"Gateway router"}
+    end
+
+    subgraph outside ["Storage and banks"]
+        direction LR
+        DB[("PostgreSQL<br/>RLS · triggers · constraints")]
+        B["Simulated bank"]
+        IY["iyzico sandbox"]
+    end
+
+    C --> API
+    M --> API
+    S --> API
+    L --> DB
+    RB -->|"test tokens"| B
+    RB -->|"iyzico tokens"| IY
 ```
 
 ### Taking a payment when the bank may not answer
