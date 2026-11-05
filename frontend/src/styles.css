@@ -1066,6 +1066,47 @@ form.toolbar {
   text-align: center;
 }
 
+/* Privacy policy and terms */
+.legal-links {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin: 14px 0 0;
+  font-size: 0.85rem;
+}
+
+.legal-page {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 32px 16px 48px;
+}
+
+.legal-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.legal-brand {
+  color: inherit;
+  text-decoration: none;
+}
+
+.legal {
+  padding: 28px;
+  line-height: 1.6;
+}
+
+.legal h2 {
+  margin: 22px 0 6px;
+  font-size: 1.05rem;
+}
+
+.legal p {
+  margin: 0 0 10px;
+}
+
 /* Checkout */
 .checkout-card {
   display: flex;

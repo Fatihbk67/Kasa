@@ -6,6 +6,7 @@ import { useAuth } from '../auth';
 import { Brand, ErrorNote, usePageTitle } from '../components';
 import { GoogleButton, GoogleSignup, type GoogleResult } from '../GoogleSignIn';
 import { LanguagePicker, t } from '../i18n';
+import { LegalLinks } from './Legal';
 
 interface TokenResponse {
   accessToken: string;
@@ -33,6 +34,7 @@ function AuthCard({ title, children }: { title: string; children: ReactNode }) {
         </p>
         {children}
       </div>
+      <LegalLinks />
     </div>
   );
 }

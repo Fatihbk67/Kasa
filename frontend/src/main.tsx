@@ -17,6 +17,7 @@ import { Settings } from './pages/Settings';
 import { AcceptInvitation, TeamPage } from './pages/Team';
 import { Developers } from './pages/Developers';
 import { ForgotPassword, Login, Register, ResetPassword, VerifyEmail } from './pages/Auth';
+import { PrivacyPage, TermsPage } from './pages/Legal';
 import { NotFound } from './pages/NotFound';
 import { Onboarding } from './pages/Onboarding';
 import { RiskPage } from './pages/Risk';
@@ -46,6 +47,8 @@ createRoot(document.getElementById('root')!).render(
           <Route path="/bank/3ds/:id" element={<BankChallenge />} />
           <Route path="/l/:slug" element={<PublicLinkPage />} />
           <Route path="/invite/:token" element={<AcceptInvitation />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
+          <Route path="/terms" element={<TermsPage />} />
           <Route path="/admin" element={<AdminHome />} />
           <Route path="/admin/reconciliation/:id" element={<AdminRunDetail />} />
           <Route element={<Protected />}>
