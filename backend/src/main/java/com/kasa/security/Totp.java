@@ -51,7 +51,9 @@ public final class Totp {
      * Returns the step the code belongs to, or -1. Allows one step either way for clock differences, and refuses
      * anything at or before {@code lastUsedStep}, because a code seen once must never work a second time.
      */
-    public static long matchingStep(String base32Secret, String code, long lastUsedStep, long now) {
+    public static long matchingStep(String base32Secret, String typed, long lastUsedStep, long now) {
+        // Authenticator apps show "123 456", and people type it that way.
+        String code = typed.replaceAll("\\s", "");
         if (code.length() != DIGITS) {
             return -1;
         }

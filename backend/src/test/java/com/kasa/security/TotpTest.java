@@ -54,6 +54,15 @@ class TotpTest {
     }
 
     @Test
+    void aCodeTypedWithTheSpaceTheAppShowsStillWorks() {
+        String secret = Totp.newSecret();
+        long now = 1_000_000;
+        String code = Totp.code(secret, now);
+
+        assertThat(Totp.matchingStep(secret, code.substring(0, 3) + " " + code.substring(3), 0, now)).isEqualTo(now);
+    }
+
+    @Test
     void aMalformedCodeIsSimplyWrong() {
         assertThat(Totp.matchingStep(Totp.newSecret(), "12345", 0, 1_000_000)).isEqualTo(-1);
         assertThat(Totp.matchingStep(Totp.newSecret(), "abcdef", 0, 1_000_000)).isEqualTo(-1);
