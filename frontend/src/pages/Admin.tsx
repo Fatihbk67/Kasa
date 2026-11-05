@@ -2,11 +2,15 @@ import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } 
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { adminApi, getAdminToken, setAdminToken } from '../adminApi';
 import { ApiError } from '../api';
-import { Brand, EmptyState, ErrorNote, FormDialog, formatDate, formatDateTime, Loading, OneTimeSecret, PageHeader } from '../components';
+import { Brand, EmptyState, ErrorNote, FormDialog, formatDate, formatDateTime, Loading, PageHeader } from '../components';
 import { LanguagePicker, locale, t, tk } from '../i18n';
 import { formatMoney } from '../money';
 import { formatIban } from '../identifiers';
-import type { BusinessProfile, PlatformOverview, ReconciliationDetail, ReconciliationRun } from '../types';
+import { DailyBars, HorizontalBars } from '../charts';
+import { compareWindows, greeting } from '../dashboard';
+import type { BusinessProfile, PlatformActivity, PlatformOverview, ReconciliationDetail, ReconciliationRun } from '../types';
+import { Change, Kpi, TaskList, type Task } from './Overview';
+import { AuthenticatorSetup } from '../AuthenticatorSetup';
 import { BUSINESS_TYPES, bankName, SECTORS } from './Onboarding';
 import { useFetch } from '../useFetch';
 
@@ -106,6 +110,12 @@ interface AdminAccount {
   email: string;
   disabled: boolean;
   createdAt: string;
+}
+
+interface CreatedAdmin {
+  email: string;
+  totpSecret: string;
+  enrollmentUri: string;
 }
 
 interface AdminAuditEntry {
@@ -341,12 +351,12 @@ function AdminAccounts() {
   const [creating, setCreating] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [created, setCreated] = useState<{ email: string; totpSecret: string } | null>(null);
+  const [created, setCreated] = useState<CreatedAdmin | null>(null);
   const [disabling, setDisabling] = useState<AdminAccount | null>(null);
 
   const create = async () => {
     try {
-      const result = await adminApi<{ email: string; totpSecret: string }>('/accounts', 'POST', undefined, { email, password });
+      const result = await adminApi<CreatedAdmin>('/accounts', 'POST', undefined, { email, password });
       setCreated(result);
       setCreating(false);
       setEmail('');
@@ -375,7 +385,14 @@ function AdminAccounts() {
         <h2>{t('Yöneticiler')}</h2>
         <button type="button" className="button button-small" onClick={() => setCreating(true)}>{t('Yönetici ekle')}</button>
       </div>
-      {created && <OneTimeSecret title={t('{email} için kurulum anahtarı', { email: created.email })} value={created.totpSecret} />}
+      {created && (
+        <div className="note note-warning" role="status">
+          <strong>{t('{email} için doğrulama uygulamasını kurun', { email: created.email })}</strong>
+          <p>{t('Yönetici girişte bu uygulamadaki kodu kullanır. QR kod ve anahtar bir daha gösterilmeyecek; şimdi ekleyin.')}</p>
+          <AuthenticatorSetup secret={created.totpSecret} uri={created.enrollmentUri} />
+          <div><button type="button" className="button button-small" onClick={() => setCreated(null)}>{t('Ekledim, kapat')}</button></div>
+        </div>
+      )}
       <ErrorNote message={accounts.error} />
       {accounts.loading ? <Loading /> : accounts.data && accounts.data.length > 0 ? (
         <div className="table-wrap">
@@ -727,14 +744,137 @@ function useAdminSession() {
   return { signedIn, signOut, markSignedIn: () => setSignedIn(true) };
 }
 
-function Tile({ label, value, alert }: { label: string; value: number; alert?: boolean }) {
+const MERCHANT_COUNT_LIMIT = 100;
+
+/** One line of the system health card; a number that needs attention is marked in words as well as colour. */
+function HealthRow({ label, value, alert }: { label: string; value: number; alert?: boolean }) {
+  const bad = alert && value > 0;
   return (
-    <div className="card stat">
-      <span className="stat-label">{label}</span>
-      <span className={alert && value > 0 ? 'stat-value stat-value-small negative' : 'stat-value stat-value-small'}>
+    <li className={bad ? 'health-row health-row-bad' : 'health-row'}>
+      <span>{label}</span>
+      <span className="health-value">
+        {bad && <span className="visually-hidden">{t('Dikkat')}: </span>}
         {value.toLocaleString(locale())}
       </span>
-    </div>
+    </li>
+  );
+}
+
+/** The operator's start page: how much money moves through the platform, and what is waiting for a decision. */
+function PlatformHome({ overview, pendingRequests, onGoTo }: {
+  overview: PlatformOverview | null;
+  pendingRequests: number;
+  onGoTo: (tab: string) => void;
+}) {
+  const activity = useFetch(() => adminApi<PlatformActivity>('/activity?days=30'), []);
+  const pending = useFetch(() => adminApi<MerchantRow[]>('/merchants?status=PENDING'), []);
+  const data = activity.data;
+  const today = data ? compareWindows(data.daily, 1) : null;
+  const week = data ? compareWindows(data.daily, 7) : null;
+  const attempts = data?.daily.reduce((sum, day) => sum + day.authorizationAttempts, 0) ?? 0;
+  const approved = data?.daily.reduce((sum, day) => sum + day.authorizationsApproved, 0) ?? 0;
+  const newMerchants = data?.daily.reduce((sum, day) => sum + day.newMerchants, 0) ?? 0;
+  const captured = data?.daily.reduce((sum, day) => sum + day.captured, 0) ?? 0;
+  const captureCount = data?.daily.reduce((sum, day) => sum + day.captureCount, 0) ?? 0;
+  const percent = (value: number) => value.toLocaleString(locale(), { style: 'percent', maximumFractionDigits: 1 });
+
+  const applications = pending.data?.filter((merchant) => merchant.profileSubmittedAt) ?? [];
+  const tasks: Task[] = [
+    {
+      key: 'applications', count: applications.length, capped: (pending.data?.length ?? 0) >= MERCHANT_COUNT_LIMIT,
+      text: t('işletme başvurusu incelemenizi bekliyor', { count: applications.length }), to: '/admin?tab=merchants', tone: 'warning',
+    },
+    { key: 'requests', count: pendingRequests, capped: false, text: t('rol talebi kararınızı bekliyor', { count: pendingRequests }), to: '/admin?tab=requests', tone: 'info' },
+    ...(overview ? [
+      { key: 'operations', count: overview.pendingOperations, capped: false, text: t('işlemin sonucu bankadan bekleniyor', { count: overview.pendingOperations }), tone: 'danger' as const },
+      { key: 'payouts', count: overview.failedPayouts, capped: false, text: t('hesap kesimi bankada başarısız oldu', { count: overview.failedPayouts }), tone: 'danger' as const },
+      { key: 'webhooks', count: overview.failedWebhooks, capped: false, text: t('webhook teslim edilemedi', { count: overview.failedWebhooks }), tone: 'warning' as const },
+    ] : []),
+  ];
+
+  return (
+    <>
+      <ErrorNote message={activity.error} />
+      <section className="stats kpis" aria-label={t('Platform özeti')}>
+        {!data ? <div className="card stat kpi"><Loading rows={2} /></div> : (
+          <>
+            <Kpi label={t('Bugünkü işlem hacmi')} value={formatMoney(today!.current, data.currency)}>
+              <Change change={today!.change} against={t('Düne')} />
+            </Kpi>
+            <Kpi label={t('Son 7 gün')} value={formatMoney(week!.current, data.currency)}>
+              <Change change={week!.change} against={t('Önceki 7 güne')} />
+            </Kpi>
+            <Kpi label={t('Onay oranı')} value={attempts > 0 ? percent(approved / attempts) : '—'}>
+              <span className="hint">{t('Son 30 günde {approved} / {attempts} deneme', { approved, attempts })}</span>
+            </Kpi>
+          </>
+        )}
+        <Kpi label={t('İşletme')} value={overview ? overview.tenantCount.toLocaleString(locale()) : '—'}>
+          <span className="hint">
+            {data ? t('Son 30 günde {count} yeni kayıt', { count: newMerchants }) : ' '}
+          </span>
+        </Kpi>
+      </section>
+
+      <div className="dashboard-grid">
+        <div className="dashboard-main">
+          <section className="card chart-card" aria-labelledby="platform-chart-title">
+            <div className="section-header section-header-tight">
+              <div>
+                <h2 id="platform-chart-title">{t('Platform hacmi · son 30 gün')}</h2>
+                {data && (
+                  <span className="hint">
+                    {t('Bütün işletmelerin {currency} tahsilatı: {captured} · {count} işlem', {
+                      currency: data.currency,
+                      captured: formatMoney(captured, data.currency),
+                      count: captureCount,
+                    })}
+                  </span>
+                )}
+              </div>
+            </div>
+            {activity.loading && !data ? <Loading rows={4} />
+              : data && captured > 0 ? <DailyBars points={data.daily} currency={data.currency} />
+                : <EmptyState title={t('Bu dönemde tahsilat yok')}>{t('İşletmeler ödeme aldıkça günlük toplamlar burada görünür.')}</EmptyState>}
+          </section>
+        </div>
+
+        <aside className="dashboard-side" aria-label={t('Özet bilgiler')}>
+          <TaskList tasks={tasks} loading={pending.loading || !overview} />
+
+          <section className="card" aria-labelledby="top-merchants-title">
+            <div className="section-header section-header-tight">
+              <h2 className="panel-title" id="top-merchants-title">{t('En çok tahsilat yapan işletmeler')}</h2>
+              <button type="button" className="link-button" onClick={() => onGoTo('merchants')}>{t('Tümü')}</button>
+            </div>
+            {!data ? <Loading rows={3} /> : data.topMerchants.length > 0 ? (
+              <HorizontalBars rows={data.topMerchants.map((merchant) => ({
+                key: merchant.id,
+                label: merchant.status === 'ACTIVE' ? merchant.name : `${merchant.name} · ${t(MERCHANT_STATUS[merchant.status].label)}`,
+                value: merchant.captured,
+                valueText: formatMoney(merchant.captured, data.currency),
+                detail: t('{count} işlem', { count: merchant.captureCount }),
+              }))} />
+            ) : <p className="muted">{t('Son 30 günde tahsilat yapan işletme yok.')}</p>}
+          </section>
+
+          <section className="card" aria-labelledby="health-title">
+            <h2 className="panel-title" id="health-title">{t('Sistem durumu')}</h2>
+            {!overview ? <Loading rows={3} /> : (
+              <ul className="health">
+                <HealthRow label={t('Toplam ödeme')} value={overview.paymentCount} />
+                <HealthRow label={t('Son 24 saat tahsilat')} value={overview.capturesLastDay} />
+                <HealthRow label={t('Yoldaki hesap kesimi')} value={overview.pendingPayouts} />
+                <HealthRow label={t('Sıradaki webhook')} value={overview.queuedWebhooks} />
+                <HealthRow label={t('Sonucu bilinmeyen işlem')} value={overview.pendingOperations} alert />
+                <HealthRow label={t('Başarısız hesap kesimi')} value={overview.failedPayouts} alert />
+                <HealthRow label={t('Başarısız webhook')} value={overview.failedWebhooks} alert />
+              </ul>
+            )}
+          </section>
+        </aside>
+      </div>
+    </>
   );
 }
 
@@ -804,6 +944,10 @@ function AdminDashboard({ onSignOut }: { onSignOut: () => void }) {
       <>
       <PageHeader
         title={t('Genel durum')}
+        description={t('{greeting}. Bugün {date}.', {
+          greeting: greeting(new Date().getHours()),
+          date: new Intl.DateTimeFormat(locale(), { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date()),
+        })}
         actions={(
           <>
             <button type="button" className="button" onClick={() => setSettling(true)}>{t('Hesap kesimini çalıştır')}</button>
@@ -813,18 +957,7 @@ function AdminDashboard({ onSignOut }: { onSignOut: () => void }) {
       />
       {notice && <p className="note note-success" role="status">{notice}</p>}
       <ErrorNote message={overview.error} />
-      {overview.loading && !overview.data ? <Loading /> : overview.data && (
-        <section className="stats stats-wide" aria-label={t('Platform özeti')}>
-          <Tile label={t('İşletme')} value={overview.data.tenantCount} />
-          <Tile label={t('Toplam ödeme')} value={overview.data.paymentCount} />
-          <Tile label={t('Son 24 saat tahsilat')} value={overview.data.capturesLastDay} />
-          <Tile label={t('Sonucu bilinmeyen işlem')} value={overview.data.pendingOperations} alert />
-          <Tile label={t('Yoldaki hesap kesimi')} value={overview.data.pendingPayouts} />
-          <Tile label={t('Başarısız hesap kesimi')} value={overview.data.failedPayouts} alert />
-          <Tile label={t('Sıradaki webhook')} value={overview.data.queuedWebhooks} />
-          <Tile label={t('Başarısız webhook')} value={overview.data.failedWebhooks} alert />
-        </section>
-      )}
+      <PlatformHome overview={overview.data ?? null}pendingRequests={pendingCount} onGoTo={(key) => setParams({ tab: key })} />
 
       <div className="section-header"><h2>{t('Mutabakat geçmişi')}</h2></div>
       <ErrorNote message={runs.error} />

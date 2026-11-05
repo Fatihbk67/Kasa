@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -14,8 +15,10 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import com.kasa.admin.AdminAccountService;
+import com.kasa.admin.PlatformActivityService;
 import com.kasa.settlement.SettlementService;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -25,14 +28,19 @@ import jakarta.servlet.http.HttpServletRequest;
 @RequestMapping("/api/v1/admin")
 public class AdminController {
 
+    private static final int MAX_ACTIVITY_DAYS = 90;
+
     private final ReconciliationService reconciliation;
     private final SettlementService settlement;
     private final AdminAccountService accounts;
+    private final PlatformActivityService activity;
 
-    public AdminController(ReconciliationService reconciliation, SettlementService settlement, AdminAccountService accounts) {
+    public AdminController(ReconciliationService reconciliation, SettlementService settlement, AdminAccountService accounts,
+            PlatformActivityService activity) {
         this.reconciliation = reconciliation;
         this.settlement = settlement;
         this.accounts = accounts;
+        this.activity = activity;
     }
 
     @PostMapping("/reconciliation/runs")
@@ -55,6 +63,14 @@ public class AdminController {
     @GetMapping("/overview")
     public ReconciliationService.PlatformOverview overview() {
         return reconciliation.overview();
+    }
+
+    @GetMapping("/activity")
+    public PlatformActivityService.Activity activity(@RequestParam(defaultValue = "30") int days) {
+        if (days < 1 || days > MAX_ACTIVITY_DAYS) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "days must be between 1 and " + MAX_ACTIVITY_DAYS);
+        }
+        return activity.activity(days);
     }
 
     /** Settles everything completed so far, without waiting for the daily job. */

@@ -50,7 +50,7 @@ function NewCheckoutDialog({ onClose }: { onClose: () => void }) {
 }
 
 /** A change is spelled out with an arrow and words, so it never depends on colour alone. */
-function Change({ change, against }: { change: number | null; against: string }) {
+export function Change({ change, against }: { change: number | null; against: string }) {
   if (change === null) {
     return <span className="hint">{t('{period} ile karşılaştırılacak veri yok', { period: against })}</span>;
   }
@@ -63,7 +63,7 @@ function Change({ change, against }: { change: number | null; against: string })
   );
 }
 
-function Kpi({ label, value, negative, children }: { label: string; value: string; negative?: boolean; children?: ReactNode }) {
+export function Kpi({ label, value, negative, children }: { label: string; value: string; negative?: boolean; children?: ReactNode }) {
   return (
     <div className="card stat kpi">
       <span className="stat-label">{label}</span>
@@ -73,16 +73,17 @@ function Kpi({ label, value, negative, children }: { label: string; value: strin
   );
 }
 
-interface Task {
+export interface Task {
   key: string;
   count: number;
   capped: boolean;
   text: string;
-  to: string;
+  /** Where the work is done; a task with nowhere to go in the panel is shown without a link. */
+  to?: string;
   tone: 'danger' | 'warning' | 'info';
 }
 
-function TaskList({ tasks, loading }: { tasks: Task[]; loading: boolean }) {
+export function TaskList({ tasks, loading }: { tasks: Task[]; loading: boolean }) {
   const open = tasks.filter((task) => task.count > 0);
   return (
     <section className="card" aria-labelledby="tasks-title">
@@ -93,11 +94,18 @@ function TaskList({ tasks, loading }: { tasks: Task[]; loading: boolean }) {
         <ul className="tasks">
           {open.map((task) => (
             <li key={task.key}>
-              <Link to={task.to} className={`task task-${task.tone}`}>
-                <span className="task-count">{task.capped ? `${task.count}+` : task.count}</span>
-                <span>{task.text}</span>
-                <span className="task-arrow" aria-hidden="true">→</span>
-              </Link>
+              {task.to ? (
+                <Link to={task.to} className={`task task-${task.tone}`}>
+                  <span className="task-count">{task.capped ? `${task.count}+` : task.count}</span>
+                  <span>{task.text}</span>
+                  <span className="task-arrow" aria-hidden="true">→</span>
+                </Link>
+              ) : (
+                <div className={`task task-${task.tone}`}>
+                  <span className="task-count">{task.capped ? `${task.count}+` : task.count}</span>
+                  <span>{task.text}</span>
+                </div>
+              )}
             </li>
           ))}
         </ul>

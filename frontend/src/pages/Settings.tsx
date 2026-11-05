@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api, ApiError } from '../api';
 import { useAuth } from '../auth';
+import { AuthenticatorSetup } from '../AuthenticatorSetup';
 import { CopyButton, ErrorNote, Loading, PageHeader } from '../components';
 import { LanguagePicker, t, tk } from '../i18n';
 import { isOwner, ROLE_LABELS, useMe } from '../me';
@@ -124,7 +125,7 @@ function TwoFactorSettings() {
   const status = useFetch(() => api<TwoFactorStatus>('/settings/two-factor'), []);
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
-  const [setup, setSetup] = useState<{ secret: string } | null>(null);
+  const [setup, setSetup] = useState<{ secret: string; enrollmentUri: string } | null>(null);
   const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -144,7 +145,7 @@ function TwoFactorSettings() {
   const begin = (event: FormEvent) => {
     event.preventDefault();
     void run(async () => {
-      setSetup(await api<{ secret: string }>('/settings/two-factor/setup', { method: 'POST', body: { password } }));
+      setSetup(await api<{ secret: string; enrollmentUri: string }>('/settings/two-factor/setup', { method: 'POST', body: { password } }));
       setPassword('');
     });
   };
@@ -194,21 +195,17 @@ function TwoFactorSettings() {
           </label>
           <label className="field">
             {t('Doğrulama kodu')}
-            <input inputMode="numeric" required autoComplete="one-time-code" maxLength={6} value={code} onChange={(e) => setCode(e.target.value)} />
+            <input inputMode="numeric" required autoComplete="one-time-code" maxLength={7} value={code} onChange={(e) => setCode(e.target.value)} />
           </label>
           <ErrorNote message={error} />
           <div><button type="submit" className="button" disabled={busy}>{busy ? t('Kapatılıyor…') : t('İki adımlı girişi kapat')}</button></div>
         </form>
       ) : setup ? (
         <form onSubmit={enable} className="stack">
-          <p className="muted">{t('Doğrulama uygulamanızda (Google Authenticator, Authy) elle ekleme seçeneğine bu anahtarı girin:')}</p>
-          <div className="secret-row">
-            <code className="secret">{setup.secret}</code>
-            <CopyButton value={setup.secret} />
-          </div>
+          <AuthenticatorSetup secret={setup.secret} uri={setup.enrollmentUri} />
           <label className="field">
             {t('Uygulamadaki 6 haneli kod')}
-            <input inputMode="numeric" required autoFocus autoComplete="one-time-code" maxLength={6} value={code} onChange={(e) => setCode(e.target.value)} />
+            <input inputMode="numeric" required autoFocus autoComplete="one-time-code" maxLength={7} value={code} onChange={(e) => setCode(e.target.value)} />
             <span className="hint">{t('Açınca diğer cihazlardaki oturumlarınız kapanır.')}</span>
           </label>
           <ErrorNote message={error} />

@@ -223,6 +223,19 @@ export interface PlatformOverview {
   failedWebhooks: number;
 }
 
+export interface PlatformDay extends DayPoint {
+  authorizationAttempts: number;
+  authorizationsApproved: number;
+  newMerchants: number;
+}
+
+export interface PlatformActivity {
+  days: number;
+  currency: string;
+  daily: PlatformDay[];
+  topMerchants: { id: string; name: string; status: 'PENDING' | 'ACTIVE' | 'SUSPENDED'; captured: number; captureCount: number }[];
+}
+
 export interface ReconciliationRun {
   id: string;
   statementDate: string;

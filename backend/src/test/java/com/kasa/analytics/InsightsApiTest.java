@@ -214,6 +214,45 @@ class InsightsApiTest extends PostgresIntegrationTest {
                 .retrieve().onStatus(s -> true, (req, res) -> { }).toBodilessEntity().getStatusCode().value()).isEqualTo(403);
     }
 
+    @Test
+    void theOperatorSeesPlatformVolumeByDayAndTheBiggestMerchants() {
+        Map<String, Object> before = activity(7);
+        // Just under the default review rule, so both are captured straight away.
+        merchant.authorized(500, "tok_insufficient_funds");
+        merchant.capturedPayment(999_999);
+        merchant.capturedPayment(999_999);
+
+        Map<String, Object> after = activity(7);
+        List<Map<String, Object>> daily = (List<Map<String, Object>>) after.get("daily");
+        Map<String, Object> today = daily.getLast();
+        Map<String, Object> todayBefore = ((List<Map<String, Object>>) before.get("daily")).getLast();
+
+        assertThat(daily).hasSize(7);
+        assertThat(after.get("currency")).isEqualTo("TRY");
+        assertThat(number(today, "captured") - number(todayBefore, "captured")).isEqualTo(1_999_998);
+        assertThat(number(today, "captureCount") - number(todayBefore, "captureCount")).isEqualTo(2);
+        assertThat(number(today, "authorizationAttempts") - number(todayBefore, "authorizationAttempts")).isEqualTo(3);
+        assertThat(number(today, "authorizationsApproved") - number(todayBefore, "authorizationsApproved")).isEqualTo(2);
+        assertThat(number(today, "newMerchants")).isGreaterThanOrEqualTo(1);
+
+        Map<String, Object> top = ((List<Map<String, Object>>) after.get("topMerchants")).getFirst();
+        assertThat(number(top, "captured")).isGreaterThanOrEqualTo(1_999_998);
+        assertThat(top).containsKeys("id", "name", "status", "captureCount");
+    }
+
+    @Test
+    void platformActivityIsForTheOperatorOnlyAndHasABoundedRange() {
+        assertThat(client().get().uri("/api/v1/admin/activity").header("X-Api-Key", merchant.apiKey())
+                .retrieve().onStatus(s -> true, (req, res) -> { }).toBodilessEntity().getStatusCode().value()).isEqualTo(403);
+        assertThat(client().get().uri("/api/v1/admin/activity?days=365").header("X-Admin-Token", "test-admin-token")
+                .retrieve().onStatus(s -> true, (req, res) -> { }).toBodilessEntity().getStatusCode().value()).isEqualTo(400);
+    }
+
+    private Map<String, Object> activity(int days) {
+        return client().get().uri("/api/v1/admin/activity?days={days}", days)
+                .header("X-Admin-Token", "test-admin-token").retrieve().body(Map.class);
+    }
+
     private UUID create(long amount, String description) {
         Map<String, Object> result = merchant.post("/api/v1/payments",
                 Map.of("amount", amount, "currency", "TRY", "cardToken", "tok_success", "description", description));

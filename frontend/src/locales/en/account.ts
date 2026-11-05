@@ -128,8 +128,11 @@ export const ACCOUNT: Record<string, string> = {
   'Açık. {count} kurtarma kodu kaldı.': 'On. 1 recovery code left.|On. {count} recovery codes left.',
   'Kapatılıyor…': 'Turning off…',
   'İki adımlı girişi kapat': 'Turn off two-step sign-in',
-  'Doğrulama uygulamanızda (Google Authenticator, Authy) elle ekleme seçeneğine bu anahtarı girin:':
-    'In your authenticator app (Google Authenticator, Authy), choose to add a key manually and enter:',
+  'Doğrulama uygulaması için QR kod': 'QR code for the authenticator app',
+  'Telefonunuzda Google Authenticator, Microsoft Authenticator veya Authy uygulamasını açın.':
+    'Open Google Authenticator, Microsoft Authenticator or Authy on your phone.',
+  '+ simgesine dokunun ve QR kodu tarayın.': 'Tap + and scan the QR code.',
+  'Tarayamıyorsanız "kurulum anahtarı gir" seçeneğine şu anahtarı yazın:': 'If you cannot scan it, choose "Enter a setup key" and type this key:',
   'Uygulamadaki 6 haneli kod': 'The 6-digit code from the app',
   'Açınca diğer cihazlardaki oturumlarınız kapanır.': 'Turning it on signs you out on other devices.',
   'İki adımlı girişi aç': 'Turn on two-step sign-in',
