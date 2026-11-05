@@ -24,6 +24,8 @@ services:
       KASA_JWT_SECRET: ${KASA_JWT_SECRET:?copy .env.example to .env and set it}
       KASA_ADMIN_TOKEN: ${KASA_ADMIN_TOKEN:?copy .env.example to .env and set it}
       KASA_ENCRYPTION_KEY: ${KASA_ENCRYPTION_KEY:?copy .env.example to .env and set it}
+      # No mail provider here, so verification and reset links are printed to the log: `docker compose logs app`.
+      KASA_MAIL_LOG_BODY: "true"
     ports:
       - "8080:8080"
 

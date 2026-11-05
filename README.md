@@ -181,13 +181,27 @@ Denemeye değer akış: **Test ödemesi oluştur** ile ödeme sayfasını açın
 
 ## Docker ile çalıştırma
 
-Bu yol henüz çalıştırılarak denenmemiştir. `.env.example` dosyasını `.env` olarak kopyalayıp değerleri değiştirin, ardından:
+Canlıya en yakın kurulum budur: kalıcı bir PostgreSQL 18, uygulama imajı, Prometheus ve Grafana birlikte açılır. `.env.example` dosyasını `.env` olarak kopyalayıp her değeri uzun ve rastgele bir metinle değiştirin, ardından:
 
 ```bash
 docker compose up --build
 ```
 
-Uygulama `http://localhost:8080`, Prometheus `http://localhost:9090`, Grafana `http://localhost:3000` adresindedir. Grafana'da "Kasa" panosu hazır gelir.
+İlk derleme bağımlılıklar indiği için birkaç dakika sürer. Uygulama `http://localhost:8080`, Prometheus `http://localhost:9090`, Grafana `http://localhost:3000` adresindedir. Grafana'ya `admin` kullanıcısı ve `.env` dosyasındaki `GRAFANA_ADMIN_PASSWORD` ile girilir; "Kasa" panosu hazır gelir.
+
+Bu kurulumda demo verisi yoktur, canlı sitedeki gibi sıfırdan başlanır:
+
+1. `http://localhost:8080` adresinde hesap açın. E-posta servisi bağlı olmadığı için doğrulama bağlantısı uygulama logunda yazar:
+
+   ```bash
+   docker compose logs app
+   ```
+
+2. Panelde işletme başvurusunu doldurun.
+3. `http://localhost:8080/admin` adresinde `.env` dosyasındaki `KASA_ADMIN_TOKEN` ile yönetici paneline girip başvuruyu onaylayın.
+4. Artık test ödemesi alabilirsiniz.
+
+Veriler Docker volume'larında kalır. Durdurmak için `docker compose down`, verileri de silmek için `docker compose down -v` kullanın.
 
 ## Yayına alma
 
