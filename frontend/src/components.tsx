@@ -1,67 +1,77 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { locale, t, tk } from './i18n';
 import type { DisputeStatus, InvoiceStatus, OperationStatus, PaymentLinkStatus, PaymentStatus, Payout, SubscriptionStatus, WebhookDelivery } from './types';
 
 type Tone = 'success' | 'warning' | 'danger' | 'neutral' | 'info';
 
+// Labels in the constants below are Turkish keys, translated where they are shown.
 const PAYMENT_STATUS: Record<PaymentStatus, { label: string; tone: Tone }> = {
-  PENDING: { label: 'Bankadan yanıt bekleniyor', tone: 'warning' },
-  AUTHORIZED: { label: 'Provizyon alındı', tone: 'info' },
-  DECLINED: { label: 'Reddedildi', tone: 'danger' },
-  FAILED: { label: 'Başarısız', tone: 'danger' },
-  VOIDED: { label: 'İptal edildi', tone: 'neutral' },
-  CAPTURED: { label: 'Tahsil edildi', tone: 'success' },
-  PARTIALLY_REFUNDED: { label: 'Kısmen iade edildi', tone: 'warning' },
-  REFUNDED: { label: 'İade edildi', tone: 'neutral' },
+  PENDING: { label: tk('Bankadan yanıt bekleniyor'), tone: 'warning' },
+  AUTHORIZED: { label: tk('Provizyon alındı'), tone: 'info' },
+  DECLINED: { label: tk('Reddedildi'), tone: 'danger' },
+  FAILED: { label: tk('Başarısız'), tone: 'danger' },
+  VOIDED: { label: tk('İptal edildi'), tone: 'neutral' },
+  CAPTURED: { label: tk('Tahsil edildi'), tone: 'success' },
+  PARTIALLY_REFUNDED: { label: tk('Kısmen iade edildi'), tone: 'warning' },
+  REFUNDED: { label: tk('İade edildi'), tone: 'neutral' },
 };
 
 export function paymentStatusLabel(status: PaymentStatus): string {
-  return PAYMENT_STATUS[status].label;
+  return t(PAYMENT_STATUS[status].label);
 }
 
-export const PAYMENT_STATUS_OPTIONS =Object.entries(PAYMENT_STATUS).map(([value, { label }]) => ({ value, label }));
+/** For a status filter: the labels are translated when the options are asked for. */
+export function paymentStatusOptions(): { value: string; label: string }[] {
+  return Object.entries(PAYMENT_STATUS).map(([value, { label }]) => ({ value, label: t(label) }));
+}
 
 const FAILURE_CODES: Record<string, string> = {
-  card_declined: 'Kart bankası işlemi reddetti.',
-  insufficient_funds: 'Kartta yeterli bakiye yok.',
-  invalid_token: 'Kart bilgisi geçersiz.',
-  capture_rejected: 'Banka tahsilatı reddetti.',
-  bank_no_record: 'İstek bankaya ulaşmadı, para hareketi olmadı.',
-  account_closed: 'Alıcı banka hesabı kapalı.',
-  unknown_authorization: 'Banka bu provizyonu bulamadı.',
-  risk_blocked: 'Ödeme bir risk kuralına takıldı ve bankaya gönderilmedi.',
-  '3ds_failed': 'Kart sahibi doğrulaması (3D Secure) tamamlanmadı.',
-  iyzico_declined: 'Ödeme iyzico sayfasında tamamlanmadı.',
+  card_declined: tk('Kart bankası işlemi reddetti.'),
+  insufficient_funds: tk('Kartta yeterli bakiye yok.'),
+  invalid_token: tk('Kart bilgisi geçersiz.'),
+  capture_rejected: tk('Banka tahsilatı reddetti.'),
+  bank_no_record: tk('İstek bankaya ulaşmadı, para hareketi olmadı.'),
+  account_closed: tk('Alıcı banka hesabı kapalı.'),
+  unknown_authorization: tk('Banka bu provizyonu bulamadı.'),
+  risk_blocked: tk('Ödeme bir risk kuralına takıldı ve bankaya gönderilmedi.'),
+  '3ds_failed': tk('Kart sahibi doğrulaması (3D Secure) tamamlanmadı.'),
+  iyzico_declined: tk('Ödeme iyzico sayfasında tamamlanmadı.'),
 };
 
-export const RISK_REASONS: Record<string, string> = {
-  CARD_VELOCITY: 'Aynı kartla kısa sürede çok fazla deneme',
-  CARD_DECLINES: 'Kart bankadan art arda reddedildi',
-  AMOUNT_ABOVE: 'Tutar belirlenen sınırın üstünde',
-  CARD_BLOCKLISTED: 'Kart engelli kartlar listesinde',
+const RISK_REASONS: Record<string, string> = {
+  CARD_VELOCITY: tk('Aynı kartla kısa sürede çok fazla deneme'),
+  CARD_DECLINES: tk('Kart bankadan art arda reddedildi'),
+  AMOUNT_ABOVE: tk('Tutar belirlenen sınırın üstünde'),
+  CARD_BLOCKLISTED: tk('Kart engelli kartlar listesinde'),
 };
+
+export function riskReason(code: string): string {
+  return RISK_REASONS[code] ? t(RISK_REASONS[code]) : code;
+}
 
 export function RiskBadge({ level, reviewStatus }: { level: string | null; reviewStatus: string | null }) {
   if (reviewStatus === 'OPEN') {
-    return <Badge label="İncelemede" tone="warning" />;
+    return <Badge label={tk('İncelemede')} tone="warning" />;
   }
   if (reviewStatus === 'REJECTED') {
-    return <Badge label="İncelemede reddedildi" tone="danger" />;
+    return <Badge label={tk('İncelemede reddedildi')} tone="danger" />;
   }
   if (reviewStatus === 'APPROVED') {
-    return <Badge label="İncelendi, onaylandı" tone="success" />;
+    return <Badge label={tk('İncelendi, onaylandı')} tone="success" />;
   }
   if (level === 'BLOCKED') {
-    return <Badge label="Risk nedeniyle engellendi" tone="danger" />;
+    return <Badge label={tk('Risk nedeniyle engellendi')} tone="danger" />;
   }
   return null;
 }
 
 export function failureMessage(code: string | null): string {
-  return (code && FAILURE_CODES[code]) || 'İşlem tamamlanamadı.';
+  return t((code && FAILURE_CODES[code]) || 'İşlem tamamlanamadı.');
 }
 
+/** Takes a Turkish key and shows it in the chosen language. */
 function Badge({ label, tone }: { label: string; tone: Tone }) {
-  return <span className={`badge badge-${tone}`}>{label}</span>;
+  return <span className={`badge badge-${tone}`}>{t(label)}</span>;
 }
 
 export function PaymentStatusBadge({ status }: { status: PaymentStatus }) {
@@ -70,78 +80,78 @@ export function PaymentStatusBadge({ status }: { status: PaymentStatus }) {
 
 export function OperationStatusBadge({ status }: { status: OperationStatus }) {
   const map: Record<OperationStatus, { label: string; tone: Tone }> = {
-    PENDING: { label: 'Bekliyor', tone: 'warning' },
-    SUCCEEDED: { label: 'Başarılı', tone: 'success' },
-    FAILED: { label: 'Başarısız', tone: 'danger' },
+    PENDING: { label: tk('Bekliyor'), tone: 'warning' },
+    SUCCEEDED: { label: tk('Başarılı'), tone: 'success' },
+    FAILED: { label: tk('Başarısız'), tone: 'danger' },
   };
   return <Badge {...map[status]} />;
 }
 
 export function PayoutStatusBadge({ status }: { status: Payout['status'] }) {
   const map: Record<Payout['status'], { label: string; tone: Tone }> = {
-    PENDING: { label: 'Yolda', tone: 'warning' },
-    PAID: { label: 'Ödendi', tone: 'success' },
-    FAILED: { label: 'Başarısız', tone: 'danger' },
+    PENDING: { label: tk('Yolda'), tone: 'warning' },
+    PAID: { label: tk('Ödendi'), tone: 'success' },
+    FAILED: { label: tk('Başarısız'), tone: 'danger' },
   };
   return <Badge {...map[status]} />;
 }
 
 export function DeliveryStatusBadge({ status }: { status: WebhookDelivery['status'] }) {
   const map: Record<WebhookDelivery['status'], { label: string; tone: Tone }> = {
-    PENDING: { label: 'Sırada', tone: 'warning' },
-    DELIVERED: { label: 'Teslim edildi', tone: 'success' },
-    FAILED: { label: 'Başarısız', tone: 'danger' },
-    CANCELLED: { label: 'İptal edildi', tone: 'neutral' },
+    PENDING: { label: tk('Sırada'), tone: 'warning' },
+    DELIVERED: { label: tk('Teslim edildi'), tone: 'success' },
+    FAILED: { label: tk('Başarısız'), tone: 'danger' },
+    CANCELLED: { label: tk('İptal edildi'), tone: 'neutral' },
   };
   return <Badge {...map[status]} />;
 }
 
 export function DisputeStatusBadge({ status }: { status: DisputeStatus }) {
   const map: Record<DisputeStatus, { label: string; tone: Tone }> = {
-    NEEDS_RESPONSE: { label: 'Yanıt bekliyor', tone: 'danger' },
-    UNDER_REVIEW: { label: 'İnceleniyor', tone: 'warning' },
-    WON: { label: 'Kazanıldı', tone: 'success' },
-    LOST: { label: 'Kaybedildi', tone: 'neutral' },
+    NEEDS_RESPONSE: { label: tk('Yanıt bekliyor'), tone: 'danger' },
+    UNDER_REVIEW: { label: tk('İnceleniyor'), tone: 'warning' },
+    WON: { label: tk('Kazanıldı'), tone: 'success' },
+    LOST: { label: tk('Kaybedildi'), tone: 'neutral' },
   };
   return <Badge {...map[status]} />;
 }
 
 export function PaymentLinkStatusBadge({ status }: { status: PaymentLinkStatus }) {
   const map: Record<PaymentLinkStatus, { label: string; tone: Tone }> = {
-    OPEN: { label: 'Açık', tone: 'success' },
-    SOLD_OUT: { label: 'Kontenjan doldu', tone: 'warning' },
-    EXPIRED: { label: 'Süresi doldu', tone: 'neutral' },
-    DISABLED: { label: 'Kapatıldı', tone: 'neutral' },
+    OPEN: { label: tk('Açık'), tone: 'success' },
+    SOLD_OUT: { label: tk('Kontenjan doldu'), tone: 'warning' },
+    EXPIRED: { label: tk('Süresi doldu'), tone: 'neutral' },
+    DISABLED: { label: tk('Kapatıldı'), tone: 'neutral' },
   };
   return <Badge {...map[status]} />;
 }
 
 export function SubscriptionStatusBadge({ status }: { status: SubscriptionStatus }) {
   const map: Record<SubscriptionStatus, { label: string; tone: Tone }> = {
-    INCOMPLETE: { label: 'İlk ödeme bekleniyor', tone: 'warning' },
-    ACTIVE: { label: 'Aktif', tone: 'success' },
-    PAST_DUE: { label: 'Ödeme gecikti', tone: 'danger' },
-    CANCELED: { label: 'İptal edildi', tone: 'neutral' },
+    INCOMPLETE: { label: tk('İlk ödeme bekleniyor'), tone: 'warning' },
+    ACTIVE: { label: tk('Aktif'), tone: 'success' },
+    PAST_DUE: { label: tk('Ödeme gecikti'), tone: 'danger' },
+    CANCELED: { label: tk('İptal edildi'), tone: 'neutral' },
   };
   return <Badge {...map[status]} />;
 }
 
 export function InvoiceStatusBadge({ status }: { status: InvoiceStatus }) {
   const map: Record<InvoiceStatus, { label: string; tone: Tone }> = {
-    OPEN: { label: 'Ödenmedi', tone: 'warning' },
-    PAID: { label: 'Ödendi', tone: 'success' },
-    VOID: { label: 'İptal edildi', tone: 'neutral' },
-    UNCOLLECTIBLE: { label: 'Tahsil edilemedi', tone: 'danger' },
+    OPEN: { label: tk('Ödenmedi'), tone: 'warning' },
+    PAID: { label: tk('Ödendi'), tone: 'success' },
+    VOID: { label: tk('İptal edildi'), tone: 'neutral' },
+    UNCOLLECTIBLE: { label: tk('Tahsil edilemedi'), tone: 'danger' },
   };
   return <Badge {...map[status]} />;
 }
 
 export function formatDateTime(value: string): string {
-  return new Intl.DateTimeFormat('tr-TR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
+  return new Intl.DateTimeFormat(locale(), { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
 }
 
 export function formatDate(value: string): string {
-  return new Intl.DateTimeFormat('tr-TR', { dateStyle: 'medium' }).format(new Date(`${value}T00:00:00`));
+  return new Intl.DateTimeFormat(locale(), { dateStyle: 'medium' }).format(new Date(`${value}T00:00:00`));
 }
 
 export function ErrorNote({ message }: { message: string | null }) {
@@ -152,7 +162,7 @@ export function ErrorNote({ message }: { message: string | null }) {
 export function Loading({ rows = 3 }: { rows?: number }) {
   return (
     <div className="skeleton" role="status">
-      <span className="visually-hidden">Yükleniyor…</span>
+      <span className="visually-hidden">{t('Yükleniyor…')}</span>
       {Array.from({ length: rows }, (_, i) => <span key={i} className="skeleton-line" aria-hidden="true" />)}
     </div>
   );
@@ -202,7 +212,7 @@ export function PageHeader({ title, description, actions }: { title: string; des
   );
 }
 
-export function CopyButton({ value, label = 'Kopyala' }: { value: string; label?: string }) {
+export function CopyButton({ value, label }: { value: string; label?: string }) {
   const [copied, setCopied] = useState(false);
   const copy = async () => {
     try {
@@ -215,7 +225,7 @@ export function CopyButton({ value, label = 'Kopyala' }: { value: string; label?
   };
   return (
     <button type="button" className="button button-small" onClick={copy}>
-      {copied ? 'Kopyalandı' : label}
+      {copied ? t('Kopyalandı') : label ?? t('Kopyala')}
     </button>
   );
 }
@@ -225,7 +235,7 @@ export function OneTimeSecret({ title, value }: { title: string; value: string }
   return (
     <div className="note note-warning">
       <strong>{title}</strong>
-      <p>Bu değeri şimdi kaydedin. Güvenlik nedeniyle bir daha gösterilmeyecek.</p>
+      <p>{t('Bu değeri şimdi kaydedin. Güvenlik nedeniyle bir daha gösterilmeyecek.')}</p>
       <div className="secret-row">
         <code className="secret">{value}</code>
         <CopyButton value={value} />
@@ -260,7 +270,7 @@ export function FormDialog({ title, submitLabel, danger, onClose, onSubmit, chil
     try {
       await onSubmit();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Beklenmeyen bir hata oluştu.');
+      setError(e instanceof Error ? e.message : t('Beklenmeyen bir hata oluştu.'));
     } finally {
       setBusy(false);
     }
@@ -273,9 +283,9 @@ export function FormDialog({ title, submitLabel, danger, onClose, onSubmit, chil
         {children}
         <ErrorNote message={error} />
         <div className="dialog-actions">
-          <button type="button" className="button" onClick={onClose} disabled={busy}>Vazgeç</button>
+          <button type="button" className="button" onClick={onClose} disabled={busy}>{t('Vazgeç')}</button>
           <button type="submit" className={danger ? 'button button-danger' : 'button button-primary'} disabled={busy}>
-            {busy ? 'İşleniyor…' : submitLabel}
+            {busy ? t('İşleniyor…') : submitLabel}
           </button>
         </div>
       </form>

@@ -1,8 +1,10 @@
 package com.kasa.auth;
 
 import java.util.Locale;
+import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -44,6 +46,21 @@ public class AuthController {
     public record VerifyEmailRequest(@NotBlank @Size(max = 128) String token) {
     }
 
+    public record GoogleRequest(@NotBlank @Size(max = 4096) String credential) {
+    }
+
+    public record GoogleRegisterRequest(@NotBlank @Size(max = 2048) String signupToken, @NotBlank @Size(max = 200) String businessName) {
+    }
+
+    /** What the sign-in page may offer. The Google client id is public: Google's button prints it into the page anyway. */
+    public record Providers(String googleClientId) {
+    }
+
+    public record GoogleSignInResponse(UUID tenantId, String accessToken, Long expiresInSeconds, boolean twoFactorRequired,
+                                       String challengeToken, boolean registrationRequired, String signupToken, String email,
+                                       String suggestedName) {
+    }
+
     private final AuthService authService;
     private final PasswordResetService passwordResets;
     private final AdminAccountService admins;
@@ -51,8 +68,14 @@ public class AuthController {
     private final RateLimitProperties limits;
     private final EmailVerificationService emailVerification;
 
+    private final GoogleSignInService google;
+    private final GoogleProperties googleProperties;
+
     public AuthController(AuthService authService, PasswordResetService passwordResets, AdminAccountService admins,
-                          RateLimiter rateLimiter, RateLimitProperties limits, EmailVerificationService emailVerification) {
+                          RateLimiter rateLimiter, RateLimitProperties limits, EmailVerificationService emailVerification,
+                          GoogleSignInService google, GoogleProperties googleProperties) {
+        this.google = google;
+        this.googleProperties = googleProperties;
         this.emailVerification = emailVerification;
         this.admins = admins;
         this.passwordResets = passwordResets;
@@ -75,6 +98,29 @@ public class AuthController {
         rateLimiter.check("login-ip:" + ip, limits.loginPerIp());
         rateLimiter.check("login:" + ip + ":" + request.email().trim().toLowerCase(Locale.ROOT), limits.loginPerIpAndEmail());
         return authService.login(request.email(), request.password(), ip);
+    }
+
+    @GetMapping("/providers")
+    public Providers providers() {
+        return new Providers(googleProperties.enabled() ? googleProperties.clientId() : null);
+    }
+
+    @PostMapping("/google")
+    public GoogleSignInResponse google(@Valid @RequestBody GoogleRequest request, HttpServletRequest http) {
+        rateLimiter.check("login-ip:" + http.getRemoteAddr(), limits.loginPerIp());
+        GoogleSignInService.SignIn signIn = google.signIn(request.credential());
+        AuthService.LoginResponse login = signIn.login();
+        return login == null
+                ? new GoogleSignInResponse(null, null, null, false, null, true, signIn.signupToken(), signIn.email(), signIn.suggestedName())
+                : new GoogleSignInResponse(login.tenantId(), login.accessToken(), login.expiresInSeconds(), login.twoFactorRequired(),
+                        login.challengeToken(), false, null, null, null);
+    }
+
+    @PostMapping("/google/register")
+    @ResponseStatus(HttpStatus.CREATED)
+    public AuthService.TokenResponse googleRegister(@Valid @RequestBody GoogleRegisterRequest request, HttpServletRequest http) {
+        rateLimiter.check("register:" + http.getRemoteAddr(), limits.registerPerIp());
+        return google.register(request.signupToken(), request.businessName());
     }
 
     @PostMapping("/login/admin")

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { api, ApiError } from '../api';
 import { DeliveryStatusBadge, EmptyState, ErrorNote, FormDialog, formatDateTime, Loading, OneTimeSecret, PageHeader } from '../components';
+import { t } from '../i18n';
 import type { ApiKey, WebhookDelivery, WebhookEndpoint } from '../types';
 import { useFetch } from '../useFetch';
 
@@ -29,22 +30,22 @@ function ApiKeys() {
     <section>
       <div className="section-header">
         <div>
-          <h2>API anahtarları</h2>
-          <p className="muted">Sunucunuzun Kasa'ya bağlanması için kullanılır. Tarayıcıya veya mobil uygulamaya koymayın.</p>
+          <h2>{t('API anahtarları')}</h2>
+          <p className="muted">{t('Sunucunuzun Kasa\'ya bağlanması için kullanılır. Tarayıcıya veya mobil uygulamaya koymayın.')}</p>
         </div>
-        <button type="button" className="button" onClick={() => setCreating(true)}>Anahtar oluştur</button>
+        <button type="button" className="button" onClick={() => setCreating(true)}>{t('Anahtar oluştur')}</button>
       </div>
-      {created && <OneTimeSecret title="API anahtarınız" value={created} />}
+      {created && <OneTimeSecret title={t('API anahtarınız')} value={created} />}
       <ErrorNote message={keys.error} />
       {keys.loading ? <Loading /> : keys.data && keys.data.length > 0 ? (
         <div className="table-wrap">
           <table>
             <thead>
               <tr>
-                <th scope="col">Ad</th>
-                <th scope="col">Önek</th>
-                <th scope="col" className="hide-narrow">Oluşturulma</th>
-                <th scope="col"><span className="visually-hidden">İşlemler</span></th>
+                <th scope="col">{t('Ad')}</th>
+                <th scope="col">{t('Önek')}</th>
+                <th scope="col" className="hide-narrow">{t('Oluşturulma')}</th>
+                <th scope="col"><span className="visually-hidden">{t('İşlemler')}</span></th>
               </tr>
             </thead>
             <tbody>
@@ -55,27 +56,27 @@ function ApiKeys() {
                   <td className="hide-narrow muted">{formatDateTime(key.createdAt)}</td>
                   <td className="numeric">
                     {key.revokedAt
-                      ? <span className="muted">İptal edildi</span>
-                      : <button type="button" className="button button-small" onClick={() => setRevoking(key)}>İptal et</button>}
+                      ? <span className="muted">{t('İptal edildi')}</span>
+                      : <button type="button" className="button button-small" onClick={() => setRevoking(key)}>{t('Anahtarı iptal et')}</button>}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      ) : !keys.error && <div className="card"><EmptyState title="Henüz API anahtarı yok" /></div>}
+      ) : !keys.error && <div className="card"><EmptyState title={t('Henüz API anahtarı yok')} /></div>}
 
       {creating && (
-        <FormDialog title="API anahtarı oluştur" submitLabel="Oluştur" onClose={() => setCreating(false)} onSubmit={create}>
+        <FormDialog title={t('API anahtarı oluştur')} submitLabel={t('Oluştur')} onClose={() => setCreating(false)} onSubmit={create}>
           <label className="field">
-            Anahtar adı
-            <input required autoFocus maxLength={100} placeholder="Canlı sunucu" value={name} onChange={(e) => setName(e.target.value)} />
+            {t('Anahtar adı')}
+            <input required autoFocus maxLength={100} placeholder={t('Canlı sunucu')} value={name} onChange={(e) => setName(e.target.value)} />
           </label>
         </FormDialog>
       )}
       {revoking && (
-        <FormDialog title="Anahtarı iptal et" submitLabel="İptal et" danger onClose={() => setRevoking(null)} onSubmit={revoke}>
-          <p><strong>{revoking.name}</strong> anahtarını kullanan sunucular hemen erişimini kaybeder. Bu işlem geri alınamaz.</p>
+        <FormDialog title={t('Anahtarı iptal et')} submitLabel={t('Anahtarı iptal et')} danger onClose={() => setRevoking(null)} onSubmit={revoke}>
+          <p>{t('{name} anahtarını kullanan sunucular hemen erişimini kaybeder. Bu işlem geri alınamaz.', { name: revoking.name })}</p>
         </FormDialog>
       )}
     </section>
@@ -103,7 +104,7 @@ function Deliveries({ endpoint }: { endpoint: WebhookEndpoint }) {
     return <ErrorNote message={deliveries.error} />;
   }
   if (!deliveries.data || deliveries.data.length === 0) {
-    return <p className="muted">Henüz teslimat yok. Yeni ödeme olayları burada görünür.</p>;
+    return <p className="muted">{t('Henüz teslimat yok. Yeni ödeme olayları burada görünür.')}</p>;
   }
   return (
     <>
@@ -112,10 +113,10 @@ function Deliveries({ endpoint }: { endpoint: WebhookEndpoint }) {
         <table>
           <thead>
             <tr>
-              <th scope="col">Olay</th>
-              <th scope="col">Durum</th>
-              <th scope="col" className="numeric">Deneme</th>
-              <th scope="col"><span className="visually-hidden">İşlemler</span></th>
+              <th scope="col">{t('Olay')}</th>
+              <th scope="col">{t('Durum')}</th>
+              <th scope="col" className="numeric">{t('Deneme')}</th>
+              <th scope="col"><span className="visually-hidden">{t('İşlemler')}</span></th>
             </tr>
           </thead>
           <tbody>
@@ -126,7 +127,7 @@ function Deliveries({ endpoint }: { endpoint: WebhookEndpoint }) {
                 <td className="numeric">{delivery.attempts}</td>
                 <td className="numeric">
                   {delivery.status === 'FAILED' && !endpoint.disabledAt && (
-                    <button type="button" className="button button-small" onClick={() => retry(delivery)}>Yeniden dene</button>
+                    <button type="button" className="button button-small" onClick={() => retry(delivery)}>{t('Yeniden dene')}</button>
                   )}
                 </td>
               </tr>
@@ -155,7 +156,7 @@ function Webhooks() {
       endpoints.reload();
     } catch (e) {
       if (e instanceof ApiError && e.status === 422) {
-        throw new Error('Bu adres kullanılamaz. Herkese açık bir https adresi girin.');
+        throw new Error(t('Bu adres kullanılamaz. Herkese açık bir https adresi girin.'));
       }
       throw e;
     }
@@ -171,12 +172,12 @@ function Webhooks() {
     <section>
       <div className="section-header">
         <div>
-          <h2>Webhook'lar</h2>
-          <p className="muted">Ödeme sonuçlandığında sunucunuza imzalı bildirim gönderilir.</p>
+          <h2>{t('Webhook\'lar')}</h2>
+          <p className="muted">{t('Ödeme sonuçlandığında sunucunuza imzalı bildirim gönderilir.')}</p>
         </div>
-        <button type="button" className="button" onClick={() => setCreating(true)}>Adres ekle</button>
+        <button type="button" className="button" onClick={() => setCreating(true)}>{t('Adres ekle')}</button>
       </div>
-      {secret && <OneTimeSecret title="İmza anahtarınız" value={secret} />}
+      {secret && <OneTimeSecret title={t('İmza anahtarınız')} value={secret} />}
       <ErrorNote message={endpoints.error} />
       {endpoints.loading ? <Loading /> : endpoints.data && endpoints.data.length > 0 ? (
         <div className="stack">
@@ -185,12 +186,12 @@ function Webhooks() {
               <div className="endpoint-row">
                 <code className="endpoint-url">{endpoint.url}</code>
                 <div className="endpoint-actions">
-                  {endpoint.disabledAt && <span className="muted">Devre dışı</span>}
+                  {endpoint.disabledAt && <span className="muted">{t('Devre dışı')}</span>}
                   <button type="button" className="button button-small" aria-expanded={openId === endpoint.id} onClick={() => setOpenId(openId === endpoint.id ? null : endpoint.id)}>
-                    {openId === endpoint.id ? 'Teslimatları gizle' : 'Teslimatlar'}
+                    {openId === endpoint.id ? t('Teslimatları gizle') : t('Teslimatlar')}
                   </button>
                   {!endpoint.disabledAt && (
-                    <button type="button" className="button button-small" onClick={() => setDisabling(endpoint)}>Devre dışı bırak</button>
+                    <button type="button" className="button button-small" onClick={() => setDisabling(endpoint)}>{t('Devre dışı bırak')}</button>
                   )}
                 </div>
               </div>
@@ -198,19 +199,19 @@ function Webhooks() {
             </div>
           ))}
         </div>
-      ) : !endpoints.error && <div className="card"><EmptyState title="Henüz webhook adresi yok" /></div>}
+      ) : !endpoints.error && <div className="card"><EmptyState title={t('Henüz webhook adresi yok')} /></div>}
 
       {creating && (
-        <FormDialog title="Webhook adresi ekle" submitLabel="Ekle" onClose={() => setCreating(false)} onSubmit={create}>
+        <FormDialog title={t('Webhook adresi ekle')} submitLabel={t('Ekle')} onClose={() => setCreating(false)} onSubmit={create}>
           <label className="field">
-            Adres
+            {t('Adres')}
             <input type="url" required autoFocus maxLength={2000} placeholder="https://ornek.com/kasa-webhook" value={url} onChange={(e) => setUrl(e.target.value)} />
           </label>
         </FormDialog>
       )}
       {disabling && (
-        <FormDialog title="Adresi devre dışı bırak" submitLabel="Devre dışı bırak" danger onClose={() => setDisabling(null)} onSubmit={disable}>
-          <p>Bekleyen teslimatlar iptal edilir ve bu adrese yeni bildirim gönderilmez.</p>
+        <FormDialog title={t('Adresi devre dışı bırak')} submitLabel={t('Devre dışı bırak')} danger onClose={() => setDisabling(null)} onSubmit={disable}>
+          <p>{t('Bekleyen teslimatlar iptal edilir ve bu adrese yeni bildirim gönderilmez.')}</p>
         </FormDialog>
       )}
     </section>
@@ -220,7 +221,7 @@ function Webhooks() {
 export function Developers() {
   return (
     <>
-      <PageHeader title="Geliştiriciler" />
+      <PageHeader title={t('Geliştiriciler')} />
       <div className="sections">
         <ApiKeys />
         <Webhooks />

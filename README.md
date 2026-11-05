@@ -243,6 +243,14 @@ Tek bir Docker imajı API ile arayüzü birlikte sunar. Depodaki `render.yaml`, 
 
    Anahtarlar girilmezse ödeme sayfası yalnızca simüle bankayı gösterir. Test kartı: `5528 7900 0000 0008`, ileri bir son kullanma tarihi, herhangi üç haneli güvenlik kodu.
 
+5. "Google ile giriş" için (isteğe bağlı) [Google Cloud Console](https://console.cloud.google.com/apis/credentials)'da **OAuth istemci kimliği** oluşturun (uygulama türü: Web). **Yetkili JavaScript kaynakları**na sitenizin adresini (`https://kasa-rpb3.onrender.com`) ve yerelde denemek için `http://localhost:8080` ekleyin. Oluşan istemci kimliğini Render'a girin:
+
+   | Değişken | Değer |
+   |---|---|
+   | `KASA_GOOGLE_CLIENT_ID` | `….apps.googleusercontent.com` ile biten istemci kimliği |
+
+   İstemci kimliği gizli değildir; Google'ın düğmesi onu zaten sayfaya yazar. Gizli anahtar (client secret) gerekmez: sunucu, Google'ın imzaladığı kimlik kartını Google'ın açık anahtarlarıyla doğrular.
+
 Başka bir platformda aynı değişkenlere ek olarak `KASA_DB_APP_USER=kasa_app` tanımlayın. Ters proxy arkasında `KASA_FORWARD_HEADERS=native` gerekir; aksi halde tüm istemciler tek adres sayılır ve istek sınırı herkesi birlikte engeller.
 
 **Ücretsiz planda bilinmesi gerekenler:** Sunucu 15 dakika istek almazsa uyur ve ilk istekte yeniden başlaması bir dakikadan uzun sürebilir. Uyurken zamanlanmış işler çalışmaz, bu yüzden günlük hesap kesimi ve mutabakat güvenilir biçimde tetiklenmez. İşletme verileri ve simüle bankanın kayıtları PostgreSQL'de durduğu için yeniden başlatmada kaybolmaz. Banka kalıcı hale gelmeden önce alınan eski provizyonlar `unknown_authorization` hatası alır, mutabakat da o dönemin işlemlerini `MISSING_IN_BANK` olarak gösterir.

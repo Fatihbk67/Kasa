@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from './api';
+import { locale, t } from './i18n';
 import type { AppNotification, Inbox } from './types';
 import { usePolling, useFetch } from './useFetch';
 
@@ -10,21 +11,21 @@ const POLL_MS = 30_000;
 export function timeAgo(value: string, now: number = Date.now()): string {
   const seconds = Math.max(0, Math.round((now - new Date(value).getTime()) / 1000));
   if (seconds < 60) {
-    return 'az önce';
+    return t('az önce');
   }
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) {
-    return `${minutes} dk önce`;
+    return t('{count} dk önce', { count: minutes });
   }
   const hours = Math.floor(minutes / 60);
   if (hours < 24) {
-    return `${hours} sa önce`;
+    return t('{count} sa önce', { count: hours });
   }
   const days = Math.floor(hours / 24);
   if (days < 7) {
-    return `${days} gün önce`;
+    return t('{count} gün önce', { count: days });
   }
-  return new Intl.DateTimeFormat('tr-TR', { dateStyle: 'medium' }).format(new Date(value));
+  return new Intl.DateTimeFormat(locale(), { dateStyle: 'medium' }).format(new Date(value));
 }
 
 /**
@@ -77,7 +78,7 @@ export function NotificationBell() {
   return (
     <div className="bell" ref={panel}>
       <button type="button" className="bell-button" aria-expanded={open} aria-haspopup="true"
-        aria-label={unread > 0 ? `Bildirimler, ${unread} okunmamış` : 'Bildirimler'} onClick={() => setOpen(!open)}>
+        aria-label={unread > 0 ? t('Bildirimler, {count} okunmamış', { count: unread }) : t('Bildirimler')} onClick={() => setOpen(!open)}>
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
           <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
@@ -85,13 +86,13 @@ export function NotificationBell() {
         {unread > 0 && <span className="bell-count" aria-hidden="true">{unread > 9 ? '9+' : unread}</span>}
       </button>
       {open && (
-        <div className="bell-panel" role="dialog" aria-label="Bildirimler">
+        <div className="bell-panel" role="dialog" aria-label={t('Bildirimler')}>
           <div className="bell-header">
-            <strong>Bildirimler</strong>
-            {unread > 0 && <button type="button" className="link-button" onClick={readAll}>Tümünü okundu say</button>}
+            <strong>{t('Bildirimler')}</strong>
+            {unread > 0 && <button type="button" className="link-button" onClick={readAll}>{t('Tümünü okundu say')}</button>}
           </div>
           {items.length === 0 ? (
-            <p className="bell-empty muted">Henüz bildirim yok. İtirazlar, hesap kesimleri ve hesap durumunuz burada görünür.</p>
+            <p className="bell-empty muted">{t('Henüz bildirim yok. İtirazlar, hesap kesimleri ve hesap durumunuz burada görünür.')}</p>
           ) : (
             <ul className="bell-list">
               {items.map((item) => (

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api, downloadFile } from '../api';
-import { EmptyState, ErrorNote, Loading, PageHeader, PAYMENT_STATUS_OPTIONS } from '../components';
+import { EmptyState, ErrorNote, Loading, PageHeader, paymentStatusOptions } from '../components';
+import { t } from '../i18n';
 import { parseAmount } from '../money';
 import type { Payment, PaymentPage } from '../types';
 import { useFetch } from '../useFetch';
@@ -65,17 +66,17 @@ export function Payments() {
     event.preventDefault();
     const invalidAmount = [draft.min, draft.max].some((value) => value && parseAmount(value) === null);
     if (invalidAmount) {
-      setFormError('Tutarları 149,90 gibi yazın.');
+      setFormError(t('Tutarları 149,90 gibi yazın.'));
       return;
     }
     const min = draft.min ? parseAmount(draft.min)! : null;
     const max = draft.max ? parseAmount(draft.max)! : null;
     if (min !== null && max !== null && min > max) {
-      setFormError('En düşük tutar en yüksek tutardan büyük olamaz.');
+      setFormError(t('En düşük tutar en yüksek tutardan büyük olamaz.'));
       return;
     }
     if (draft.from && draft.to && draft.from > draft.to) {
-      setFormError('Başlangıç tarihi bitiş tarihinden sonra olamaz.');
+      setFormError(t('Başlangıç tarihi bitiş tarihinden sonra olamaz.'));
       return;
     }
     setFormError(null);
@@ -113,7 +114,7 @@ export function Payments() {
     try {
       const { truncated } = await downloadFile(`/payments/export?${apiQuery}`, 'kasa-odemeler.csv');
       if (truncated) {
-        setExportNote('Dosya yalnızca en yeni 10.000 ödemeyi içeriyor. Tümünü almak için tarih aralığını daraltıp birkaç parça halinde indirin.');
+        setExportNote(t('Dosya yalnızca en yeni 10.000 ödemeyi içeriyor. Tümünü almak için tarih aralığını daraltıp birkaç parça halinde indirin.'));
       }
     } catch (e) {
       setExportError((e as Error).message);
@@ -125,45 +126,45 @@ export function Payments() {
   return (
     <>
       <PageHeader
-        title="Ödemeler"
-        actions={<button type="button" className="button" onClick={exportCsv} disabled={exporting}>{exporting ? 'Hazırlanıyor…' : 'CSV indir'}</button>}
+        title={t('Ödemeler')}
+        actions={<button type="button" className="button" onClick={exportCsv} disabled={exporting}>{exporting ? t('Hazırlanıyor…') : t('CSV indir')}</button>}
       />
       <ErrorNote message={exportError} />
       {exportNote && <p className="note note-warning" role="status">{exportNote}</p>}
 
-      <form className="card filters" onSubmit={apply} aria-label="Ödeme filtreleri">
+      <form className="card filters" onSubmit={apply} aria-label={t('Ödeme filtreleri')}>
         <label className="field filters-search">
-          Ara
-          <input type="search" maxLength={200} placeholder="Açıklama veya ödeme kimliği" value={draft.q} onChange={(e) => update('q', e.target.value)} />
+          {t('Ara')}
+          <input type="search" maxLength={200} placeholder={t('Açıklama veya ödeme kimliği')} value={draft.q} onChange={(e) => update('q', e.target.value)} />
         </label>
         <label className="field filters-wide">
-          Durum
+          {t('Durum')}
           <select value={draft.status} onChange={(e) => update('status', e.target.value)}>
-            <option value="">Tümü</option>
-            {PAYMENT_STATUS_OPTIONS.map((option) => (
+            <option value="">{t('Tümü')}</option>
+            {paymentStatusOptions().map((option) => (
               <option key={option.value} value={option.value}>{option.label}</option>
             ))}
           </select>
         </label>
         <label className="field">
-          Başlangıç
+          {t('Başlangıç')}
           <input type="date" value={draft.from} onChange={(e) => update('from', e.target.value)} />
         </label>
         <label className="field">
-          Bitiş
+          {t('Bitiş')}
           <input type="date" value={draft.to} onChange={(e) => update('to', e.target.value)} />
         </label>
         <label className="field">
-          En düşük (₺)
+          {t('En düşük (₺)')}
           <input inputMode="decimal" value={draft.min} onChange={(e) => update('min', e.target.value)} />
         </label>
         <label className="field">
-          En yüksek (₺)
+          {t('En yüksek (₺)')}
           <input inputMode="decimal" value={draft.max} onChange={(e) => update('max', e.target.value)} />
         </label>
         <div className="filters-actions">
-          <button type="submit" className="button button-primary">Uygula</button>
-          {hasFilters && <button type="button" className="button" onClick={clear}>Temizle</button>}
+          <button type="submit" className="button button-primary">{t('Uygula')}</button>
+          {hasFilters && <button type="button" className="button" onClick={clear}>{t('Temizle')}</button>}
         </div>
         {formError && <div className="filters-error"><ErrorNote message={formError} /></div>}
       </form>
@@ -176,14 +177,14 @@ export function Payments() {
           {cursor && (
             <div className="load-more">
               <button type="button" className="button" onClick={loadMore} disabled={loadingMore}>
-                {loadingMore ? 'Yükleniyor…' : 'Daha fazla göster'}
+                {loadingMore ? t('Yükleniyor…') : t('Daha fazla göster')}
               </button>
             </div>
           )}
         </>
       ) : !firstPage.error && (
         <div className="card">
-          <EmptyState title={hasFilters ? 'Bu filtrelere uyan ödeme yok' : 'Henüz ödeme yok'} />
+          <EmptyState title={hasFilters ? t('Bu filtrelere uyan ödeme yok') : t('Henüz ödeme yok')} />
         </div>
       )}
     </>

@@ -1,3 +1,4 @@
+import { locale, t } from './i18n';
 import type { DayPoint } from './types';
 
 export interface WindowComparison {
@@ -27,19 +28,19 @@ export function compareWindows(daily: DayPoint[], size: number): WindowCompariso
 }
 
 export function formatChange(change: number): string {
-  const percent = new Intl.NumberFormat('tr-TR', { style: 'percent', maximumFractionDigits: 0, signDisplay: 'exceptZero' });
+  const percent = new Intl.NumberFormat(locale(), { style: 'percent', maximumFractionDigits: 0, signDisplay: 'exceptZero' });
   return percent.format(change);
 }
 
 export function greeting(hour: number): string {
   if (hour >= 5 && hour < 12) {
-    return 'Günaydın';
+    return t('Günaydın');
   }
   if (hour >= 12 && hour < 18) {
-    return 'İyi günler';
+    return t('İyi günler');
   }
   if (hour >= 18 && hour < 23) {
-    return 'İyi akşamlar';
+    return t('İyi akşamlar');
   }
-  return 'İyi geceler';
+  return t('İyi geceler');
 }

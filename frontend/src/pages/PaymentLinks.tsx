@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError } from '../api';
 import { CopyButton, EmptyState, ErrorNote, FormDialog, formatDateTime, Loading, PageHeader, PaymentLinkStatusBadge } from '../components';
+import { LanguagePicker, t } from '../i18n';
 import { canTakePayments, useMe } from '../me';
 import { formatMoney, parseAmount } from '../money';
 import type { PaymentLink, PublicPaymentLink } from '../types';
@@ -23,7 +24,7 @@ function NewLinkDialog({ onClose, onCreated }: { onClose: () => void; onCreated:
   const submit = async () => {
     const minorUnits = amount.trim() ? parseAmount(amount) : null;
     if (amount.trim() && minorUnits === null) {
-      setFormError('Geçerli bir tutar girin, örneğin 149,90.');
+      setFormError(t('Geçerli bir tutar girin, örneğin 149,90.'));
       return;
     }
     setFormError(null);
@@ -41,24 +42,24 @@ function NewLinkDialog({ onClose, onCreated }: { onClose: () => void; onCreated:
   };
 
   return (
-    <FormDialog title="Yeni ödeme bağlantısı" submitLabel="Oluştur" onClose={onClose} onSubmit={submit}>
+    <FormDialog title={t('Yeni ödeme bağlantısı')} submitLabel={t('Oluştur')} onClose={onClose} onSubmit={submit}>
       <label className="field">
-        Başlık
-        <input required autoFocus maxLength={200} placeholder="Kahve demleme atölyesi" value={title} onChange={(e) => setTitle(e.target.value)} />
+        {t('Başlık')}
+        <input required autoFocus maxLength={200} placeholder={t('Kahve demleme atölyesi')} value={title} onChange={(e) => setTitle(e.target.value)} />
       </label>
       <label className="field">
-        Açıklama
+        {t('Açıklama')}
         <input maxLength={500} value={description} onChange={(e) => setDescription(e.target.value)} />
       </label>
       <label className="field">
-        Tutar (₺)
+        {t('Tutar (₺)')}
         <input inputMode="decimal" placeholder="149,90" value={amount} onChange={(e) => setAmount(e.target.value)} />
-        <span className="hint">Boş bırakırsanız tutarı ödeyen kişi belirler.</span>
+        <span className="hint">{t('Boş bırakırsanız tutarı ödeyen kişi belirler.')}</span>
       </label>
       <label className="field">
-        Kontenjan
+        {t('Kontenjan')}
         <input type="number" min={1} max={1000000} value={maxPayments} onChange={(e) => setMaxPayments(e.target.value)} />
-        <span className="hint">Boş bırakırsanız sınırsız ödeme alınır.</span>
+        <span className="hint">{t('Boş bırakırsanız sınırsız ödeme alınır.')}</span>
       </label>
       <ErrorNote message={formError} />
     </FormDialog>
@@ -77,15 +78,15 @@ export function PaymentLinks() {
     await api(`/payment-links/${disabling!.id}/disable`, { method: 'POST' });
     setDisabling(null);
     links.reload();
-    notify('Bağlantı kapatıldı.');
+    notify(t('Bağlantı kapatıldı.'));
   };
 
   return (
     <>
       <PageHeader
-        title="Ödeme bağlantıları"
-        description="Kod yazmadan ödeme alın: bağlantıyı paylaşın, ödeyen kişi müşterileriniz arasına eklensin."
-        actions={operator && <button type="button" className="button button-primary" onClick={() => setCreating(true)}>Yeni bağlantı</button>}
+        title={t('Ödeme bağlantıları')}
+        description={t('Kod yazmadan ödeme alın: bağlantıyı paylaşın, ödeyen kişi müşterileriniz arasına eklensin.')}
+        actions={operator && <button type="button" className="button button-primary" onClick={() => setCreating(true)}>{t('Yeni bağlantı')}</button>}
       />
       <ErrorNote message={links.error} />
       {links.loading ? <Loading /> : links.data && links.data.length > 0 ? (
@@ -93,12 +94,12 @@ export function PaymentLinks() {
           <table>
             <thead>
               <tr>
-                <th scope="col">Bağlantı</th>
-                <th scope="col">Durum</th>
-                <th scope="col" className="numeric">Tutar</th>
-                <th scope="col" className="numeric">Ödeme</th>
-                <th scope="col" className="numeric hide-narrow">Toplanan</th>
-                <th scope="col"><span className="visually-hidden">İşlemler</span></th>
+                <th scope="col">{t('Bağlantı')}</th>
+                <th scope="col">{t('Durum')}</th>
+                <th scope="col" className="numeric">{t('Tutar')}</th>
+                <th scope="col" className="numeric">{t('Ödeme')}</th>
+                <th scope="col" className="numeric hide-narrow">{t('Toplanan')}</th>
+                <th scope="col"><span className="visually-hidden">{t('İşlemler')}</span></th>
               </tr>
             </thead>
             <tbody>
@@ -106,17 +107,17 @@ export function PaymentLinks() {
                 <tr key={link.id}>
                   <td>
                     {link.title}
-                    <span className="hint row-hint">Oluşturulma: {formatDateTime(link.createdAt)}</span>
+                    <span className="hint row-hint">{t('Oluşturulma: {date}', { date: formatDateTime(link.createdAt) })}</span>
                   </td>
                   <td><PaymentLinkStatusBadge status={link.status} /></td>
-                  <td className="numeric">{link.amount === null ? 'Serbest' : formatMoney(link.amount, link.currency)}</td>
+                  <td className="numeric">{link.amount === null ? t('Serbest') : formatMoney(link.amount, link.currency)}</td>
                   <td className="numeric">{link.paidCount}{link.maxPayments !== null && ` / ${link.maxPayments}`}</td>
                   <td className="numeric hide-narrow">{formatMoney(link.collected, link.currency)}</td>
                   <td className="numeric">
                     <span className="row-actions">
-                      {link.status === 'OPEN' && <CopyButton value={linkUrl(link.slug)} label="Bağlantıyı kopyala" />}
+                      {link.status === 'OPEN' && <CopyButton value={linkUrl(link.slug)} label={t('Bağlantıyı kopyala')} />}
                       {operator && link.status !== 'DISABLED' && (
-                        <button type="button" className="button button-small" onClick={() => setDisabling(link)}>Kapat</button>
+                        <button type="button" className="button button-small" onClick={() => setDisabling(link)}>{t('Bağlantıyı kapat')}</button>
                       )}
                     </span>
                   </td>
@@ -126,17 +127,17 @@ export function PaymentLinks() {
           </table>
         </div>
       ) : !links.error && (
-        <div className="card"><EmptyState title="Henüz bağlantı yok">İlk bağlantınızı oluşturup WhatsApp'ta veya sosyal medyada paylaşabilirsiniz.</EmptyState></div>
+        <div className="card"><EmptyState title={t('Henüz bağlantı yok')}>{t('İlk bağlantınızı oluşturup WhatsApp\'ta veya sosyal medyada paylaşabilirsiniz.')}</EmptyState></div>
       )}
 
       {creating && <NewLinkDialog onClose={() => setCreating(false)} onCreated={() => {
         setCreating(false);
         links.reload();
-        notify('Bağlantı oluşturuldu. Kopyalayıp paylaşabilirsiniz.');
+        notify(t('Bağlantı oluşturuldu. Kopyalayıp paylaşabilirsiniz.'));
       }} />}
       {disabling && (
-        <FormDialog title="Bağlantıyı kapat" submitLabel="Kapat" danger onClose={() => setDisabling(null)} onSubmit={disable}>
-          <p><strong>{disabling.title}</strong> artık ödeme almaz. Ödeme sayfasını açmış kişiler de ödeyemez. Bu işlem geri alınamaz.</p>
+        <FormDialog title={t('Bağlantıyı kapat')} submitLabel={t('Bağlantıyı kapat')} danger onClose={() => setDisabling(null)} onSubmit={disable}>
+          <p>{t('{title} artık ödeme almaz. Ödeme sayfasını açmış kişiler de ödeyemez. Bu işlem geri alınamaz.', { title: disabling.title })}</p>
         </FormDialog>
       )}
     </>
@@ -161,7 +162,7 @@ export function PublicLinkPage() {
     if (data?.amount === null) {
       minorUnits = parseAmount(amount);
       if (minorUnits === null) {
-        setError('Geçerli bir tutar girin, örneğin 149,90.');
+        setError(t('Geçerli bir tutar girin, örneğin 149,90.'));
         return;
       }
     }
@@ -174,7 +175,7 @@ export function PublicLinkPage() {
       });
       navigate(`/pay/${session.id}`);
     } catch (e) {
-      setError(e instanceof ApiError && e.status === 410 ? 'Bu bağlantı artık ödeme almıyor.' : (e as Error).message);
+      setError(e instanceof ApiError && e.status === 410 ? t('Bu bağlantı artık ödeme almıyor.') : (e as Error).message);
       setBusy(false);
     }
   };
@@ -185,8 +186,8 @@ export function PublicLinkPage() {
       <div className="card checkout-card">
         {link.loading ? <Loading /> : !data ? (
           <div className="outcome outcome-danger" role="status">
-            <h1>Bağlantı bulunamadı</h1>
-            <p>{link.errorStatus === 404 ? 'Bağlantıyı işletmeden yeniden isteyin.' : link.error}</p>
+            <h1>{t('Bağlantı bulunamadı')}</h1>
+            <p>{link.errorStatus === 404 ? t('Bağlantıyı işletmeden yeniden isteyin.') : link.error}</p>
           </div>
         ) : (
           <>
@@ -198,36 +199,39 @@ export function PublicLinkPage() {
             </header>
             {data.status !== 'OPEN' ? (
               <div className="outcome outcome-danger" role="status">
-                <h1>{data.status === 'SOLD_OUT' ? 'Kontenjan doldu' : 'Bu bağlantı artık ödeme almıyor'}</h1>
-                <p>Ayrıntı için işletmeyle iletişime geçin.</p>
+                <h1>{data.status === 'SOLD_OUT' ? t('Kontenjan doldu') : t('Bu bağlantı artık ödeme almıyor')}</h1>
+                <p>{t('Ayrıntı için işletmeyle iletişime geçin.')}</p>
               </div>
             ) : (
               <form onSubmit={submit} className="stack">
                 {data.amount === null && (
                   <label className="field">
-                    Tutar (₺)
+                    {t('Tutar (₺)')}
                     <input inputMode="decimal" required autoFocus placeholder="149,90" value={amount} onChange={(e) => setAmount(e.target.value)} />
                   </label>
                 )}
                 <label className="field">
-                  E-posta
+                  {t('E-posta')}
                   <input type="email" required maxLength={254} autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
                 </label>
                 <label className="field">
-                  Ad soyad
+                  {t('Ad soyad')}
                   <input maxLength={200} autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />
                 </label>
-                <p className="hint">Bu bir test sayfasıdır. Gerçek bilgilerinizi girmeyin.</p>
+                <p className="hint">{t('Bu bir test sayfasıdır. Gerçek bilgilerinizi girmeyin.')}</p>
                 <ErrorNote message={error} />
                 <button type="submit" className="button button-primary button-block" disabled={busy}>
-                  {busy ? 'Hazırlanıyor…' : 'Ödemeye geç'}
+                  {busy ? t('Hazırlanıyor…') : t('Ödemeye geç')}
                 </button>
               </form>
             )}
           </>
         )}
       </div>
-      <p className="checkout-footer muted">Kasa ile güvenli ödeme · Test modu</p>
+      <div className="checkout-footer muted">
+        <span>{t('Kasa ile güvenli ödeme · Test modu')}</span>
+        <LanguagePicker compact />
+      </div>
     </div>
   );
 }

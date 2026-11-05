@@ -12,9 +12,10 @@ import {
   OperationStatusBadge,
   PageHeader,
   PaymentStatusBadge,
-  RISK_REASONS,
   RiskBadge,
+  riskReason,
 } from '../components';
+import { t, tk } from '../i18n';
 import { canOperate, useMe } from '../me';
 import { formatMoney, parseAmount } from '../money';
 import type { Dispute, DisputePage, DisputeReason, Operation, OperationResult, Payment, PaymentDetail } from '../types';
@@ -25,13 +26,13 @@ import { DISPUTE_REASONS } from './Disputes';
 type Action = 'capture' | 'void' | 'refund';
 
 const OPERATION_LABELS: Record<Operation['type'], string> = {
-  AUTHORIZE: 'Provizyon',
-  CAPTURE: 'Tahsilat',
-  VOID: 'Provizyon iptali',
-  REFUND: 'İade',
-  DISPUTE_WITHDRAWAL: 'İtiraz kesintisi',
-  DISPUTE_REVERSAL: 'İtiraz iadesi',
-  DISPUTE_FEE: 'İtiraz ücreti',
+  AUTHORIZE: tk('Provizyon'),
+  CAPTURE: tk('Tahsilat'),
+  VOID: tk('Provizyon iptali'),
+  REFUND: tk('İade'),
+  DISPUTE_WITHDRAWAL: tk('İtiraz kesintisi'),
+  DISPUTE_REVERSAL: tk('İtiraz iadesi'),
+  DISPUTE_FEE: tk('İtiraz ücreti'),
 };
 
 /** Money leaving the merchant's balance, shown with a minus so the story reads like a statement. */
@@ -44,18 +45,22 @@ export function timelineOrder(operations: Operation[]): Operation[] {
   return [...operations].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
 }
 
+function installmentText(count: number): string {
+  return count === 1 ? t('Tek çekim') : t('{count} taksit', { count });
+}
+
 function Timeline({ payment, operations }: { payment: Payment; operations: Operation[] }) {
-  const source = payment.processor === 'IYZICO' ? `iyzico${payment.cardLabel ? ` · ${payment.cardLabel}` : ''}` : 'Simüle banka';
+  const source = payment.processor === 'IYZICO' ? `iyzico${payment.cardLabel ? ` · ${payment.cardLabel}` : ''}` : t('Simüle banka');
   return (
     <ol className="card timeline">
       <li className="timeline-item timeline-neutral">
         <span className="timeline-dot" aria-hidden="true" />
         <div className="timeline-body">
           <div className="timeline-row">
-            <strong>Ödeme oluşturuldu</strong>
+            <strong>{t('Ödeme oluşturuldu')}</strong>
             <span className="numeric">{formatMoney(payment.amount, payment.currency)}</span>
           </div>
-          <span className="hint">{source} · {payment.installments === 1 ? 'Tek çekim' : `${payment.installments} taksit`} · {formatDateTime(payment.createdAt)}</span>
+          <span className="hint">{source} · {installmentText(payment.installments)} · {formatDateTime(payment.createdAt)}</span>
         </div>
       </li>
       {timelineOrder(operations).map((operation) => (
@@ -63,7 +68,7 @@ function Timeline({ payment, operations }: { payment: Payment; operations: Opera
           <span className="timeline-dot" aria-hidden="true" />
           <div className="timeline-body">
             <div className="timeline-row">
-              <strong>{OPERATION_LABELS[operation.type]} <OperationStatusBadge status={operation.status} /></strong>
+              <strong>{t(OPERATION_LABELS[operation.type])} <OperationStatusBadge status={operation.status} /></strong>
               <span className="numeric">
                 {OUTGOING.includes(operation.type) && operation.status === 'SUCCEEDED' ? '−' : ''}{formatMoney(operation.amount, payment.currency)}
               </span>
@@ -86,12 +91,12 @@ function SimulateDisputeDialog({ payment, onClose, onDone }: { payment: Payment;
   };
 
   return (
-    <FormDialog title="Banka itirazı simüle et" submitLabel="İtirazı başlat" danger onClose={onClose} onSubmit={submit}>
-      <p>Gerçekte itirazı müşterinin bankası başlatır. Tutar bakiyenizden hemen düşer.</p>
+    <FormDialog title={t('Banka itirazı simüle et')} submitLabel={t('İtirazı başlat')} danger onClose={onClose} onSubmit={submit}>
+      <p>{t('Gerçekte itirazı müşterinin bankası başlatır. Tutar bakiyenizden hemen düşer.')}</p>
       <label className="field">
-        Neden
+        {t('Neden')}
         <select value={reason} onChange={(e) => setReason(e.target.value as DisputeReason)}>
-          {Object.entries(DISPUTE_REASONS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          {Object.entries(DISPUTE_REASONS).map(([value, label]) => <option key={value} value={value}>{t(label)}</option>)}
         </select>
       </label>
     </FormDialog>
@@ -110,14 +115,14 @@ function ActionDialog({ action, payment, onClose, onDone }: {
   // Stays the same for this dialog, so a repeated click on submit can never be processed twice.
   const [idempotencyKey] = useState(newIdempotencyKey);
   const notify = useToast();
-  const titles: Record<Action, string> = { capture: 'Tahsil et', void: 'Provizyonu iptal et', refund: 'İade et' };
+  const titles: Record<Action, string> = { capture: t('Tahsil et'), void: t('Provizyonu iptal et'), refund: t('İade et') };
 
   const submit = async () => {
     let body: { amount: number } | undefined;
     if (action !== 'void' && amount.trim()) {
       const minorUnits = parseAmount(amount);
       if (minorUnits === null || minorUnits > limit) {
-        setAmountError(`En fazla ${formatMoney(limit, payment.currency)} girebilirsiniz.`);
+        setAmountError(t('En fazla {amount} girebilirsiniz.', { amount: formatMoney(limit, payment.currency) }));
         return;
       }
       body = { amount: minorUnits };
@@ -126,7 +131,7 @@ function ActionDialog({ action, payment, onClose, onDone }: {
     const path = { capture: 'capture', void: 'void', refund: 'refunds' }[action];
     const result = await api<OperationResult>(`/payments/${payment.id}/${path}`, { method: 'POST', body, idempotencyKey });
     if (result.operation.status === 'SUCCEEDED') {
-      notify({ capture: 'Tahsilat tamamlandı.', void: 'Provizyon iptal edildi.', refund: 'İade tamamlandı.' }[action]);
+      notify({ capture: t('Tahsilat tamamlandı.'), void: t('Provizyon iptal edildi.'), refund: t('İade tamamlandı.') }[action]);
     }
     onDone(result.operation.status === 'FAILED' ? failureMessage(result.operation.failureCode) : null);
   };
@@ -134,16 +139,16 @@ function ActionDialog({ action, payment, onClose, onDone }: {
   return (
     <FormDialog title={titles[action]} submitLabel={titles[action]} danger={action !== 'capture'} onClose={onClose} onSubmit={submit}>
       {action === 'void' ? (
-        <p>{formatMoney(payment.amount, payment.currency)} tutarındaki provizyon iptal edilecek. Bu işlem geri alınamaz.</p>
+        <p>{t('{amount} tutarındaki provizyon iptal edilecek. Bu işlem geri alınamaz.', { amount: formatMoney(payment.amount, payment.currency) })}</p>
       ) : (
         <>
           <label className="field">
-            Tutar (₺)
+            {t('Tutar (₺)')}
             <input inputMode="decimal" autoFocus placeholder={(limit / 100).toFixed(2).replace('.', ',')} value={amount} onChange={(e) => setAmount(e.target.value)} />
-            <span className="hint">Boş bırakırsanız {formatMoney(limit, payment.currency)} işlenir.</span>
+            <span className="hint">{t('Boş bırakırsanız {amount} işlenir.', { amount: formatMoney(limit, payment.currency) })}</span>
           </label>
           <ErrorNote message={amountError} />
-          {action === 'refund' && <p className="muted">İade edilen tutarın komisyonu geri ödenmez.</p>}
+          {action === 'refund' && <p className="muted">{t('İade edilen tutarın komisyonu geri ödenmez.')}</p>}
         </>
       )}
     </FormDialog>
@@ -172,8 +177,8 @@ export function PaymentDetailPage() {
   if (!detail.data) {
     return (
       <>
-        <ErrorNote message={detail.errorStatus === 404 ? 'Bu ödeme bulunamadı.' : detail.error} />
-        <Link to="/payments">Ödemelere dön</Link>
+        <ErrorNote message={detail.errorStatus === 404 ? t('Bu ödeme bulunamadı.') : detail.error} />
+        <Link to="/payments">{t('Ödemelere dön')}</Link>
       </>
     );
   }
@@ -193,96 +198,93 @@ export function PaymentDetailPage() {
     detail.reload();
   };
 
+  const verification = payment.processor === 'IYZICO' ? t('iyzico ödeme sayfasında')
+    : payment.threeDsMethod === 'CHALLENGE' ? t('3D Secure, SMS ile (ECI {eci})', { eci: payment.threeDsEci ?? '' })
+      : payment.threeDsMethod === 'FRICTIONLESS' ? t('3D Secure, sessiz onay (ECI {eci})', { eci: payment.threeDsEci ?? '' })
+        : t('Yok (API ile alınan ödeme)');
+
   return (
     <>
-      <p className="breadcrumb"><Link to="/payments">Ödemeler</Link> / Ödeme ayrıntısı</p>
+      <p className="breadcrumb"><Link to="/payments">{t('Ödemeler')}</Link> / {t('Ödeme ayrıntısı')}</p>
       <PageHeader
         title={formatMoney(payment.amount, payment.currency)}
-        description={payment.description ?? 'Açıklamasız ödeme'}
+        description={payment.description ?? t('Açıklamasız ödeme')}
         actions={(
           <>
-            {canCapture && <button type="button" className="button button-primary" onClick={() => setAction('capture')}>Tahsil et</button>}
-            {canCapture && <button type="button" className="button" onClick={() => setAction('void')}>İptal et</button>}
-            {canRefund && <button type="button" className="button" onClick={() => setAction('refund')}>İade et</button>}
-            {canDispute && <button type="button" className="button" onClick={() => setSimulating(true)}>İtiraz simüle et</button>}
-            {canOperate(me) && payment.riskLevel !== null && <button type="button" className="button" onClick={() => setBlocking(true)}>Kartı engelle</button>}
+            {canCapture && <button type="button" className="button button-primary" onClick={() => setAction('capture')}>{t('Tahsil et')}</button>}
+            {canCapture && <button type="button" className="button" onClick={() => setAction('void')}>{t('İptal et')}</button>}
+            {canRefund && <button type="button" className="button" onClick={() => setAction('refund')}>{t('İade et')}</button>}
+            {canDispute && <button type="button" className="button" onClick={() => setSimulating(true)}>{t('İtiraz simüle et')}</button>}
+            {canOperate(me) && payment.riskLevel !== null && <button type="button" className="button" onClick={() => setBlocking(true)}>{t('Kartı engelle')}</button>}
           </>
         )}
       />
       <ErrorNote message={operationFailure} />
       {hasPending && (
         <p className="note note-warning" role="status">
-          Bankadan yanıt alınamadı. Para iki kez hareket etmez; sonuç bankaya sorularak kısa süre içinde netleşecek.
+          {t('Bankadan yanıt alınamadı. Para iki kez hareket etmez; sonuç bankaya sorularak kısa süre içinde netleşecek.')}
         </p>
       )}
       {payment.failureCode && <p className="note note-danger">{failureMessage(payment.failureCode)}</p>}
       {dispute && (
         <p className="note note-warning">
-          Bu ödemeye itiraz edildi: {formatMoney(dispute.amount, dispute.currency)}. <DisputeStatusBadge status={dispute.status} /> <Link to={`/disputes/${dispute.id}`}>İtirazı aç</Link>
+          {t('Bu ödemeye itiraz edildi: {amount}.', { amount: formatMoney(dispute.amount, dispute.currency) })} <DisputeStatusBadge status={dispute.status} /> <Link to={`/disputes/${dispute.id}`}>{t('İtirazı aç')}</Link>
         </p>
       )}
 
       {(payment.riskLevel === 'REVIEW' || payment.riskLevel === 'BLOCKED') && (
-        <section className={held ? 'note note-warning' : 'card risk-card'} aria-label="Risk değerlendirmesi">
+        <section className={held ? 'note note-warning' : 'card risk-card'} aria-label={t('Risk değerlendirmesi')}>
           <div className="section-header section-header-tight">
-            <strong>Risk değerlendirmesi <RiskBadge level={payment.riskLevel} reviewStatus={payment.reviewStatus} /></strong>
-            {held && canOperate(me) && <Link to="/risk" className="button button-small">İncelemeye git</Link>}
+            <strong>{t('Risk değerlendirmesi')} <RiskBadge level={payment.riskLevel} reviewStatus={payment.reviewStatus} /></strong>
+            {held && canOperate(me) && <Link to="/risk" className="button button-small">{t('İncelemeye git')}</Link>}
           </div>
           <ul className="risk-reasons">
-            {payment.riskReasons.map((reason) => <li key={reason}>{RISK_REASONS[reason] ?? reason}</li>)}
+            {payment.riskReasons.map((reason) => <li key={reason}>{riskReason(reason)}</li>)}
           </ul>
-          {held && <p>Bu ödeme onaylanana kadar tahsil edilemez.</p>}
-          {payment.reviewedBy && payment.reviewedAt && <p className="hint">Karar: {payment.reviewedBy}, {formatDateTime(payment.reviewedAt)}</p>}
+          {held && <p>{t('Bu ödeme onaylanana kadar tahsil edilemez.')}</p>}
+          {payment.reviewedBy && payment.reviewedAt && <p className="hint">{t('Karar: {who}, {when}', { who: payment.reviewedBy, when: formatDateTime(payment.reviewedAt) })}</p>}
         </section>
       )}
 
       <section className="card">
         <dl className="details">
-          <div><dt>Durum</dt><dd><PaymentStatusBadge status={payment.status} /></dd></div>
-          <div><dt>Tahsil edilen</dt><dd>{formatMoney(payment.capturedAmount, payment.currency)}</dd></div>
-          <div><dt>Komisyon</dt><dd>{formatMoney(payment.feeAmount, payment.currency)}</dd></div>
-          <div><dt>İade edilen</dt><dd>{formatMoney(payment.refundedAmount, payment.currency)}</dd></div>
-          {payment.disputedAmount > 0 && <div><dt>İtirazda</dt><dd>{formatMoney(payment.disputedAmount, payment.currency)}</dd></div>}
-          {payment.customerId && <div><dt>Müşteri</dt><dd><Link to={`/customers/${payment.customerId}`}>Müşteriyi aç</Link></dd></div>}
+          <div><dt>{t('Durum')}</dt><dd><PaymentStatusBadge status={payment.status} /></dd></div>
+          <div><dt>{t('Tahsil edilen')}</dt><dd>{formatMoney(payment.capturedAmount, payment.currency)}</dd></div>
+          <div><dt>{t('Komisyon')}</dt><dd>{formatMoney(payment.feeAmount, payment.currency)}</dd></div>
+          <div><dt>{t('İade edilen')}</dt><dd>{formatMoney(payment.refundedAmount, payment.currency)}</dd></div>
+          {payment.disputedAmount > 0 && <div><dt>{t('İtirazda')}</dt><dd>{formatMoney(payment.disputedAmount, payment.currency)}</dd></div>}
+          {payment.customerId && <div><dt>{t('Müşteri')}</dt><dd><Link to={`/customers/${payment.customerId}`}>{t('Müşteriyi aç')}</Link></dd></div>}
+          <div><dt>{t('Kart doğrulaması')}</dt><dd>{verification}</dd></div>
           <div>
-            <dt>Kart doğrulaması</dt>
-            <dd>
-              {payment.processor === 'IYZICO' ? 'iyzico ödeme sayfasında'
-                : payment.threeDsMethod === 'CHALLENGE' ? `3D Secure, SMS ile (ECI ${payment.threeDsEci})`
-                  : payment.threeDsMethod === 'FRICTIONLESS' ? `3D Secure, sessiz onay (ECI ${payment.threeDsEci})`
-                    : 'Yok (API ile alınan ödeme)'}
-            </dd>
+            <dt>{t('Ödeme altyapısı')}</dt>
+            <dd>{payment.processor === 'IYZICO' ? t('iyzico (test ortamı)') : t('Simüle banka')}</dd>
           </div>
-          <div>
-            <dt>Ödeme altyapısı</dt>
-            <dd>{payment.processor === 'IYZICO' ? 'iyzico (test ortamı)' : 'Simüle banka'}</dd>
-          </div>
-          {payment.cardLabel && <div><dt>Kart</dt><dd>{payment.cardLabel}</dd></div>}
-          <div><dt>Taksit</dt><dd>{payment.installments === 1 ? 'Tek çekim' : `${payment.installments} taksit`}</dd></div>
-          <div><dt>Oluşturulma</dt><dd>{formatDateTime(payment.createdAt)}</dd></div>
-          <div className="details-id"><dt>Ödeme kimliği</dt><dd><code>{payment.id}</code> <CopyButton value={payment.id} /></dd></div>
+          {payment.cardLabel && <div><dt>{t('Kart')}</dt><dd>{payment.cardLabel}</dd></div>}
+          <div><dt>{t('Taksit')}</dt><dd>{installmentText(payment.installments)}</dd></div>
+          <div><dt>{t('Oluşturulma')}</dt><dd>{formatDateTime(payment.createdAt)}</dd></div>
+          <div className="details-id"><dt>{t('Ödeme kimliği')}</dt><dd><code>{payment.id}</code> <CopyButton value={payment.id} /></dd></div>
         </dl>
       </section>
 
-      <div className="section-header"><h2>İşlem geçmişi</h2></div>
+      <div className="section-header"><h2>{t('İşlem geçmişi')}</h2></div>
       <Timeline payment={payment} operations={operations} />
       {action && <ActionDialog action={action} payment={payment} onClose={() => setAction(null)} onDone={finish} />}
       {blocking && (
-        <FormDialog title="Kartı engelle" submitLabel="Engelle" danger onClose={() => setBlocking(false)}
+        <FormDialog title={t('Kartı engelle')} submitLabel={t('Engelle')} danger onClose={() => setBlocking(false)}
           onSubmit={async () => {
             try {
               await api('/risk/blocklist', { method: 'POST', body: { paymentId: payment.id, reason: blockReason.trim() } });
             } catch (e) {
-              throw e instanceof ApiError && e.status === 409 ? new Error('Bu kart zaten engelli.') : e;
+              throw e instanceof ApiError && e.status === 409 ? new Error(t('Bu kart zaten engelli.')) : e;
             }
             setBlocking(false);
             setBlockReason('');
-            notify('Kart engellendi. Bu karttan gelen ödemeler bankaya gönderilmeden reddedilecek.');
+            notify(t('Kart engellendi. Bu karttan gelen ödemeler bankaya gönderilmeden reddedilecek.'));
           }}>
-          <p>Bu ödemede kullanılan karttan bundan sonra ödeme alınmaz. Engeli Risk sayfasından kaldırabilirsiniz.</p>
+          <p>{t('Bu ödemede kullanılan karttan bundan sonra ödeme alınmaz. Engeli Risk sayfasından kaldırabilirsiniz.')}</p>
           <label className="field">
-            Neden
-            <input required autoFocus maxLength={300} value={blockReason} onChange={(e) => setBlockReason(e.target.value)} placeholder="Müşteri kartının çalındığını bildirdi" />
+            {t('Neden')}
+            <input required autoFocus maxLength={300} value={blockReason} onChange={(e) => setBlockReason(e.target.value)} placeholder={t('Müşteri kartının çalındığını bildirdi')} />
           </label>
         </FormDialog>
       )}

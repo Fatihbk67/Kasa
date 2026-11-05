@@ -2,10 +2,13 @@ export type ThemeChoice = 'system' | 'light' | 'dark';
 
 const STORAGE_KEY = 'kasa.theme';
 
+import { tk } from './i18n';
+
+/** Translated where shown. */
 export const THEME_LABELS: Record<ThemeChoice, string> = {
-  system: 'Sistem',
-  light: 'Açık',
-  dark: 'Koyu',
+  system: tk('Sistem'),
+  light: tk('Açık'),
+  dark: tk('Koyu'),
 };
 
 /** The person's saved choice; "system" when none is saved or storage is unavailable. */

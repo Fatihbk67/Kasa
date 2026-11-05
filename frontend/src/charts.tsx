@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { locale, t } from './i18n';
 import { formatMoney } from './money';
 import type { DayPoint } from './types';
 
@@ -16,11 +17,11 @@ export function niceMax(value: number): number {
 }
 
 function shortDay(day: string): string {
-  return new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'short' }).format(new Date(`${day}T00:00:00`));
+  return new Intl.DateTimeFormat(locale(), { day: 'numeric', month: 'short' }).format(new Date(`${day}T00:00:00`));
 }
 
 function compactMoney(minorUnits: number, currency: string): string {
-  return new Intl.NumberFormat('tr-TR', { style: 'currency', currency, notation: 'compact', maximumFractionDigits: 1 })
+  return new Intl.NumberFormat(locale(), { style: 'currency', currency, currencyDisplay: 'narrowSymbol', notation: 'compact', maximumFractionDigits: 1 })
     .format(minorUnits / 100);
 }
 
@@ -56,7 +57,7 @@ export function DailyBars({ points, currency }: { points: DayPoint[]; currency: 
   return (
     <div className="chart" ref={container}>
       {width > 0 && (
-        <svg width={width} height={HEIGHT} role="img" aria-label="Günlere göre tahsilat grafiği" onMouseLeave={() => setActive(null)}>
+        <svg width={width} height={HEIGHT} role="img" aria-label={t('Günlere göre tahsilat grafiği')} onMouseLeave={() => setActive(null)}>
           {[0, 0.5, 1].map((fraction) => (
             <g key={fraction}>
               <line className="chart-grid" x1={MARGIN.left} x2={width - MARGIN.right} y1={yFor(top * fraction)} y2={yFor(top * fraction)} />
@@ -95,9 +96,9 @@ export function DailyBars({ points, currency }: { points: DayPoint[]; currency: 
           }}
         >
           <strong>{shortDay(activePoint.day)}</strong>
-          <span>Tahsilat: {formatMoney(activePoint.captured, currency)}</span>
-          <span>İade: {formatMoney(activePoint.refunded, currency)}</span>
-          <span>{activePoint.captureCount} işlem</span>
+          <span>{t('Tahsilat: {amount}', { amount: formatMoney(activePoint.captured, currency) })}</span>
+          <span>{t('İade: {amount}', { amount: formatMoney(activePoint.refunded, currency) })}</span>
+          <span>{t('{count} işlem', { count: activePoint.captureCount })}</span>
         </div>
       )}
     </div>

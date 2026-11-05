@@ -1,26 +1,28 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api, ApiError } from '../api';
 import { ErrorNote, formatDateTime, Loading, PageHeader } from '../components';
+import { t, tk } from '../i18n';
 import { formatIban, isValidTckn, isValidTrIban, isValidVkn, normalizeIban } from '../identifiers';
 import { isOwner, useMe } from '../me';
 import { useToast } from '../toast';
 import type { BusinessProfile, BusinessType, Me, Sector } from '../types';
 import { useFetch } from '../useFetch';
 
+/** Turkish keys, translated where shown. */
 export const BUSINESS_TYPES: Record<BusinessType, { label: string; hint: string }> = {
-  INDIVIDUAL: { label: 'Bireysel', hint: 'Şirketi olmayan, ara sıra satış yapan kişi' },
-  SOLE_PROPRIETOR: { label: 'Şahıs şirketi', hint: 'Vergi mükellefi olan tek kişilik işletme' },
-  COMPANY: { label: 'Limited veya anonim şirket', hint: 'Ticaret siciline kayıtlı tüzel kişi' },
+  INDIVIDUAL: { label: tk('Bireysel'), hint: tk('Şirketi olmayan, ara sıra satış yapan kişi') },
+  SOLE_PROPRIETOR: { label: tk('Şahıs şirketi'), hint: tk('Vergi mükellefi olan tek kişilik işletme') },
+  COMPANY: { label: tk('Limited veya anonim şirket'), hint: tk('Ticaret siciline kayıtlı tüzel kişi') },
 };
 
 export const SECTORS: Record<Sector, string> = {
-  ECOMMERCE: 'E-ticaret',
-  FOOD: 'Yiyecek ve içecek',
-  EDUCATION: 'Eğitim',
-  SERVICES: 'Hizmet',
-  RETAIL: 'Perakende mağaza',
-  SOFTWARE: 'Yazılım ve dijital ürün',
-  OTHER: 'Diğer',
+  ECOMMERCE: tk('E-ticaret'),
+  FOOD: tk('Yiyecek ve içecek'),
+  EDUCATION: tk('Eğitim'),
+  SERVICES: tk('Hizmet'),
+  RETAIL: tk('Perakende mağaza'),
+  SOFTWARE: tk('Yazılım ve dijital ürün'),
+  OTHER: tk('Diğer'),
 };
 
 const BANKS: Record<string, string> = {
@@ -37,7 +39,7 @@ const BANKS: Record<string, string> = {
 };
 
 export function bankName(code: string): string {
-  return BANKS[code] ?? `Banka kodu ${code}`;
+  return BANKS[code] ?? t('Banka kodu {code}', { code });
 }
 
 interface Form {
@@ -63,33 +65,33 @@ function taxIdError(form: Form): string | null {
     return null;
   }
   return form.businessType === 'COMPANY'
-    ? (isValidVkn(form.taxId) ? null : 'Vergi kimlik numarası 10 haneli olmalı ve kontrol hanesi tutmalı.')
-    : (isValidTckn(form.taxId) ? null : 'T.C. kimlik numarası 11 haneli olmalı ve kontrol haneleri tutmalı.');
+    ? (isValidVkn(form.taxId) ? null : t('Vergi kimlik numarası 10 haneli olmalı ve kontrol hanesi tutmalı.'))
+    : (isValidTckn(form.taxId) ? null : t('T.C. kimlik numarası 11 haneli olmalı ve kontrol haneleri tutmalı.'));
 }
 
 function ibanError(iban: string): string | null {
   if (normalizeIban(iban) === '') {
     return null;
   }
-  return isValidTrIban(iban) ? null : 'Geçerli bir TR IBAN girin. Rakamlardan biri yanlış yazılmış olabilir.';
+  return isValidTrIban(iban) ? null : t('Geçerli bir TR IBAN girin. Rakamlardan biri yanlış yazılmış olabilir.');
 }
 
 /** Where the application stands, as a short row of steps the person can follow. */
 function Steps({ me, profile }: { me: Me | null; profile: BusinessProfile | null }) {
   const approved = me?.tenantStatus === 'ACTIVE';
   const steps = [
-    { label: 'Hesap açıldı', done: true },
-    { label: 'Başvuru gönderildi', done: profile !== null },
-    { label: 'Platform incelemesi', done: approved },
-    { label: 'Ödeme almaya hazır', done: approved },
+    { label: t('Hesap açıldı'), done: true },
+    { label: t('Başvuru gönderildi'), done: profile !== null },
+    { label: t('Platform incelemesi'), done: approved },
+    { label: t('Ödeme almaya hazır'), done: approved },
   ];
   return (
-    <ol className="steps" aria-label="Başvuru adımları">
+    <ol className="steps" aria-label={t('Başvuru adımları')}>
       {steps.map((step, index) => (
         <li key={step.label} className={step.done ? 'step step-done' : 'step'}>
           <span className="step-mark" aria-hidden="true">{step.done ? '✓' : index + 1}</span>
           <span>{step.label}</span>
-          <span className="visually-hidden">{step.done ? ' (tamamlandı)' : ' (bekliyor)'}</span>
+          <span className="visually-hidden">{step.done ? ` (${t('tamamlandı')})` : ` (${t('bekliyor')})`}</span>
         </li>
       ))}
     </ol>
@@ -99,16 +101,16 @@ function Steps({ me, profile }: { me: Me | null; profile: BusinessProfile | null
 function ProfileSummary({ profile }: { profile: BusinessProfile }) {
   return (
     <dl className="details">
-      <div><dt>İşletme türü</dt><dd>{BUSINESS_TYPES[profile.businessType].label}</dd></div>
-      <div><dt>Yasal unvan</dt><dd>{profile.legalName}</dd></div>
-      <div><dt>{profile.businessType === 'COMPANY' ? 'Vergi kimlik no' : 'T.C. kimlik no'}</dt><dd>{profile.taxId}</dd></div>
-      <div><dt>Vergi dairesi</dt><dd>{profile.taxOffice}</dd></div>
-      <div><dt>Sektör</dt><dd>{SECTORS[profile.sector]}</dd></div>
-      <div><dt>Telefon</dt><dd>{profile.phone}</dd></div>
-      <div><dt>Web sitesi</dt><dd>{profile.website ?? '—'}</dd></div>
-      <div><dt>Şehir</dt><dd>{profile.city}</dd></div>
-      <div className="details-id"><dt>Adres</dt><dd>{profile.address}</dd></div>
-      <div className="details-id"><dt>Ödeme hesabı</dt><dd>{bankName(profile.bankCode)} · <code>{profile.iban}</code></dd></div>
+      <div><dt>{t('İşletme türü')}</dt><dd>{t(BUSINESS_TYPES[profile.businessType].label)}</dd></div>
+      <div><dt>{t('Yasal unvan')}</dt><dd>{profile.legalName}</dd></div>
+      <div><dt>{profile.businessType === 'COMPANY' ? t('Vergi kimlik no') : t('T.C. kimlik no')}</dt><dd>{profile.taxId}</dd></div>
+      <div><dt>{t('Vergi dairesi')}</dt><dd>{profile.taxOffice}</dd></div>
+      <div><dt>{t('Sektör')}</dt><dd>{t(SECTORS[profile.sector])}</dd></div>
+      <div><dt>{t('Telefon')}</dt><dd>{profile.phone}</dd></div>
+      <div><dt>{t('Web sitesi')}</dt><dd>{profile.website ?? '—'}</dd></div>
+      <div><dt>{t('Şehir')}</dt><dd>{profile.city}</dd></div>
+      <div className="details-id"><dt>{t('Adres')}</dt><dd>{profile.address}</dd></div>
+      <div className="details-id"><dt>{t('Ödeme hesabı')}</dt><dd>{bankName(profile.bankCode)} · <code>{profile.iban}</code></dd></div>
     </dl>
   );
 }
@@ -135,8 +137,8 @@ export function Onboarding() {
   if (!isOwner(me)) {
     return (
       <>
-        <PageHeader title="İşletme başvurusu" />
-        <p className="note note-warning">Başvuruyu yalnızca işletme sahibi görebilir ve gönderebilir.</p>
+        <PageHeader title={t('İşletme başvurusu')} />
+        <p className="note note-warning">{t('Başvuruyu yalnızca işletme sahibi görebilir ve gönderebilir.')}</p>
       </>
     );
   }
@@ -152,7 +154,7 @@ export function Onboarding() {
     event.preventDefault();
     setTouched(true);
     if (taxError || accountError || !form.taxId || !iban) {
-      setError('Lütfen işaretli alanları düzeltin.');
+      setError(t('Lütfen işaretli alanları düzeltin.'));
       return;
     }
     setBusy(true);
@@ -162,18 +164,18 @@ export function Onboarding() {
         method: 'PUT',
         body: { ...form, iban, legalName: form.legalName.trim(), website: form.website.trim() || null },
       });
-      notify(saved ? 'Başvurunuz güncellendi.' : 'Başvurunuz incelemeye gönderildi.');
+      notify(saved ? t('Başvurunuz güncellendi.') : t('Başvurunuz incelemeye gönderildi.'));
       setEditing(false);
       profile.reload();
       reloadMe();
     } catch (e) {
       setError(e instanceof ApiError && e.status === 403
-        ? 'Başvuru göndermeden önce e-posta adresinizi doğrulayın. Bağlantıyı sayfanın üstünden yeniden isteyebilirsiniz.'
+        ? t('Başvuru göndermeden önce e-posta adresinizi doğrulayın. Bağlantıyı sayfanın üstünden yeniden isteyebilirsiniz.')
         : e instanceof ApiError && e.status === 409
-        ? 'Onaylanmış bir başvuru değiştirilemez. Bilgileriniz değiştiyse destek ekibine yazın.'
-        : e instanceof ApiError && e.status === 422
-          ? 'Kimlik, vergi numarası veya IBAN doğrulanamadı. Lütfen kontrol edin.'
-          : e instanceof Error ? e.message : 'Beklenmeyen bir hata oluştu.');
+          ? t('Onaylanmış bir başvuru değiştirilemez. Bilgileriniz değiştiyse destek ekibine yazın.')
+          : e instanceof ApiError && e.status === 422
+            ? t('Kimlik, vergi numarası veya IBAN doğrulanamadı. Lütfen kontrol edin.')
+            : e instanceof Error ? e.message : t('Beklenmeyen bir hata oluştu.'));
     } finally {
       setBusy(false);
     }
@@ -181,8 +183,8 @@ export function Onboarding() {
 
   return (
     <>
-      <PageHeader title="İşletme başvurusu"
-        description="Ödeme alabilmeniz için işletmenizi tanımamız gerekiyor. Bilgiler yalnızca platform incelemesi için kullanılır." />
+      <PageHeader title={t('İşletme başvurusu')}
+        description={t('Ödeme alabilmeniz için işletmenizi tanımamız gerekiyor. Bilgiler yalnızca platform incelemesi için kullanılır.')} />
       <Steps me={me} profile={saved} />
       <ErrorNote message={profile.error} />
       {profile.loading && !profile.data ? <Loading /> : profile.error ? null : (
@@ -190,17 +192,17 @@ export function Onboarding() {
           {saved && !editing && (
             <section className="card settings-card">
               <div className="section-header section-header-tight">
-                <h2>Gönderilen bilgiler</h2>
-                {saved.editable && <button type="button" className="button button-small" onClick={() => setEditing(true)}>Düzenle</button>}
+                <h2>{t('Gönderilen bilgiler')}</h2>
+                {saved.editable && <button type="button" className="button button-small" onClick={() => setEditing(true)}>{t('Düzenle')}</button>}
               </div>
               {me?.tenantStatus === 'PENDING' && (
-                <p className="note note-warning">Başvurunuz inceleniyor ({formatDateTime(saved.submittedAt)}). Sonuç size bildirim ve e-posta ile iletilecek.</p>
+                <p className="note note-warning">{t('Başvurunuz inceleniyor ({date}). Sonuç size bildirim ve e-posta ile iletilecek.', { date: formatDateTime(saved.submittedAt) })}</p>
               )}
               {me?.tenantStatus === 'SUSPENDED' && (
-                <p className="note note-danger">Hesabınız askıda. Gerekçeye göre bilgilerinizi düzeltip yeniden gönderebilirsiniz.</p>
+                <p className="note note-danger">{t('Hesabınız askıda. Gerekçeye göre bilgilerinizi düzeltip yeniden gönderebilirsiniz.')}</p>
               )}
               {me?.tenantStatus === 'ACTIVE' && (
-                <p className="note note-success">Başvurunuz onaylandı. Güvenliğiniz için onaylı bilgiler, özellikle IBAN, panelden değiştirilemez.</p>
+                <p className="note note-success">{t('Başvurunuz onaylandı. Güvenliğiniz için onaylı bilgiler, özellikle IBAN, panelden değiştirilemez.')}</p>
               )}
               <ProfileSummary profile={saved} />
             </section>
@@ -209,71 +211,71 @@ export function Onboarding() {
           {showForm && (
             <form className="stack" onSubmit={submit} noValidate={false}>
               <section className="card settings-card">
-                <h2>İşletme türü</h2>
+                <h2>{t('İşletme türü')}</h2>
                 <fieldset className="card-options">
-                  <legend className="visually-hidden">İşletme türü</legend>
+                  <legend className="visually-hidden">{t('İşletme türü')}</legend>
                   {(Object.keys(BUSINESS_TYPES) as BusinessType[]).map((type) => (
                     <label key={type} className="card-option">
                       <input type="radio" name="businessType" checked={form.businessType === type} onChange={() => set('businessType', type)} />
-                      <span><strong>{BUSINESS_TYPES[type].label}</strong><br /><span className="hint">{BUSINESS_TYPES[type].hint}</span></span>
+                      <span><strong>{t(BUSINESS_TYPES[type].label)}</strong><br /><span className="hint">{t(BUSINESS_TYPES[type].hint)}</span></span>
                     </label>
                   ))}
                 </fieldset>
               </section>
 
               <section className="card settings-card stack">
-                <h2>Yasal bilgiler</h2>
+                <h2>{t('Yasal bilgiler')}</h2>
                 <label className="field">
-                  {form.businessType === 'COMPANY' ? 'Şirket unvanı' : 'Ad soyad veya işletme unvanı'}
+                  {form.businessType === 'COMPANY' ? t('Şirket unvanı') : t('Ad soyad veya işletme unvanı')}
                   <input required maxLength={200} value={form.legalName} onChange={(e) => set('legalName', e.target.value)}
-                    placeholder={form.businessType === 'COMPANY' ? 'Örnek Gıda Ltd. Şti.' : 'Ayşe Yılmaz'} />
+                    placeholder={form.businessType === 'COMPANY' ? t('Örnek Gıda Ltd. Şti.') : 'Ayşe Yılmaz'} />
                 </label>
                 <div className="form-row">
                   <label className="field">
-                    {form.businessType === 'COMPANY' ? 'Vergi kimlik numarası' : 'T.C. kimlik numarası'}
+                    {form.businessType === 'COMPANY' ? t('Vergi kimlik numarası') : t('T.C. kimlik numarası')}
                     <input required inputMode="numeric" autoComplete="off" maxLength={form.businessType === 'COMPANY' ? 10 : 11}
                       value={form.taxId} aria-invalid={taxError !== null && touched}
                       onChange={(e) => set('taxId', e.target.value.replace(/\D/g, ''))} onBlur={() => setTouched(true)} />
                     {touched && taxError && <span className="field-error">{taxError}</span>}
                   </label>
                   <label className="field">
-                    Vergi dairesi
+                    {t('Vergi dairesi')}
                     <input required maxLength={100} value={form.taxOffice} onChange={(e) => set('taxOffice', e.target.value)} placeholder="Kadıköy" />
                   </label>
                 </div>
                 <label className="field">
-                  Sektör
+                  {t('Sektör')}
                   <select value={form.sector} onChange={(e) => set('sector', e.target.value as Sector)}>
-                    {(Object.keys(SECTORS) as Sector[]).map((sector) => <option key={sector} value={sector}>{SECTORS[sector]}</option>)}
+                    {(Object.keys(SECTORS) as Sector[]).map((sector) => <option key={sector} value={sector}>{t(SECTORS[sector])}</option>)}
                   </select>
                 </label>
               </section>
 
               <section className="card settings-card stack">
-                <h2>İletişim</h2>
+                <h2>{t('İletişim')}</h2>
                 <div className="form-row">
                   <label className="field">
-                    Telefon
+                    {t('Telefon')}
                     <input required type="tel" maxLength={30} autoComplete="tel" value={form.phone} onChange={(e) => set('phone', e.target.value)} placeholder="+90 5xx xxx xx xx" />
                   </label>
                   <label className="field">
-                    Web sitesi <span className="hint">(isteğe bağlı)</span>
+                    {t('Web sitesi')} <span className="hint">{t('(isteğe bağlı)')}</span>
                     <input type="url" maxLength={200} value={form.website} onChange={(e) => set('website', e.target.value)} placeholder="https://" />
                   </label>
                 </div>
                 <label className="field">
-                  Adres
+                  {t('Adres')}
                   <textarea required rows={2} maxLength={500} value={form.address} onChange={(e) => set('address', e.target.value)} />
                 </label>
                 <label className="field">
-                  Şehir
+                  {t('Şehir')}
                   <input required maxLength={100} value={form.city} onChange={(e) => set('city', e.target.value)} />
                 </label>
               </section>
 
               <section className="card settings-card stack">
-                <h2>Ödeme hesabı</h2>
-                <p className="hint">Hesap kesimleri bu hesaba gönderilir. IBAN, yukarıdaki unvan adına kayıtlı olmalıdır.</p>
+                <h2>{t('Ödeme hesabı')}</h2>
+                <p className="hint">{t('Hesap kesimleri bu hesaba gönderilir. IBAN, yukarıdaki unvan adına kayıtlı olmalıdır.')}</p>
                 <label className="field">
                   IBAN
                   <input required autoComplete="off" spellCheck={false} maxLength={40} value={form.iban}
@@ -281,16 +283,16 @@ export function Onboarding() {
                     onChange={(e) => set('iban', e.target.value)} onBlur={() => { setTouched(true); if (isValidTrIban(form.iban)) set('iban', formatIban(form.iban)); }} />
                   {touched && accountError && <span className="field-error">{accountError}</span>}
                   {bank && <span className="hint">✓ {bank}</span>}
-                  {saved && <span className="hint">Güvenlik nedeniyle kayıtlı IBAN gösterilmez; düzenlerken yeniden girin.</span>}
+                  {saved && <span className="hint">{t('Güvenlik nedeniyle kayıtlı IBAN gösterilmez; düzenlerken yeniden girin.')}</span>}
                 </label>
               </section>
 
               <ErrorNote message={error} />
               <div className="form-actions">
-                {editing && <button type="button" className="button" onClick={() => { setEditing(false); setError(null); }} disabled={busy}>Vazgeç</button>}
+                {editing && <button type="button" className="button" onClick={() => { setEditing(false); setError(null); }} disabled={busy}>{t('Vazgeç')}</button>}
                 <button type="submit" className="button button-primary" disabled={busy || me?.emailVerified === false}
-                  title={me?.emailVerified === false ? 'Önce e-posta adresinizi doğrulayın' : undefined}>
-                  {busy ? 'Gönderiliyor…' : saved ? 'Güncellemeyi gönder' : 'Başvuruyu gönder'}
+                  title={me?.emailVerified === false ? t('Önce e-posta adresinizi doğrulayın') : undefined}>
+                  {busy ? t('Gönderiliyor…') : saved ? t('Güncellemeyi gönder') : t('Başvuruyu gönder')}
                 </button>
               </div>
             </form>

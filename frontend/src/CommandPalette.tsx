@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { t, tk } from './i18n';
 
 export interface Command {
   to: string;
@@ -11,11 +12,11 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Records an id can belong to. A pasted id is offered for each, since the id alone does not say which it is. */
 const RECORDS: { path: string; label: string }[] = [
-  { path: '/payments', label: 'Ödemeyi aç' },
-  { path: '/customers', label: 'Müşteriyi aç' },
-  { path: '/subscriptions', label: 'Aboneliği aç' },
-  { path: '/disputes', label: 'İtirazı aç' },
-  { path: '/payouts', label: 'Hesap kesimini aç' },
+  { path: '/payments', label: tk('Ödemeyi aç') },
+  { path: '/customers', label: tk('Müşteriyi aç') },
+  { path: '/subscriptions', label: tk('Aboneliği aç') },
+  { path: '/disputes', label: tk('İtirazı aç') },
+  { path: '/payouts', label: tk('Hesap kesimini aç') },
 ];
 
 /** Lower case without Turkish marks, so "odeme" finds "Ödemeler" and "IADE" finds "İade". */
@@ -35,7 +36,7 @@ export function searchCommands(query: string, pages: Command[]): Command[] {
   const trimmed = query.trim();
   if (UUID.test(trimmed)) {
     const id = trimmed.toLowerCase();
-    return RECORDS.map((record) => ({ to: `${record.path}/${id}`, label: record.label, group: 'Kimlikle aç' }));
+    return RECORDS.map((record) => ({ to: `${record.path}/${id}`, label: t(record.label), group: t('Kimlikle aç') }));
   }
   const words = fold(trimmed).split(/\s+/).filter(Boolean);
   if (words.length === 0) {
@@ -99,7 +100,7 @@ export function CommandPalette({ pages, onClose }: { pages: Command[]; onClose: 
   };
 
   return (
-    <dialog ref={dialog} className="dialog command-palette" aria-label="Hızlı arama" onClose={onClose}
+    <dialog ref={dialog} className="dialog command-palette" aria-label={t('Hızlı arama')} onClose={onClose}
       onClick={(event) => event.target === dialog.current && onClose()}>
       <input
         className="command-input"
@@ -108,8 +109,8 @@ export function CommandPalette({ pages, onClose }: { pages: Command[]; onClose: 
         aria-expanded="true"
         aria-controls={listId}
         aria-activedescendant={results.length ? `${listId}-${selected}` : undefined}
-        aria-label="Sayfa adı ya da ödeme kimliği"
-        placeholder="Sayfa ara ya da ödeme kimliği yapıştır…"
+        aria-label={t('Sayfa adı ya da ödeme kimliği')}
+        placeholder={t('Sayfa ara ya da ödeme kimliği yapıştır…')}
         value={query}
         onChange={(event) => {
           setQuery(event.target.value);
@@ -117,7 +118,7 @@ export function CommandPalette({ pages, onClose }: { pages: Command[]; onClose: 
         }}
         onKeyDown={onKeyDown}
       />
-      <ul id={listId} role="listbox" className="command-list" aria-label="Sonuçlar">
+      <ul id={listId} role="listbox" className="command-list" aria-label={t('Sonuçlar')}>
         {results.map((command, index) => (
           <li
             key={command.to}
@@ -133,9 +134,9 @@ export function CommandPalette({ pages, onClose }: { pages: Command[]; onClose: 
           </li>
         ))}
       </ul>
-      {results.length === 0 && <p className="command-empty muted">“{query.trim()}” ile eşleşen sayfa yok.</p>}
+      {results.length === 0 && <p className="command-empty muted">{t('“{query}” ile eşleşen sayfa yok.', { query: query.trim() })}</p>}
       <p className="command-help hint">
-        <kbd>↑</kbd> <kbd>↓</kbd> seç · <kbd>Enter</kbd> aç · <kbd>Esc</kbd> kapat
+        <kbd>↑</kbd> <kbd>↓</kbd> {t('seç')} · <kbd>Enter</kbd> {t('aç')} · <kbd>Esc</kbd> {t('kapat')}
       </p>
     </dialog>
   );

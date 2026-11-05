@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from './auth';
+import { LanguageProvider } from './i18n';
 import { Layout } from './Layout';
 import { AdminHome, AdminRunDetail } from './pages/Admin';
 import { Analytics } from './pages/Analytics';
@@ -32,6 +33,7 @@ function Protected() {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
+    <LanguageProvider>
     <AuthProvider>
       <BrowserRouter>
         <Routes>
@@ -71,5 +73,6 @@ createRoot(document.getElementById('root')!).render(
         </Routes>
       </BrowserRouter>
     </AuthProvider>
+    </LanguageProvider>
   </StrictMode>,
 );

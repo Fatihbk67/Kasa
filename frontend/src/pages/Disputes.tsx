@@ -2,25 +2,27 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { DisputeStatusBadge, EmptyState, ErrorNote, FormDialog, formatDateTime, Loading, PageHeader } from '../components';
+import { t, tk } from '../i18n';
 import { canOperate, useMe } from '../me';
 import { formatMoney } from '../money';
 import type { Dispute, DisputePage, DisputeReason, DisputeStatus } from '../types';
 import { useToast } from '../toast';
 import { useFetch, usePolling } from '../useFetch';
 
+/** Turkish keys, translated where shown. */
 export const DISPUTE_REASONS: Record<DisputeReason, string> = {
-  FRAUDULENT: 'Kart sahibi işlemi tanımıyor',
-  PRODUCT_NOT_RECEIVED: 'Ürün ulaşmadı',
-  PRODUCT_UNACCEPTABLE: 'Ürün beklendiği gibi değil',
-  DUPLICATE: 'Mükerrer çekim',
-  OTHER: 'Diğer',
+  FRAUDULENT: tk('Kart sahibi işlemi tanımıyor'),
+  PRODUCT_NOT_RECEIVED: tk('Ürün ulaşmadı'),
+  PRODUCT_UNACCEPTABLE: tk('Ürün beklendiği gibi değil'),
+  DUPLICATE: tk('Mükerrer çekim'),
+  OTHER: tk('Diğer'),
 };
 
 const STATUS_OPTIONS: { value: DisputeStatus; label: string }[] = [
-  { value: 'NEEDS_RESPONSE', label: 'Yanıt bekliyor' },
-  { value: 'UNDER_REVIEW', label: 'İnceleniyor' },
-  { value: 'WON', label: 'Kazanıldı' },
-  { value: 'LOST', label: 'Kaybedildi' },
+  { value: 'NEEDS_RESPONSE', label: tk('Yanıt bekliyor') },
+  { value: 'UNDER_REVIEW', label: tk('İnceleniyor') },
+  { value: 'WON', label: tk('Kazanıldı') },
+  { value: 'LOST', label: tk('Kaybedildi') },
 ];
 
 /** Whole days, rounded up, because "0 days left" would read as already too late. */
@@ -62,13 +64,13 @@ export function Disputes() {
 
   return (
     <>
-      <PageHeader title="İtirazlar" description="Müşteri bankasına başvurduğunda banka tutarı hemen geri alır. Süresinde kanıt sunarsanız geri kazanabilirsiniz." />
+      <PageHeader title={t('İtirazlar')} description={t('Müşteri bankasına başvurduğunda banka tutarı hemen geri alır. Süresinde kanıt sunarsanız geri kazanabilirsiniz.')} />
       <div className="toolbar">
         <label className="field field-inline">
-          Durum
+          {t('Durum')}
           <select value={status} onChange={(e) => setParams(e.target.value ? { status: e.target.value } : {})}>
-            <option value="">Tümü</option>
-            {STATUS_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            <option value="">{t('Tümü')}</option>
+            {STATUS_OPTIONS.map((option) => <option key={option.value} value={option.value}>{t(option.label)}</option>)}
           </select>
         </label>
       </div>
@@ -79,22 +81,22 @@ export function Disputes() {
             <table>
               <thead>
                 <tr>
-                  <th scope="col">Neden</th>
-                  <th scope="col">Durum</th>
-                  <th scope="col" className="numeric">Tutar</th>
-                  <th scope="col" className="hide-narrow">Son yanıt</th>
+                  <th scope="col">{t('Neden')}</th>
+                  <th scope="col">{t('Durum')}</th>
+                  <th scope="col" className="numeric">{t('Tutar')}</th>
+                  <th scope="col" className="hide-narrow">{t('Son yanıt')}</th>
                 </tr>
               </thead>
               <tbody>
                 {items.map((dispute) => (
                   <tr key={dispute.id} className="row-link" onClick={() => navigate(`/disputes/${dispute.id}`)}>
                     <td>
-                      <a href={`/disputes/${dispute.id}`} onClick={(e) => e.preventDefault()}>{DISPUTE_REASONS[dispute.reason]}</a>
+                      <a href={`/disputes/${dispute.id}`} onClick={(e) => e.preventDefault()}>{t(DISPUTE_REASONS[dispute.reason])}</a>
                     </td>
                     <td><DisputeStatusBadge status={dispute.status} /></td>
                     <td className="numeric">{formatMoney(dispute.amount, dispute.currency)}</td>
                     <td className="hide-narrow muted">
-                      {dispute.status === 'NEEDS_RESPONSE' ? `${daysLeft(dispute.respondBy)} gün kaldı` : '—'}
+                      {dispute.status === 'NEEDS_RESPONSE' ? t('{count} gün kaldı', { count: daysLeft(dispute.respondBy) }) : '—'}
                     </td>
                   </tr>
                 ))}
@@ -105,15 +107,15 @@ export function Disputes() {
           {cursor !== null && (
             <div className="load-more">
               <button type="button" className="button" onClick={loadMore} disabled={loadingMore}>
-                {loadingMore ? 'Yükleniyor…' : 'Daha fazla göster'}
+                {loadingMore ? t('Yükleniyor…') : t('Daha fazla göster')}
               </button>
             </div>
           )}
         </>
       ) : !firstPage.error && (
         <div className="card">
-          <EmptyState title={status ? 'Bu durumda itiraz yok' : 'Henüz itiraz yok'}>
-            Denemek için tahsil edilmiş bir ödemenin sayfasından banka itirazı simüle edebilirsiniz.
+          <EmptyState title={status ? t('Bu durumda itiraz yok') : t('Henüz itiraz yok')}>
+            {t('Denemek için tahsil edilmiş bir ödemenin sayfasından banka itirazı simüle edebilirsiniz.')}
           </EmptyState>
         </div>
       )}
@@ -132,19 +134,19 @@ function EvidenceDialog({ dispute, onClose, onDone }: { dispute: Dispute; onClos
   };
 
   return (
-    <FormDialog title="Kanıt gönder" submitLabel="Bankaya gönder" onClose={onClose} onSubmit={submit}>
-      <p className="muted">Bir kez gönderilir, sonradan değiştirilemez.</p>
+    <FormDialog title={t('Kanıt gönder')} submitLabel={t('Bankaya gönder')} onClose={onClose} onSubmit={submit}>
+      <p className="muted">{t('Bir kez gönderilir, sonradan değiştirilemez.')}</p>
       <label className="field">
-        Açıklama
+        {t('Açıklama')}
         <textarea required autoFocus maxLength={4000} rows={4} value={explanation} onChange={(e) => setExplanation(e.target.value)} />
       </label>
       <label className="field">
-        Kargo takip numarası
+        {t('Kargo takip numarası')}
         <input maxLength={200} value={tracking} onChange={(e) => setTracking(e.target.value)} />
-        <span className="hint">Simüle banka, teslimat kanıtı olan itirazları işletme lehine sonuçlandırır.</span>
+        <span className="hint">{t('Simüle banka, teslimat kanıtı olan itirazları işletme lehine sonuçlandırır.')}</span>
       </label>
       <label className="field">
-        Müşteriyle yazışma özeti
+        {t('Müşteriyle yazışma özeti')}
         <textarea maxLength={4000} rows={3} value={communication} onChange={(e) => setCommunication(e.target.value)} />
       </label>
     </FormDialog>
@@ -165,8 +167,8 @@ export function DisputeDetailPage() {
   if (!detail.data) {
     return (
       <>
-        <ErrorNote message={detail.errorStatus === 404 ? 'Bu itiraz bulunamadı.' : detail.error} />
-        <Link to="/disputes">İtirazlara dön</Link>
+        <ErrorNote message={detail.errorStatus === 404 ? t('Bu itiraz bulunamadı.') : detail.error} />
+        <Link to="/disputes">{t('İtirazlara dön')}</Link>
       </>
     );
   }
@@ -180,63 +182,65 @@ export function DisputeDetailPage() {
   };
   const accept = async () => {
     await api(`/disputes/${dispute.id}/accept`, { method: 'POST' });
-    finish('İtiraz kabul edildi.');
+    finish(t('İtiraz kabul edildi.'));
   };
 
   return (
     <>
-      <p className="breadcrumb"><Link to="/disputes">İtirazlar</Link> / Ayrıntı</p>
+      <p className="breadcrumb"><Link to="/disputes">{t('İtirazlar')}</Link> / {t('Ayrıntı')}</p>
       <PageHeader
         title={formatMoney(dispute.amount, dispute.currency)}
-        description={DISPUTE_REASONS[dispute.reason]}
+        description={t(DISPUTE_REASONS[dispute.reason])}
         actions={open && (
           <>
-            <button type="button" className="button button-primary" onClick={() => setDialog('evidence')}>Kanıt gönder</button>
-            <button type="button" className="button" onClick={() => setDialog('accept')}>Kabul et</button>
+            <button type="button" className="button button-primary" onClick={() => setDialog('evidence')}>{t('Kanıt gönder')}</button>
+            <button type="button" className="button" onClick={() => setDialog('accept')}>{t('Kabul et')}</button>
           </>
         )}
       />
       {dispute.status === 'NEEDS_RESPONSE' && (
         <p className="note note-warning" role="status">
-          Tutar bakiyenizden düşüldü. {formatDateTime(dispute.respondBy)} tarihine kadar ({daysLeft(dispute.respondBy)} gün) kanıt göndermezseniz itiraz kaybedilir.
+          {t('Tutar bakiyenizden düşüldü. {date} tarihine kadar ({count} gün) kanıt göndermezseniz itiraz kaybedilir.', { date: formatDateTime(dispute.respondBy), count: daysLeft(dispute.respondBy) })}
         </p>
       )}
-      {dispute.status === 'UNDER_REVIEW' && <p className="note note-warning" role="status">Kanıtınız bankada inceleniyor. Sonuç bu sayfada görünecek.</p>}
-      {dispute.status === 'WON' && <p className="note note-success" role="status">İtirazı kazandınız. Tutar bakiyenize geri döndü.</p>}
+      {dispute.status === 'UNDER_REVIEW' && <p className="note note-warning" role="status">{t('Kanıtınız bankada inceleniyor. Sonuç bu sayfada görünecek.')}</p>}
+      {dispute.status === 'WON' && <p className="note note-success" role="status">{t('İtirazı kazandınız. Tutar bakiyenize geri döndü.')}</p>}
       {dispute.status === 'LOST' && (
         <p className="note note-danger" role="status">
-          İtiraz kaybedildi. Tutar müşteride kaldı{dispute.feeAmount > 0 ? `, ayrıca ${formatMoney(dispute.feeAmount, dispute.currency)} itiraz ücreti kesildi` : ''}.
+          {dispute.feeAmount > 0
+            ? t('İtiraz kaybedildi. Tutar müşteride kaldı, ayrıca {fee} itiraz ücreti kesildi.', { fee: formatMoney(dispute.feeAmount, dispute.currency) })
+            : t('İtiraz kaybedildi. Tutar müşteride kaldı.')}
         </p>
       )}
 
       <section className="card">
         <dl className="details">
-          <div><dt>Durum</dt><dd><DisputeStatusBadge status={dispute.status} /></dd></div>
-          <div><dt>Ödeme</dt><dd><Link to={`/payments/${dispute.paymentId}`}><code>{dispute.paymentId.slice(0, 8)}</code></Link></dd></div>
-          <div><dt>Açılış</dt><dd>{formatDateTime(dispute.createdAt)}</dd></div>
-          <div><dt>Son yanıt</dt><dd>{formatDateTime(dispute.respondBy)}</dd></div>
-          {dispute.resolvedAt && <div><dt>Sonuç tarihi</dt><dd>{formatDateTime(dispute.resolvedAt)}</dd></div>}
+          <div><dt>{t('Durum')}</dt><dd><DisputeStatusBadge status={dispute.status} /></dd></div>
+          <div><dt>{t('Ödeme')}</dt><dd><Link to={`/payments/${dispute.paymentId}`}><code>{dispute.paymentId.slice(0, 8)}</code></Link></dd></div>
+          <div><dt>{t('Açılış')}</dt><dd>{formatDateTime(dispute.createdAt)}</dd></div>
+          <div><dt>{t('Son yanıt')}</dt><dd>{formatDateTime(dispute.respondBy)}</dd></div>
+          {dispute.resolvedAt && <div><dt>{t('Sonuç tarihi')}</dt><dd>{formatDateTime(dispute.resolvedAt)}</dd></div>}
         </dl>
       </section>
 
       {dispute.evidenceSubmittedAt && (
         <>
-          <div className="section-header"><h2>Gönderilen kanıt</h2></div>
+          <div className="section-header"><h2>{t('Gönderilen kanıt')}</h2></div>
           <section className="card">
             <dl className="details">
-              <div className="details-id"><dt>Açıklama</dt><dd className="prewrap">{dispute.evidenceExplanation}</dd></div>
-              {dispute.evidenceTracking && <div><dt>Kargo takip</dt><dd>{dispute.evidenceTracking}</dd></div>}
-              {dispute.evidenceCommunication && <div className="details-id"><dt>Yazışma</dt><dd className="prewrap">{dispute.evidenceCommunication}</dd></div>}
-              <div><dt>Gönderim</dt><dd>{formatDateTime(dispute.evidenceSubmittedAt)}</dd></div>
+              <div className="details-id"><dt>{t('Açıklama')}</dt><dd className="prewrap">{dispute.evidenceExplanation}</dd></div>
+              {dispute.evidenceTracking && <div><dt>{t('Kargo takip')}</dt><dd>{dispute.evidenceTracking}</dd></div>}
+              {dispute.evidenceCommunication && <div className="details-id"><dt>{t('Yazışma')}</dt><dd className="prewrap">{dispute.evidenceCommunication}</dd></div>}
+              <div><dt>{t('Gönderim')}</dt><dd>{formatDateTime(dispute.evidenceSubmittedAt)}</dd></div>
             </dl>
           </section>
         </>
       )}
 
-      {dialog === 'evidence' && <EvidenceDialog dispute={dispute} onClose={() => setDialog(null)} onDone={() => finish('Kanıt bankaya gönderildi.')} />}
+      {dialog === 'evidence' && <EvidenceDialog dispute={dispute} onClose={() => setDialog(null)} onDone={() => finish(t('Kanıt bankaya gönderildi.'))} />}
       {dialog === 'accept' && (
-        <FormDialog title="İtirazı kabul et" submitLabel="Kabul et" danger onClose={() => setDialog(null)} onSubmit={accept}>
-          <p>{formatMoney(dispute.amount, dispute.currency)} müşteride kalır ve itiraz ücreti kesilir. Bu işlem geri alınamaz.</p>
+        <FormDialog title={t('İtirazı kabul et')} submitLabel={t('Kabul et')} danger onClose={() => setDialog(null)} onSubmit={accept}>
+          <p>{t('{amount} müşteride kalır ve itiraz ücreti kesilir. Bu işlem geri alınamaz.', { amount: formatMoney(dispute.amount, dispute.currency) })}</p>
         </FormDialog>
       )}
     </>

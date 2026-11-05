@@ -2,80 +2,82 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { EmptyState, ErrorNote, formatDateTime, Loading, PageHeader } from '../components';
+import { locale, t, tk } from '../i18n';
 import { ROLE_LABELS } from '../me';
 import { formatMoney } from '../money';
 import type { AuditEntry, AuditPage as Page, ChainReport, Role } from '../types';
 import { useFetch } from '../useFetch';
 
 const ACTION_LABELS: Record<string, string> = {
-  TENANT_REGISTERED: 'İşletme kaydoldu',
-  TENANT_RENAMED: 'İşletme adı değişti',
-  LOGIN_SUCCEEDED: 'Giriş yapıldı',
-  LOGIN_FAILED: 'Başarısız giriş',
-  LOGIN_PASSWORD_ACCEPTED: 'Parola doğru, kod bekleniyor',
-  TWO_FACTOR_ENABLED: 'İki adımlı giriş açıldı',
-  TWO_FACTOR_DISABLED: 'İki adımlı giriş kapatıldı',
-  TWO_FACTOR_LOCKED: 'Hatalı kodlar nedeniyle hesap kilitlendi',
-  PASSWORD_RESET_REQUESTED: 'Parola sıfırlama istendi',
-  PASSWORD_RESET: 'Parola sıfırlandı',
-  ROLE_REQUESTED: 'Rol talebinde bulunuldu',
-  ROLE_REQUEST_CANCELED: 'Rol talebi geri çekildi',
-  ROLE_REQUEST_APPROVED: 'Rol talebi onaylandı',
-  ROLE_REQUEST_REJECTED: 'Rol talebi reddedildi',
-  MEMBER_RESTORED: 'Üye yeniden açıldı',
-  MERCHANT_APPROVED: 'İşletme onaylandı',
-  MERCHANT_SUSPENDED: 'İşletme askıya alındı',
-  MERCHANT_REACTIVATED: 'İşletme yeniden açıldı',
-  PASSWORD_CHANGED: 'Parola değişti',
-  API_KEY_CREATED: 'API anahtarı oluşturuldu',
-  API_KEY_REVOKED: 'API anahtarı iptal edildi',
-  WEBHOOK_ENDPOINT_CREATED: 'Webhook adresi eklendi',
-  WEBHOOK_ENDPOINT_DISABLED: 'Webhook adresi kapatıldı',
-  MEMBER_INVITED: 'Üye davet edildi',
-  INVITATION_REVOKED: 'Davet iptal edildi',
-  MEMBER_JOINED: 'Üye katıldı',
-  MEMBER_ROLE_CHANGED: 'Üye rolü değişti',
-  MEMBER_REMOVED: 'Üye çıkarıldı',
-  PAYMENT_CAPTURE_REQUESTED: 'Tahsilat istendi',
-  PAYMENT_VOID_REQUESTED: 'Provizyon iptali istendi',
-  PAYMENT_REFUND_REQUESTED: 'İade istendi',
-  DISPUTE_OPENED: 'İtiraz açıldı',
-  DISPUTE_EVIDENCE_SUBMITTED: 'İtiraza kanıt gönderildi',
-  DISPUTE_ACCEPTED: 'İtiraz kabul edildi',
-  DISPUTE_WON: 'İtiraz kazanıldı',
-  DISPUTE_LOST: 'İtiraz kaybedildi',
-  CUSTOMER_CREATED: 'Müşteri eklendi',
-  CUSTOMER_UPDATED: 'Müşteri güncellendi',
-  CUSTOMER_ANONYMIZED: 'Müşteri verisi silindi',
-  PAYMENT_LINK_CREATED: 'Ödeme bağlantısı oluşturuldu',
-  PAYMENT_LINK_DISABLED: 'Ödeme bağlantısı kapatıldı',
-  PLAN_CREATED: 'Plan oluşturuldu',
-  PLAN_ARCHIVED: 'Plan kapatıldı',
-  SUBSCRIPTION_CREATED: 'Abonelik başlatıldı',
-  SUBSCRIPTION_PLAN_CHANGED: 'Abonelik planı değişti',
-  SUBSCRIPTION_CARD_UPDATED: 'Abonelik kartı güncellendi',
-  SUBSCRIPTION_CANCEL_SCHEDULED: 'Abonelik iptali planlandı',
-  SUBSCRIPTION_RESUMED: 'Abonelik iptali geri alındı',
-  SUBSCRIPTION_CANCELED: 'Abonelik iptal edildi',
+  TENANT_REGISTERED: tk('İşletme kaydoldu'),
+  TENANT_RENAMED: tk('İşletme adı değişti'),
+  LOGIN_SUCCEEDED: tk('Giriş yapıldı'),
+  LOGIN_FAILED: tk('Başarısız giriş'),
+  LOGIN_PASSWORD_ACCEPTED: tk('Parola doğru, kod bekleniyor'),
+  TWO_FACTOR_ENABLED: tk('İki adımlı giriş açıldı'),
+  TWO_FACTOR_DISABLED: tk('İki adımlı giriş kapatıldı'),
+  TWO_FACTOR_LOCKED: tk('Hatalı kodlar nedeniyle hesap kilitlendi'),
+  PASSWORD_RESET_REQUESTED: tk('Parola sıfırlama istendi'),
+  PASSWORD_RESET: tk('Parola sıfırlandı'),
+  ROLE_REQUESTED: tk('Rol talebinde bulunuldu'),
+  ROLE_REQUEST_CANCELED: tk('Rol talebi geri çekildi'),
+  ROLE_REQUEST_APPROVED: tk('Rol talebi onaylandı'),
+  ROLE_REQUEST_REJECTED: tk('Rol talebi reddedildi'),
+  MEMBER_RESTORED: tk('Üye yeniden açıldı'),
+  MERCHANT_APPROVED: tk('İşletme onaylandı'),
+  MERCHANT_SUSPENDED: tk('İşletme askıya alındı'),
+  MERCHANT_REACTIVATED: tk('İşletme yeniden açıldı'),
+  PASSWORD_CHANGED: tk('Parola değişti'),
+  API_KEY_CREATED: tk('API anahtarı oluşturuldu'),
+  API_KEY_REVOKED: tk('API anahtarı iptal edildi'),
+  WEBHOOK_ENDPOINT_CREATED: tk('Webhook adresi eklendi'),
+  WEBHOOK_ENDPOINT_DISABLED: tk('Webhook adresi kapatıldı'),
+  MEMBER_INVITED: tk('Üye davet edildi'),
+  INVITATION_REVOKED: tk('Davet iptal edildi'),
+  MEMBER_JOINED: tk('Üye katıldı'),
+  MEMBER_ROLE_CHANGED: tk('Üye rolü değişti'),
+  MEMBER_REMOVED: tk('Üye çıkarıldı'),
+  PAYMENT_CAPTURE_REQUESTED: tk('Tahsilat istendi'),
+  PAYMENT_VOID_REQUESTED: tk('Provizyon iptali istendi'),
+  PAYMENT_REFUND_REQUESTED: tk('İade istendi'),
+  DISPUTE_OPENED: tk('İtiraz açıldı'),
+  DISPUTE_EVIDENCE_SUBMITTED: tk('İtiraza kanıt gönderildi'),
+  DISPUTE_ACCEPTED: tk('İtiraz kabul edildi'),
+  DISPUTE_WON: tk('İtiraz kazanıldı'),
+  DISPUTE_LOST: tk('İtiraz kaybedildi'),
+  CUSTOMER_CREATED: tk('Müşteri eklendi'),
+  CUSTOMER_UPDATED: tk('Müşteri güncellendi'),
+  CUSTOMER_ANONYMIZED: tk('Müşteri verisi silindi'),
+  PAYMENT_LINK_CREATED: tk('Ödeme bağlantısı oluşturuldu'),
+  PAYMENT_LINK_DISABLED: tk('Ödeme bağlantısı kapatıldı'),
+  PLAN_CREATED: tk('Plan oluşturuldu'),
+  PLAN_ARCHIVED: tk('Plan kapatıldı'),
+  SUBSCRIPTION_CREATED: tk('Abonelik başlatıldı'),
+  SUBSCRIPTION_PLAN_CHANGED: tk('Abonelik planı değişti'),
+  SUBSCRIPTION_CARD_UPDATED: tk('Abonelik kartı güncellendi'),
+  SUBSCRIPTION_CANCEL_SCHEDULED: tk('Abonelik iptali planlandı'),
+  SUBSCRIPTION_RESUMED: tk('Abonelik iptali geri alındı'),
+  SUBSCRIPTION_CANCELED: tk('Abonelik iptal edildi'),
 };
 
 const METADATA_LABELS: Record<string, string> = {
-  email: 'E-posta',
-  role: 'Rol',
-  from: 'Eski rol',
-  to: 'Yeni rol',
-  name: 'Ad',
-  prefix: 'Önek',
-  url: 'Adres',
-  businessName: 'İşletme',
-  title: 'Başlık',
-  reason: 'Neden',
-  planName: 'Plan',
-  secondFactor: 'İkinci adım',
+  email: tk('E-posta'),
+  role: tk('Rol'),
+  from: tk('Eski rol'),
+  to: tk('Yeni rol'),
+  name: tk('Ad'),
+  prefix: tk('Önek'),
+  url: tk('Adres'),
+  businessName: tk('İşletme'),
+  title: tk('Başlık'),
+  reason: tk('Neden'),
+  planName: tk('Plan'),
+  secondFactor: tk('İkinci adım'),
+  method: tk('Yöntem'),
 };
 
 function actionLabel(action: string): string {
-  return ACTION_LABELS[action] ?? action;
+  return ACTION_LABELS[action] ? t(ACTION_LABELS[action]) : action;
 }
 
 function details(entry: AuditEntry): string {
@@ -85,16 +87,19 @@ function details(entry: AuditEntry): string {
       .filter(([key]) => key !== 'operationId' && key !== 'currency')
       .map(([key, value]) => {
         if (key === 'amount') {
-          return `Tutar: ${formatMoney(Number(value), String(metadata.currency ?? 'TRY'))}`;
+          return `${t('Tutar')}: ${formatMoney(Number(value), String(metadata.currency ?? 'TRY'))}`;
         }
         if (entry.action === 'SUBSCRIPTION_PLAN_CHANGED') {
-          return `${key === 'from' ? 'Eski plan' : 'Yeni plan'}: ${String(value)}`;
+          return `${key === 'from' ? t('Eski plan') : t('Yeni plan')}: ${String(value)}`;
         }
         if (key === 'role' || key === 'from' || key === 'to') {
-          const label = ROLE_LABELS[value as Role] ?? String(value);
-          return `${METADATA_LABELS[key]}: ${label}`;
+          const label = ROLE_LABELS[value as Role] ? t(ROLE_LABELS[value as Role]) : String(value);
+          return `${t(METADATA_LABELS[key])}: ${label}`;
         }
-        return `${METADATA_LABELS[key] ?? key}: ${String(value)}`;
+        if (key === 'method' && value === 'google') {
+          return `${t(METADATA_LABELS[key])}: Google`;
+        }
+        return `${METADATA_LABELS[key] ? t(METADATA_LABELS[key]) : key}: ${String(value)}`;
       })
       .join(', ');
   } catch {
@@ -153,19 +158,19 @@ export function AuditPage() {
   return (
     <>
       <PageHeader
-        title="Denetim günlüğü"
-        description="Önemli işlemlerin değiştirilemez kaydı. Her kayıt bir öncekinin özetini içerir, bu yüzden geçmişle oynanırsa zincir bozulur."
-        actions={<button type="button" className="button" onClick={verify} disabled={verifying}>{verifying ? 'Doğrulanıyor…' : 'Zinciri doğrula'}</button>}
+        title={t('Denetim günlüğü')}
+        description={t('Önemli işlemlerin değiştirilemez kaydı. Her kayıt bir öncekinin özetini içerir, bu yüzden geçmişle oynanırsa zincir bozulur.')}
+        actions={<button type="button" className="button" onClick={verify} disabled={verifying}>{verifying ? t('Doğrulanıyor…') : t('Zinciri doğrula')}</button>}
       />
       <ErrorNote message={verifyError} />
       {report && (report.valid
-        ? <p className="note note-success" role="status">Zincir sağlam: {report.checked.toLocaleString('tr-TR')} kayıt doğrulandı, değiştirilmiş kayıt yok.</p>
-        : <p className="note note-danger" role="alert">Zincir bozuk: {report.brokenAtSeq} numaralı kayıt değiştirilmiş veya silinmiş. {report.checked.toLocaleString('tr-TR')} kayıt sağlam.</p>)}
+        ? <p className="note note-success" role="status">{t('Zincir sağlam: {count} kayıt doğrulandı, değiştirilmiş kayıt yok.', { count: report.checked.toLocaleString(locale()) })}</p>
+        : <p className="note note-danger" role="alert">{t('Zincir bozuk: {seq} numaralı kayıt değiştirilmiş veya silinmiş. {count} kayıt sağlam.', { seq: report.brokenAtSeq ?? '', count: report.checked.toLocaleString(locale()) })}</p>)}
       <div className="toolbar">
         <label className="field field-inline">
-          İşlem
+          {t('İşlem')}
           <select value={action} onChange={(e) => setParams(e.target.value ? { action: e.target.value } : {})}>
-            <option value="">Tümü</option>
+            <option value="">{t('Tümü')}</option>
             {(actions.data ?? []).map((value) => <option key={value} value={value}>{actionLabel(value)}</option>)}
           </select>
         </label>
@@ -177,10 +182,10 @@ export function AuditPage() {
             <table>
               <thead>
                 <tr>
-                  <th scope="col" className="numeric">No</th>
-                  <th scope="col">İşlem</th>
-                  <th scope="col">Yapan</th>
-                  <th scope="col" className="hide-narrow">Tarih</th>
+                  <th scope="col" className="numeric">{t('No')}</th>
+                  <th scope="col">{t('İşlem')}</th>
+                  <th scope="col">{t('Yapan')}</th>
+                  <th scope="col" className="hide-narrow">{t('Tarih')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -192,7 +197,7 @@ export function AuditPage() {
                       {details(entry) && <span className="hint row-hint">{details(entry)}</span>}
                     </td>
                     <td>
-                      {entry.actorLabel ?? 'Sistem'}
+                      {entry.actorLabel ?? t('Sistem')}
                       {entry.ip && <span className="hint row-hint">{entry.ip}</span>}
                     </td>
                     <td className="hide-narrow muted">{formatDateTime(entry.createdAt)}</td>
@@ -205,12 +210,12 @@ export function AuditPage() {
           {cursor !== null && (
             <div className="load-more">
               <button type="button" className="button" onClick={loadMore} disabled={loadingMore}>
-                {loadingMore ? 'Yükleniyor…' : 'Daha fazla göster'}
+                {loadingMore ? t('Yükleniyor…') : t('Daha fazla göster')}
               </button>
             </div>
           )}
         </>
-      ) : !firstPage.error && <div className="card"><EmptyState title="Kayıt yok" /></div>}
+      ) : !firstPage.error && <div className="card"><EmptyState title={t('Kayıt yok')} /></div>}
     </>
   );
 }

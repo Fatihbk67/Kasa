@@ -40,6 +40,9 @@ services:
         sync: false
       - key: KASA_IYZICO_SECRET_KEY
         sync: false
+      # Google's public OAuth client id for "Sign in with Google". Without it the button is not shown.
+      - key: KASA_GOOGLE_CLIENT_ID
+        sync: false
       # Fits the JVM into a small instance, trading peak speed for memory.
       - key: JAVA_TOOL_OPTIONS
         value: -Xmx320m -XX:+UseSerialGC -XX:TieredStopAtLevel=1

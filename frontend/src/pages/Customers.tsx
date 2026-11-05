@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api, ApiError } from '../api';
 import { EmptyState, ErrorNote, FormDialog, formatDateTime, Loading, PageHeader } from '../components';
+import { t } from '../i18n';
 import { canOperate, useMe } from '../me';
 import { formatMoney } from '../money';
 import type { Customer, CustomerPage, PaymentPage } from '../types';
@@ -10,7 +11,7 @@ import { useFetch } from '../useFetch';
 import { PaymentTable } from './PaymentTable';
 
 function friendlyCustomerError(e: unknown): Error {
-  return e instanceof ApiError && e.status === 409 ? new Error('Bu e-postayla kayıtlı bir müşteri zaten var.') : e as Error;
+  return e instanceof ApiError && e.status === 409 ? new Error(t('Bu e-postayla kayıtlı bir müşteri zaten var.')) : e as Error;
 }
 
 /** Each currency on its own line: adding lira to dollars would produce a number that means nothing. */
@@ -22,7 +23,7 @@ function Totals({ customer }: { customer: Customer }) {
 }
 
 function displayName(customer: Customer): string {
-  return customer.anonymized ? 'Silinmiş müşteri' : customer.name || customer.email || '—';
+  return customer.anonymized ? t('Silinmiş müşteri') : customer.name || customer.email || '—';
 }
 
 function CustomerDialog({ customer, onClose, onDone }: { customer?: Customer; onClose: () => void; onDone: (saved: Customer) => void }) {
@@ -42,13 +43,13 @@ function CustomerDialog({ customer, onClose, onDone }: { customer?: Customer; on
   };
 
   return (
-    <FormDialog title={customer ? 'Müşteriyi düzenle' : 'Yeni müşteri'} submitLabel="Kaydet" onClose={onClose} onSubmit={submit}>
+    <FormDialog title={customer ? t('Müşteriyi düzenle') : t('Yeni müşteri')} submitLabel={t('Kaydet')} onClose={onClose} onSubmit={submit}>
       <label className="field">
-        E-posta
+        {t('E-posta')}
         <input type="email" required autoFocus maxLength={254} value={email} onChange={(e) => setEmail(e.target.value)} />
       </label>
       <label className="field">
-        Ad soyad
+        {t('Ad soyad')}
         <input maxLength={200} value={name} onChange={(e) => setName(e.target.value)} />
       </label>
     </FormDialog>
@@ -98,16 +99,16 @@ export function Customers() {
   return (
     <>
       <PageHeader
-        title="Müşteriler"
-        description="Ödeme yapan kişiler ve sizde bıraktıkları tutar."
-        actions={canOperate(me) && <button type="button" className="button button-primary" onClick={() => setCreating(true)}>Yeni müşteri</button>}
+        title={t('Müşteriler')}
+        description={t('Ödeme yapan kişiler ve sizde bıraktıkları tutar.')}
+        actions={canOperate(me) && <button type="button" className="button button-primary" onClick={() => setCreating(true)}>{t('Yeni müşteri')}</button>}
       />
       <form className="toolbar" onSubmit={search} role="search">
         <label className="field field-inline">
-          Ara
-          <input type="search" placeholder="E-posta veya ad" value={draft} onChange={(e) => setDraft(e.target.value)} />
+          {t('Ara')}
+          <input type="search" placeholder={t('E-posta veya ad')} value={draft} onChange={(e) => setDraft(e.target.value)} />
         </label>
-        <button type="submit" className="button">Ara</button>
+        <button type="submit" className="button">{t('Ara')}</button>
       </form>
       <ErrorNote message={firstPage.error} />
       {firstPage.loading ? <Loading /> : items.length > 0 ? (
@@ -116,9 +117,9 @@ export function Customers() {
             <table>
               <thead>
                 <tr>
-                  <th scope="col">Müşteri</th>
-                  <th scope="col" className="numeric">Harcama</th>
-                  <th scope="col" className="hide-narrow">Kayıt</th>
+                  <th scope="col">{t('Müşteri')}</th>
+                  <th scope="col" className="numeric">{t('Harcama')}</th>
+                  <th scope="col" className="hide-narrow">{t('Kayıt')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -139,15 +140,15 @@ export function Customers() {
           {cursor !== null && (
             <div className="load-more">
               <button type="button" className="button" onClick={loadMore} disabled={loadingMore}>
-                {loadingMore ? 'Yükleniyor…' : 'Daha fazla göster'}
+                {loadingMore ? t('Yükleniyor…') : t('Daha fazla göster')}
               </button>
             </div>
           )}
         </>
       ) : !firstPage.error && (
         <div className="card">
-          <EmptyState title={applied ? 'Aramanızla eşleşen müşteri yok' : 'Henüz müşteri yok'}>
-            {!applied && 'Ödeme bağlantısıyla ödeme yapan kişiler burada görünür.'}
+          <EmptyState title={applied ? t('Aramanızla eşleşen müşteri yok') : t('Henüz müşteri yok')}>
+            {!applied && t('Ödeme bağlantısıyla ödeme yapan kişiler burada görünür.')}
           </EmptyState>
         </div>
       )}
@@ -170,8 +171,8 @@ export function CustomerDetailPage() {
   if (!detail.data) {
     return (
       <>
-        <ErrorNote message={detail.errorStatus === 404 ? 'Bu müşteri bulunamadı.' : detail.error} />
-        <Link to="/customers">Müşterilere dön</Link>
+        <ErrorNote message={detail.errorStatus === 404 ? t('Bu müşteri bulunamadı.') : detail.error} />
+        <Link to="/customers">{t('Müşterilere dön')}</Link>
       </>
     );
   }
@@ -183,51 +184,51 @@ export function CustomerDetailPage() {
       await api(`/customers/${customer.id}`, { method: 'DELETE' });
     } catch (e) {
       throw e instanceof ApiError && e.status === 409
-        ? new Error('Açık bir itiraz veya süren bir abonelik var. Önce onların sonuçlanması gerekir.')
+        ? new Error(t('Açık bir itiraz veya süren bir abonelik var. Önce onların sonuçlanması gerekir.'))
         : e;
     }
     setDialog(null);
     detail.reload();
-    notify('Kişisel veriler silindi.');
+    notify(t('Kişisel veriler silindi.'));
   };
 
   return (
     <>
-      <p className="breadcrumb"><Link to="/customers">Müşteriler</Link> / Ayrıntı</p>
+      <p className="breadcrumb"><Link to="/customers">{t('Müşteriler')}</Link> / {t('Ayrıntı')}</p>
       <PageHeader
         title={displayName(customer)}
-        description={customer.anonymized ? 'Kişisel veriler silindi. Ödeme kayıtları yasal saklama için duruyor.' : customer.email ?? undefined}
+        description={customer.anonymized ? t('Kişisel veriler silindi. Ödeme kayıtları yasal saklama için duruyor.') : customer.email ?? undefined}
         actions={canEdit && (
           <>
-            <button type="button" className="button" onClick={() => setDialog('edit')}>Düzenle</button>
-            <button type="button" className="button" onClick={() => setDialog('anonymize')}>Kişisel veriyi sil</button>
+            <button type="button" className="button" onClick={() => setDialog('edit')}>{t('Düzenle')}</button>
+            <button type="button" className="button" onClick={() => setDialog('anonymize')}>{t('Kişisel veriyi sil')}</button>
           </>
         )}
       />
       <section className="card">
         <dl className="details">
-          <div><dt>Harcama</dt><dd><Totals customer={customer} /></dd></div>
-          <div><dt>Tahsil edilen ödeme</dt><dd>{customer.totals.reduce((sum, total) => sum + total.paymentCount, 0)}</dd></div>
-          <div><dt>Kayıt</dt><dd>{formatDateTime(customer.createdAt)}</dd></div>
+          <div><dt>{t('Harcama')}</dt><dd><Totals customer={customer} /></dd></div>
+          <div><dt>{t('Tahsil edilen ödeme')}</dt><dd>{customer.totals.reduce((sum, total) => sum + total.paymentCount, 0)}</dd></div>
+          <div><dt>{t('Kayıt')}</dt><dd>{formatDateTime(customer.createdAt)}</dd></div>
         </dl>
       </section>
 
-      <div className="section-header"><h2>Ödemeler</h2></div>
+      <div className="section-header"><h2>{t('Ödemeler')}</h2></div>
       <ErrorNote message={payments.error} />
       {payments.loading && !payments.data ? <Loading /> : payments.data && payments.data.items.length > 0
         ? <PaymentTable payments={payments.data.items} />
-        : !payments.error && <div className="card"><EmptyState title="Henüz ödeme yok" /></div>}
+        : !payments.error && <div className="card"><EmptyState title={t('Henüz ödeme yok')} /></div>}
 
       {dialog === 'edit' && (
         <CustomerDialog customer={customer} onClose={() => setDialog(null)} onDone={() => {
           setDialog(null);
           detail.reload();
-          notify('Müşteri güncellendi.');
+          notify(t('Müşteri güncellendi.'));
         }} />
       )}
       {dialog === 'anonymize' && (
-        <FormDialog title="Kişisel veriyi sil" submitLabel="Kalıcı olarak sil" danger onClose={() => setDialog(null)} onSubmit={anonymize}>
-          <p>Ad ve e-posta geri getirilemeyecek şekilde silinir. Ödeme kayıtları, mali mevzuat gereği kişiyle bağlantısız olarak kalır.</p>
+        <FormDialog title={t('Kişisel veriyi sil')} submitLabel={t('Kalıcı olarak sil')} danger onClose={() => setDialog(null)} onSubmit={anonymize}>
+          <p>{t('Ad ve e-posta geri getirilemeyecek şekilde silinir. Ödeme kayıtları, mali mevzuat gereği kişiyle bağlantısız olarak kalır.')}</p>
         </FormDialog>
       )}
     </>

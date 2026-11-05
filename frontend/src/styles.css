@@ -1090,6 +1090,11 @@ form.toolbar {
 }
 
 .checkout-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
   margin-top: 14px;
   font-size: 0.85rem;
 }
@@ -1238,6 +1243,49 @@ form.toolbar {
   margin: 0;
   color: var(--success);
   font-weight: 600;
+}
+
+/* Language and theme pickers */
+.preference-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.language-picker button {
+  min-height: 26px;
+  padding: 1px 9px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.auth-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* Sign in with Google */
+.google-signin {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Takes no room until the server says Google is set up and the button has drawn. */
+.google-signin-pending .google-button {
+  height: 0;
+  overflow: hidden;
+}
+
+.google-button {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  min-height: 0;
+  color-scheme: light;
 }
 
 /* 404 */

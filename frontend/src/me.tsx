@@ -1,5 +1,6 @@
 import { createContext, useContext, type ReactNode } from 'react';
 import { api } from './api';
+import { tk } from './i18n';
 import type { Me, Role } from './types';
 import { useFetch } from './useFetch';
 
@@ -19,10 +20,11 @@ export function useMe(): MeState {
   return useContext(MeContext);
 }
 
+/** Translated where shown, with t(). */
 export const ROLE_LABELS: Record<Role, string> = {
-  OWNER: 'Sahip',
-  ADMIN: 'Yönetici',
-  VIEWER: 'Görüntüleyici',
+  OWNER: tk('Sahip'),
+  ADMIN: tk('Yönetici'),
+  VIEWER: tk('Görüntüleyici'),
 };
 
 /**

@@ -87,6 +87,10 @@ kasa:
     api-key: ${KASA_IYZICO_API_KEY:}
     secret-key: ${KASA_IYZICO_SECRET_KEY:}
     base-url: ${KASA_IYZICO_BASE_URL:https://sandbox-api.iyzipay.com}
+  google:
+    # "Sign in with Google". Left empty, the sign-in page shows only email and password.
+    client-id: ${KASA_GOOGLE_CLIENT_ID:}
+    jwks-url: https://www.googleapis.com/oauth2/v3/certs
   disputes:
     # Charged only when the merchant loses, in minor units.
     loss-fee: 15000

@@ -1,16 +1,17 @@
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api';
 import { EmptyState, ErrorNote, failureMessage, formatDate, formatDateTime, Loading, PageHeader, PayoutStatusBadge } from '../components';
+import { t, tk } from '../i18n';
 import { formatMoney } from '../money';
 import type { Payout, PayoutDetail, PayoutItem } from '../types';
 import { useFetch } from '../useFetch';
 
 const ITEM_LABELS: Record<PayoutItem['type'], string> = {
-  CAPTURE: 'Tahsilat',
-  REFUND: 'İade',
-  DISPUTE_WITHDRAWAL: 'İtiraz kesintisi',
-  DISPUTE_REVERSAL: 'İtiraz iadesi',
-  DISPUTE_FEE: 'İtiraz ücreti',
+  CAPTURE: tk('Tahsilat'),
+  REFUND: tk('İade'),
+  DISPUTE_WITHDRAWAL: tk('İtiraz kesintisi'),
+  DISPUTE_REVERSAL: tk('İtiraz iadesi'),
+  DISPUTE_FEE: tk('İtiraz ücreti'),
 };
 
 export function Payouts() {
@@ -19,17 +20,17 @@ export function Payouts() {
 
   return (
     <>
-      <PageHeader title="Hesap kesimleri" description="Tahsil edilen ödemeler komisyon düşülerek her gün hesabınıza aktarılır." />
+      <PageHeader title={t('Hesap kesimleri')} description={t('Tahsil edilen ödemeler komisyon düşülerek her gün hesabınıza aktarılır.')} />
       <ErrorNote message={payouts.error} />
       {payouts.loading ? <Loading /> : payouts.data && payouts.data.length > 0 ? (
         <div className="table-wrap">
           <table>
             <thead>
               <tr>
-                <th scope="col">Hesap kesim tarihi</th>
-                <th scope="col">Durum</th>
-                <th scope="col" className="numeric">Net tutar</th>
-                <th scope="col" className="hide-narrow">Ödeme zamanı</th>
+                <th scope="col">{t('Hesap kesim tarihi')}</th>
+                <th scope="col">{t('Durum')}</th>
+                <th scope="col" className="numeric">{t('Net tutar')}</th>
+                <th scope="col" className="hide-narrow">{t('Ödeme zamanı')}</th>
               </tr>
             </thead>
             <tbody>
@@ -48,7 +49,7 @@ export function Payouts() {
         </div>
       ) : !payouts.error && (
         <div className="card">
-          <EmptyState title="Henüz hesap kesimi yok">Tahsil ettiğiniz ödemeler günlük hesap kesiminde burada görünür.</EmptyState>
+          <EmptyState title={t('Henüz hesap kesimi yok')}>{t('Tahsil ettiğiniz ödemeler günlük hesap kesiminde burada görünür.')}</EmptyState>
         </div>
       )}
     </>
@@ -65,8 +66,8 @@ export function PayoutDetailPage() {
   if (!detail.data) {
     return (
       <>
-        <ErrorNote message={detail.errorStatus === 404 ? 'Bu hesap kesimi bulunamadı.' : detail.error} />
-        <Link to="/payouts">Hesap kesimlerine dön</Link>
+        <ErrorNote message={detail.errorStatus === 404 ? t('Bu hesap kesimi bulunamadı.') : detail.error} />
+        <Link to="/payouts">{t('Hesap kesimlerine dön')}</Link>
       </>
     );
   }
@@ -74,28 +75,28 @@ export function PayoutDetailPage() {
   const { payout, items } = detail.data;
   return (
     <>
-      <p className="breadcrumb"><Link to="/payouts">Hesap kesimleri</Link> / Ayrıntı</p>
-      <PageHeader title={formatMoney(payout.amount, payout.currency)} description={`${formatDate(payout.settlementDate)} hesap kesimi`} actions={<PayoutStatusBadge status={payout.status} />} />
+      <p className="breadcrumb"><Link to="/payouts">{t('Hesap kesimleri')}</Link> / {t('Ayrıntı')}</p>
+      <PageHeader title={formatMoney(payout.amount, payout.currency)} description={t('{date} hesap kesimi', { date: formatDate(payout.settlementDate) })} actions={<PayoutStatusBadge status={payout.status} />} />
       {payout.status === 'FAILED' && (
-        <p className="note note-danger">{failureMessage(payout.failureCode)} Tutar bakiyenize geri döndü, sonraki hesap kesiminde yeniden denenecek.</p>
+        <p className="note note-danger">{failureMessage(payout.failureCode)} {t('Tutar bakiyenize geri döndü, sonraki hesap kesiminde yeniden denenecek.')}</p>
       )}
-      <div className="section-header"><h2>Kalemler</h2></div>
+      <div className="section-header"><h2>{t('Kalemler')}</h2></div>
       <div className="table-wrap">
         <table>
           <thead>
             <tr>
-              <th scope="col">Ödeme</th>
-              <th scope="col">Tür</th>
-              <th scope="col" className="numeric">Brüt</th>
-              <th scope="col" className="numeric">Komisyon</th>
-              <th scope="col" className="numeric">Net</th>
+              <th scope="col">{t('Ödeme')}</th>
+              <th scope="col">{t('Tür')}</th>
+              <th scope="col" className="numeric">{t('Brüt')}</th>
+              <th scope="col" className="numeric">{t('Komisyon')}</th>
+              <th scope="col" className="numeric">{t('Net')}</th>
             </tr>
           </thead>
           <tbody>
             {items.map((item) => (
               <tr key={item.operationId}>
                 <td><Link to={`/payments/${item.paymentId}`}><code>{item.paymentId.slice(0, 8)}</code></Link></td>
-                <td>{ITEM_LABELS[item.type]}</td>
+                <td>{t(ITEM_LABELS[item.type])}</td>
                 <td className="numeric">{formatMoney(item.grossAmount, payout.currency)}</td>
                 <td className="numeric">{formatMoney(item.feeAmount, payout.currency)}</td>
                 <td className={item.netAmount < 0 ? 'numeric negative' : 'numeric'}>{formatMoney(item.netAmount, payout.currency)}</td>

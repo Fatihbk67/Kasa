@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { t } from './i18n';
 
 type Notify = (message: string) => void;
 
@@ -29,7 +30,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {message && (
           <div className="toast">
             <span>{message}</span>
-            <button type="button" className="toast-close" aria-label="Kapat" onClick={() => setMessage(null)}>×</button>
+            <button type="button" className="toast-close" aria-label={t('Kapat')} onClick={() => setMessage(null)}>×</button>
           </div>
         )}
       </div>

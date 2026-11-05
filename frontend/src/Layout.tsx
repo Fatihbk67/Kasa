@@ -8,6 +8,7 @@ import { api, ApiError } from './api';
 import { ToastProvider, useToast } from './toast';
 import { Brand } from './components';
 import { saveTheme, storedTheme, THEME_LABELS, type ThemeChoice } from './theme';
+import { LanguagePicker, t, tk } from './i18n';
 
 interface NavItem {
   to: string;
@@ -21,33 +22,33 @@ const NAV: { title: string | null; items: NavItem[] }[] = [
   {
     title: null,
     items: [
-      { to: '/', label: 'Genel bakış', end: true },
-      { to: '/analytics', label: 'Analiz' },
+      { to: '/', label: tk('Genel bakış'), end: true },
+      { to: '/analytics', label: tk('Analiz') },
     ],
   },
   {
-    title: 'Para',
+    title: tk('Para'),
     items: [
-      { to: '/payments', label: 'Ödemeler' },
-      { to: '/subscriptions', label: 'Abonelikler' },
-      { to: '/payment-links', label: 'Ödeme bağlantıları' },
-      { to: '/disputes', label: 'İtirazlar' },
-      { to: '/risk', label: 'Risk ve dolandırıcılık', operatorOnly: true },
-      { to: '/payouts', label: 'Hesap kesimleri' },
+      { to: '/payments', label: tk('Ödemeler') },
+      { to: '/subscriptions', label: tk('Abonelikler') },
+      { to: '/payment-links', label: tk('Ödeme bağlantıları') },
+      { to: '/disputes', label: tk('İtirazlar') },
+      { to: '/risk', label: tk('Risk ve dolandırıcılık'), operatorOnly: true },
+      { to: '/payouts', label: tk('Hesap kesimleri') },
     ],
   },
   {
-    title: 'Müşteriler',
-    items: [{ to: '/customers', label: 'Müşteriler' }],
+    title: tk('Müşteriler'),
+    items: [{ to: '/customers', label: tk('Müşteriler') }],
   },
   {
-    title: 'Hesap',
+    title: tk('Hesap'),
     items: [
-      { to: '/developers', label: 'Geliştiriciler', operatorOnly: true },
-      { to: '/team', label: 'Ekip', operatorOnly: true },
-      { to: '/audit', label: 'Denetim günlüğü', operatorOnly: true },
-      { to: '/onboarding', label: 'İşletme başvurusu', ownerOnly: true },
-      { to: '/settings', label: 'Ayarlar' },
+      { to: '/developers', label: tk('Geliştiriciler'), operatorOnly: true },
+      { to: '/team', label: tk('Ekip'), operatorOnly: true },
+      { to: '/audit', label: tk('Denetim günlüğü'), operatorOnly: true },
+      { to: '/onboarding', label: tk('İşletme başvurusu'), ownerOnly: true },
+      { to: '/settings', label: tk('Ayarlar') },
     ],
   },
 ];
@@ -63,9 +64,9 @@ function VerifyEmailBanner({ email }: { email: string }) {
     setError(null);
     try {
       await api('/settings/email-verification', { method: 'POST' });
-      notify(`${email} adresine yeni bir doğrulama bağlantısı gönderildi.`);
+      notify(t('{email} adresine yeni bir doğrulama bağlantısı gönderildi.', { email }));
     } catch (e) {
-      setError(e instanceof ApiError && e.status === 429 ? 'Çok sık istendi. Biraz sonra yeniden deneyin.' : (e as Error).message);
+      setError(e instanceof ApiError && e.status === 429 ? t('Çok sık istendi. Biraz sonra yeniden deneyin.') : (e as Error).message);
     } finally {
       setBusy(false);
     }
@@ -74,10 +75,10 @@ function VerifyEmailBanner({ email }: { email: string }) {
   return (
     <div className="note note-warning verify-banner" role="status">
       <span>
-        <strong>E-posta adresinizi doğrulayın.</strong> {email} adresine bir doğrulama bağlantısı gönderdik. Doğrulamadan işletme başvurusu yapılamaz.
+        <strong>{t('E-posta adresinizi doğrulayın.')}</strong> {t('{email} adresine bir doğrulama bağlantısı gönderdik. Doğrulamadan işletme başvurusu yapılamaz.', { email })}
         {error && <> {error}</>}
       </span>
-      <button type="button" className="button button-small" onClick={resend} disabled={busy}>{busy ? 'Gönderiliyor…' : 'Yeniden gönder'}</button>
+      <button type="button" className="button button-small" onClick={resend} disabled={busy}>{busy ? t('Gönderiliyor…') : t('Yeniden gönder')}</button>
     </div>
   );
 }
@@ -89,10 +90,10 @@ function ThemePicker() {
     saveTheme(choice);
   };
   return (
-    <div className="segmented theme-picker" role="group" aria-label="Görünüm">
+    <div className="segmented theme-picker" role="group" aria-label={t('Görünüm')}>
       {(Object.keys(THEME_LABELS) as ThemeChoice[]).map((choice) => (
         <button key={choice} type="button" aria-pressed={theme === choice} onClick={() => choose(choice)}>
-          {THEME_LABELS[choice]}
+          {t(THEME_LABELS[choice])}
         </button>
       ))}
     </div>
@@ -114,7 +115,7 @@ function Shell() {
     ...group,
     items: group.items.filter((item) => (!item.operatorOnly || canOperate(me)) && (!item.ownerOnly || isOwner(me))),
   }));
-  const pages: Command[] = visible.flatMap((group) => group.items.map((item) => ({ to: item.to, label: item.label, group: group.title ?? 'Panel' })));
+  const pages: Command[] = visible.flatMap((group) => group.items.map((item) => ({ to: item.to, label: t(item.label), group: group.title ? t(group.title) : t('Panel') })));
 
   return (
     <div className="shell">
@@ -124,24 +125,24 @@ function Shell() {
           <NotificationBell />
           <button type="button" className="button button-small menu-toggle" aria-expanded={menuOpen} aria-controls="main-menu"
             onClick={() => setMenuOpen(!menuOpen)}>
-            {menuOpen ? 'Kapat' : 'Menü'}
+            {menuOpen ? t('Kapat') : t('Menü')}
           </button>
         </div>
         <button type="button" className="search-trigger sidebar-menu" onClick={openSearch} aria-keyshortcuts={IS_MAC ? 'Meta+K' : 'Control+K'}>
-          <span>Ara…</span>
+          <span>{t('Ara…')}</span>
           <kbd>{IS_MAC ? '⌘K' : 'Ctrl K'}</kbd>
         </button>
-        <nav id="main-menu" aria-label="Ana menü" className="sidebar-menu">
+        <nav id="main-menu" aria-label={t('Ana menü')} className="sidebar-menu">
           {visible.map((group) => {
             if (group.items.length === 0) {
               return null;
             }
             return (
               <div className="nav-group" key={group.title ?? 'start'}>
-                {group.title && <span className="nav-title">{group.title}</span>}
+                {group.title && <span className="nav-title">{t(group.title)}</span>}
                 {group.items.map((item) => (
                   <NavLink key={item.to} to={item.to} end={item.end} className="nav-link" onClick={() => setMenuOpen(false)}>
-                    {item.label}
+                    {t(item.label)}
                   </NavLink>
                 ))}
               </div>
@@ -150,23 +151,27 @@ function Shell() {
         </nav>
         <div className="sidebar-footer sidebar-menu">
           <span className="merchant-name">{me?.tenantName}</span>
-          {me && <span className="hint">{me.email} · {ROLE_LABELS[me.role]}</span>}
-          <span className="test-mode">Test modu</span>
-          <ThemePicker />
-          <button type="button" className="link-button" onClick={signOut}>Çıkış yap</button>
+          {me && <span className="hint">{me.email} · {t(ROLE_LABELS[me.role])}</span>}
+          <span className="test-mode">{t('Test modu')}</span>
+          <div className="preference-row">
+            <ThemePicker />
+            <LanguagePicker compact />
+          </div>
+          <button type="button" className="link-button" onClick={signOut}>{t('Çıkış yap')}</button>
         </div>
       </aside>
       <main className="content">
         {me && !me.emailVerified && <VerifyEmailBanner email={me.email} />}
         {me?.tenantStatus === 'PENDING' && (
           <p className="note note-warning" role="status">
-            Hesabınız platform onayı bekliyor. Bu sürede paneli gezebilir, ekibinizi ve ayarlarınızı hazırlayabilirsiniz; onaydan sonra ödeme alabilirsiniz.
-            {isOwner(me) && <> <Link to="/onboarding">İşletme başvurusuna git</Link></>}
+            {t('Hesabınız platform onayı bekliyor. Bu sürede paneli gezebilir, ekibinizi ve ayarlarınızı hazırlayabilirsiniz; onaydan sonra ödeme alabilirsiniz.')}
+            {isOwner(me) && <> <Link to="/onboarding">{t('İşletme başvurusuna git')}</Link></>}
           </p>
         )}
         {me?.tenantStatus === 'SUSPENDED' && (
           <p className="note note-danger" role="alert">
-            Hesabınız askıya alındı{me.tenantStatusReason ? `: ${me.tenantStatusReason}` : '.'} Yeni ödeme alınamaz ve hesap kesimi durduruldu. İadeler ve itirazlar çalışmaya devam eder.
+            {me.tenantStatusReason ? t('Hesabınız askıya alındı: {reason}', { reason: me.tenantStatusReason }) : t('Hesabınız askıya alındı.')}
+            {' '}{t('Yeni ödeme alınamaz ve hesap kesimi durduruldu. İadeler ve itirazlar çalışmaya devam eder.')}
           </p>
         )}
         <Outlet />

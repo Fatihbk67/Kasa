@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError } from './api';
+import { t } from './i18n';
 
 interface FetchState<T> {
   data: T | null;
@@ -30,7 +31,7 @@ export function useFetch<T>(load: () => Promise<T>, deps: readonly unknown[]): F
       })
       .catch((e: unknown) => {
         if (request === latestRequest.current) {
-          setError(e instanceof Error ? e.message : 'Beklenmeyen bir hata oluştu.');
+          setError(e instanceof Error ? e.message : t('Beklenmeyen bir hata oluştu.'));
           setErrorStatus(e instanceof ApiError ? e.status : null);
         }
       })

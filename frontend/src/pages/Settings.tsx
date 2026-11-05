@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { api, ApiError } from '../api';
 import { useAuth } from '../auth';
 import { CopyButton, ErrorNote, Loading, PageHeader } from '../components';
+import { LanguagePicker, t, tk } from '../i18n';
 import { isOwner, ROLE_LABELS, useMe } from '../me';
 import type { Role } from '../types';
 import { useFetch } from '../useFetch';
@@ -37,17 +38,27 @@ function BusinessSettings() {
 
   return (
     <section className="card settings-card">
-      <h2>İşletme</h2>
+      <h2>{t('İşletme')}</h2>
       <form onSubmit={submit} className="stack">
         <label className="field">
-          İşletme adı
+          {t('İşletme adı')}
           <input required maxLength={200} value={name} onChange={(e) => setName(e.target.value)} />
-          <span className="hint">Müşterileriniz ödeme sayfasında bu adı görür.</span>
+          <span className="hint">{t('Müşterileriniz ödeme sayfasında bu adı görür.')}</span>
         </label>
         <ErrorNote message={error} />
-        {saved && <p className="note note-success" role="status">Kaydedildi.</p>}
-        <div><button type="submit" className="button button-primary" disabled={busy}>{busy ? 'Kaydediliyor…' : 'Kaydet'}</button></div>
+        {saved && <p className="note note-success" role="status">{t('Kaydedildi.')}</p>}
+        <div><button type="submit" className="button button-primary" disabled={busy}>{busy ? t('Kaydediliyor…') : t('Kaydet')}</button></div>
       </form>
+    </section>
+  );
+}
+
+function LanguageSettings() {
+  return (
+    <section className="card settings-card">
+      <h2>{t('Dil')}</h2>
+      <p className="muted">{t('Panelin dilini seçin. Seçiminiz bu tarayıcıda hatırlanır.')}</p>
+      <LanguagePicker />
     </section>
   );
 }
@@ -75,7 +86,7 @@ function PasswordSettings() {
       setNext('');
       setSaved(true);
     } catch (e) {
-      setError(e instanceof ApiError && e.status === 422 ? 'Mevcut parola hatalı.' : (e as Error).message);
+      setError(e instanceof ApiError && e.status === 422 ? t('Mevcut parola hatalı.') : (e as Error).message);
     } finally {
       setBusy(false);
     }
@@ -83,20 +94,21 @@ function PasswordSettings() {
 
   return (
     <section className="card settings-card">
-      <h2>Parola</h2>
+      <h2>{t('Parola')}</h2>
       <form onSubmit={submit} className="stack">
         <label className="field">
-          Mevcut parola
+          {t('Mevcut parola')}
           <input type="password" required autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} />
+          <span className="hint">{t('Google ile kaydolduysanız önce giriş sayfasındaki “Parolamı unuttum” ile bir parola belirleyin.')}</span>
         </label>
         <label className="field">
-          Yeni parola
+          {t('Yeni parola')}
           <input type="password" required minLength={12} maxLength={72} autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} />
-          <span className="hint">En az 12 karakter. Değiştirince diğer cihazlardaki oturumlarınız kapanır.</span>
+          <span className="hint">{t('En az 12 karakter. Değiştirince diğer cihazlardaki oturumlarınız kapanır.')}</span>
         </label>
         <ErrorNote message={error} />
-        {saved && <p className="note note-success" role="status">Parolanız değişti, diğer oturumlar kapatıldı.</p>}
-        <div><button type="submit" className="button button-primary" disabled={busy}>{busy ? 'Değiştiriliyor…' : 'Parolayı değiştir'}</button></div>
+        {saved && <p className="note note-success" role="status">{t('Parolanız değişti, diğer oturumlar kapatıldı.')}</p>}
+        <div><button type="submit" className="button button-primary" disabled={busy}>{busy ? t('Değiştiriliyor…') : t('Parolayı değiştir')}</button></div>
       </form>
     </section>
   );
@@ -123,7 +135,7 @@ function TwoFactorSettings() {
     try {
       await action();
     } catch (e) {
-      setError(e instanceof ApiError && e.status === 422 ? 'Parola veya kod hatalı.' : (e as Error).message);
+      setError(e instanceof ApiError && e.status === 422 ? t('Parola veya kod hatalı.') : (e as Error).message);
     } finally {
       setBusy(false);
     }
@@ -163,54 +175,54 @@ function TwoFactorSettings() {
 
   return (
     <section className="card settings-card">
-      <h2>İki adımlı giriş</h2>
+      <h2>{t('İki adımlı giriş')}</h2>
       <ErrorNote message={status.error} />
       {recoveryCodes && (
         <div className="note note-warning">
-          <strong>Kurtarma kodlarınızı şimdi saklayın</strong>
-          <p>Telefonunuza ulaşamazsanız her kod bir kez giriş sağlar. Bir daha gösterilmeyecek.</p>
+          <strong>{t('Kurtarma kodlarınızı şimdi saklayın')}</strong>
+          <p>{t('Telefonunuza ulaşamazsanız her kod bir kez giriş sağlar. Bir daha gösterilmeyecek.')}</p>
           <code className="secret recovery-codes">{recoveryCodes.join('\n')}</code>
           <div><CopyButton value={recoveryCodes.join('\n')} /></div>
         </div>
       )}
       {status.loading && !status.data ? <Loading /> : status.data?.enabled ? (
         <form onSubmit={disable} className="stack">
-          <p className="note note-success" role="status">Açık. {status.data.recoveryCodesLeft} kurtarma kodu kaldı.</p>
+          <p className="note note-success" role="status">{t('Açık. {count} kurtarma kodu kaldı.', { count: status.data.recoveryCodesLeft })}</p>
           <label className="field">
-            Parola
+            {t('Parola')}
             <input type="password" required autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
           </label>
           <label className="field">
-            Doğrulama kodu
+            {t('Doğrulama kodu')}
             <input inputMode="numeric" required autoComplete="one-time-code" maxLength={6} value={code} onChange={(e) => setCode(e.target.value)} />
           </label>
           <ErrorNote message={error} />
-          <div><button type="submit" className="button" disabled={busy}>{busy ? 'Kapatılıyor…' : 'İki adımlı girişi kapat'}</button></div>
+          <div><button type="submit" className="button" disabled={busy}>{busy ? t('Kapatılıyor…') : t('İki adımlı girişi kapat')}</button></div>
         </form>
       ) : setup ? (
         <form onSubmit={enable} className="stack">
-          <p className="muted">Doğrulama uygulamanızda (Google Authenticator, Authy) elle ekleme seçeneğine bu anahtarı girin:</p>
+          <p className="muted">{t('Doğrulama uygulamanızda (Google Authenticator, Authy) elle ekleme seçeneğine bu anahtarı girin:')}</p>
           <div className="secret-row">
             <code className="secret">{setup.secret}</code>
             <CopyButton value={setup.secret} />
           </div>
           <label className="field">
-            Uygulamadaki 6 haneli kod
+            {t('Uygulamadaki 6 haneli kod')}
             <input inputMode="numeric" required autoFocus autoComplete="one-time-code" maxLength={6} value={code} onChange={(e) => setCode(e.target.value)} />
-            <span className="hint">Açınca diğer cihazlardaki oturumlarınız kapanır.</span>
+            <span className="hint">{t('Açınca diğer cihazlardaki oturumlarınız kapanır.')}</span>
           </label>
           <ErrorNote message={error} />
-          <div><button type="submit" className="button button-primary" disabled={busy}>{busy ? 'Doğrulanıyor…' : 'Aç'}</button></div>
+          <div><button type="submit" className="button button-primary" disabled={busy}>{busy ? t('Doğrulanıyor…') : t('İki adımlı girişi aç')}</button></div>
         </form>
       ) : (
         <form onSubmit={begin} className="stack">
-          <p className="muted">Parolanız çalınsa bile telefonunuzdaki kod olmadan girilemez.</p>
+          <p className="muted">{t('Parolanız çalınsa bile telefonunuzdaki kod olmadan girilemez.')}</p>
           <label className="field">
-            Parola
+            {t('Parola')}
             <input type="password" required autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
           </label>
           <ErrorNote message={error} />
-          <div><button type="submit" className="button button-primary" disabled={busy}>{busy ? 'Hazırlanıyor…' : 'Kuruluma başla'}</button></div>
+          <div><button type="submit" className="button button-primary" disabled={busy}>{busy ? t('Hazırlanıyor…') : t('Kuruluma başla')}</button></div>
         </form>
       )}
     </section>
@@ -229,10 +241,10 @@ interface RoleRequest {
 }
 
 const REQUEST_LABELS: Record<RoleRequest['status'], string> = {
-  PENDING: 'Platform yöneticisinin kararı bekleniyor',
-  APPROVED: 'Onaylandı',
-  REJECTED: 'Reddedildi',
-  CANCELED: 'Geri çekildi',
+  PENDING: tk('Platform yöneticisinin kararı bekleniyor'),
+  APPROVED: tk('Onaylandı'),
+  REJECTED: tk('Reddedildi'),
+  CANCELED: tk('Geri çekildi'),
 };
 
 /** A member asks the platform administrator for another role; the request and its answer stay visible here. */
@@ -256,7 +268,7 @@ function RoleRequestSettings() {
       setReason('');
       latest.reload();
     } catch (e) {
-      setError(e instanceof ApiError && e.status === 409 ? 'Zaten açık bir talebiniz var veya bu rol sizde.' : (e as Error).message);
+      setError(e instanceof ApiError && e.status === 409 ? t('Zaten açık bir talebiniz var veya bu rol sizde.') : (e as Error).message);
     } finally {
       setBusy(false);
     }
@@ -282,31 +294,31 @@ function RoleRequestSettings() {
 
   return (
     <section className="card settings-card">
-      <h2>Rol talebi</h2>
-      <p className="muted">Şu anki rolünüz: <strong>{me ? ROLE_LABELS[me.role] : '—'}</strong>. Farklı bir yetki gerekiyorsa platform yöneticisinden isteyin.</p>
+      <h2>{t('Rol talebi')}</h2>
+      <p className="muted">{t('Şu anki rolünüz: {role}. Farklı bir yetki gerekiyorsa platform yöneticisinden isteyin.', { role: me ? t(ROLE_LABELS[me.role]) : '—' })}</p>
       {request && (
         <p className={`note ${request.status === 'APPROVED' ? 'note-success' : request.status === 'REJECTED' ? 'note-danger' : 'note-warning'}`} role="status">
-          {ROLE_LABELS[request.requestedRole]} talebiniz: {REQUEST_LABELS[request.status]}.
-          {request.decisionNote && ` Not: ${request.decisionNote}`}
+          {t('{role} talebiniz: {status}.', { role: t(ROLE_LABELS[request.requestedRole]), status: t(REQUEST_LABELS[request.status]) })}
+          {request.decisionNote && ` ${t('Not: {note}', { note: request.decisionNote })}`}
         </p>
       )}
       {pending ? (
-        <div><button type="button" className="button" disabled={busy} onClick={cancel}>Talebi geri çek</button></div>
+        <div><button type="button" className="button" disabled={busy} onClick={cancel}>{t('Talebi geri çek')}</button></div>
       ) : (
         <form onSubmit={submit} className="stack">
           <label className="field">
-            İstenen rol
+            {t('İstenen rol')}
             <select value={role || others[0]} onChange={(e) => setRole(e.target.value as Role)}>
-              {others.map((option) => <option key={option} value={option}>{ROLE_LABELS[option]}</option>)}
+              {others.map((option) => <option key={option} value={option}>{t(ROLE_LABELS[option])}</option>)}
             </select>
           </label>
           <label className="field">
-            Gerekçe
+            {t('Gerekçe')}
             <textarea required maxLength={500} rows={3} value={reason} onChange={(e) => setReason(e.target.value)} />
-            <span className="hint">Yönetici bu metni görür ve kararını buna göre verir.</span>
+            <span className="hint">{t('Yönetici bu metni görür ve kararını buna göre verir.')}</span>
           </label>
           <ErrorNote message={error} />
-          <div><button type="submit" className="button button-primary" disabled={busy}>{busy ? 'Gönderiliyor…' : 'Talep gönder'}</button></div>
+          <div><button type="submit" className="button button-primary" disabled={busy}>{busy ? t('Gönderiliyor…') : t('Talep gönder')}</button></div>
         </form>
       )}
     </section>
@@ -317,9 +329,10 @@ export function Settings() {
   const { me } = useMe();
   return (
     <>
-      <PageHeader title="Ayarlar" description={me ? `${me.email} · ${ROLE_LABELS[me.role]}` : undefined} />
+      <PageHeader title={t('Ayarlar')} description={me ? `${me.email} · ${t(ROLE_LABELS[me.role])}` : undefined} />
       <div className="settings">
         {isOwner(me) && <BusinessSettings />}
+        <LanguageSettings />
         <PasswordSettings />
         <TwoFactorSettings />
         <RoleRequestSettings />

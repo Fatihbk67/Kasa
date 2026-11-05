@@ -1,7 +1,10 @@
+import { locale } from './i18n';
+
 const MAX_MINOR_UNITS = 1_000_000_000_000;
 
 export function formatMoney(minorUnits: number, currency: string): string {
-  return new Intl.NumberFormat('tr-TR', { style: 'currency', currency }).format(minorUnits / 100);
+  // narrowSymbol keeps "₺" in English too, where the default would print "TRY".
+  return new Intl.NumberFormat(locale(), { style: 'currency', currency, currencyDisplay: 'narrowSymbol' }).format(minorUnits / 100);
 }
 
 /**

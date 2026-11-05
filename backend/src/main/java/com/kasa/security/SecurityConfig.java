@@ -38,7 +38,13 @@ public class SecurityConfig {
     private static final String VIEWER = "ROLE_VIEWER";
 
     // Limits the damage of any script injection, which matters because the dashboard's token is reachable from script.
+    // Google's sign-in button is the one outside script: it loads from, frames and talks to accounts.google.com/gsi only.
+    // It styles its button inline, which Google's own guidance allows for; scripts stay strict, and they are what an
+    // injection would need.
+    private static final String GOOGLE_SIGN_IN = "https://accounts.google.com/gsi/";
     private static final String CONTENT_SECURITY_POLICY = "default-src 'self'; img-src 'self' data:; object-src 'none'; "
+            + "script-src 'self' " + GOOGLE_SIGN_IN + "client; frame-src " + GOOGLE_SIGN_IN + "; "
+            + "connect-src 'self' " + GOOGLE_SIGN_IN + "; style-src 'self' 'unsafe-inline' " + GOOGLE_SIGN_IN + "style; "
             + "base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
 
     @Bean

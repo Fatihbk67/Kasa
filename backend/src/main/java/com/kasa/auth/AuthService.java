@@ -76,11 +76,22 @@ public class AuthService {
 
     public TokenResponse register(String businessName, String email, String password) {
         requireFitsBcrypt(password);
-        String normalizedEmail = normalize(email);
         // Hashing is deliberately slow, so it happens before a pooled connection is taken.
-        String passwordHash = passwordEncoder.encode(password);
-        UUID tenantId = UUID.randomUUID();
+        return createOwner(businessName, normalize(email), passwordEncoder.encode(password), null);
+    }
 
+    /**
+     * Opens an account for an address an identity provider has already confirmed, so no verification mail is sent.
+     * The password is random and never shown; the owner can set one later through "forgot password".
+     */
+    public TokenResponse registerVerified(String businessName, String email, String provider) {
+        // 64 hex characters: 244 random bits, and within the 72 bytes bcrypt reads.
+        String unusablePassword = (UUID.randomUUID().toString() + UUID.randomUUID()).replace("-", "");
+        return createOwner(businessName, normalize(email), passwordEncoder.encode(unusablePassword), provider);
+    }
+
+    private TokenResponse createOwner(String businessName, String normalizedEmail, String passwordHash, String verifiedBy) {
+        UUID tenantId = UUID.randomUUID();
         try {
             UUID userId = tx.execute(status -> {
                 tenantScope.apply(tenantId);
@@ -90,18 +101,21 @@ public class AuthService {
                         .param("name", businessName)
                         .update();
                 UUID id = jdbc.sql("""
-                                INSERT INTO users (tenant_id, email, password_hash, role)
-                                VALUES (:tenantId, :email, :passwordHash, 'OWNER')
+                                INSERT INTO users (tenant_id, email, password_hash, role, email_verified_at)
+                                VALUES (:tenantId, :email, :passwordHash, 'OWNER', CASE WHEN :verified THEN now() END)
                                 RETURNING id
                                 """)
                         .param("tenantId", tenantId)
                         .param("email", normalizedEmail)
                         .param("passwordHash", passwordHash)
+                        .param("verified", verifiedBy != null)
                         .query(UUID.class)
                         .single();
                 auditLog.record(tenantId, AuditLog.Actor.user(id, normalizedEmail), "TENANT_REGISTERED", "TENANT", tenantId,
-                        Map.of("businessName", businessName));
-                emailVerification.issue(tenantId, id, normalizedEmail);
+                        verifiedBy == null ? Map.of("businessName", businessName) : Map.of("businessName", businessName, "method", verifiedBy));
+                if (verifiedBy == null) {
+                    emailVerification.issue(tenantId, id, normalizedEmail);
+                }
                 return id;
             });
             return token(userId, tenantId, INITIAL_TOKEN_VERSION);
@@ -110,14 +124,33 @@ public class AuthService {
         }
     }
 
-    public LoginResponse login(String email, String password) {
-        return login(email, password, null);
+    /**
+     * Signs in the account that owns an address an identity provider has confirmed, in place of a password. A
+     * second factor is still asked for when the account has one. Empty when no account uses that address.
+     */
+    public Optional<LoginResponse> loginVerified(String email, String provider) {
+        String normalizedEmail = normalize(email);
+        return findCredentials(normalizedEmail).map(found -> {
+            String challenge = tx.execute(status -> {
+                tenantScope.apply(found.tenantId());
+                // The provider has just proven the address, which is all that verification asks.
+                jdbc.sql("UPDATE users SET email_verified_at = COALESCE(email_verified_at, now()) WHERE id = :id")
+                        .param("id", found.userId())
+                        .update();
+                auditLog.record(found.tenantId(), AuditLog.Actor.user(found.userId(), normalizedEmail),
+                        found.twoFactor() ? "LOGIN_PASSWORD_ACCEPTED" : "LOGIN_SUCCEEDED", "USER", found.userId(), Map.of("method", provider));
+                return found.twoFactor() ? twoFactor.startChallenge(found.tenantId(), found.userId(), found.tokenVersion()) : null;
+            });
+            if (challenge != null) {
+                return new LoginResponse(null, null, null, true, challenge, null);
+            }
+            TokenResponse issued = token(found.userId(), found.tenantId(), found.tokenVersion());
+            return new LoginResponse(issued.tenantId(), issued.accessToken(), issued.expiresInSeconds(), false, null, null);
+        });
     }
 
-    public LoginResponse login(String email, String password, String ip) {
-        String normalizedEmail = normalize(email);
-        String adminChallenge = admins.startLogin(ip, email, password).orElse(null);
-        Optional<LoginCredentials> credentials = jdbc.sql("""
+    private Optional<LoginCredentials> findCredentials(String normalizedEmail) {
+        return jdbc.sql("""
                         SELECT user_id, tenant_id, password_hash, token_version, two_factor
                         FROM find_login_credentials(:email)
                         """)
@@ -129,6 +162,16 @@ public class AuthService {
                         rs.getInt("token_version"),
                         rs.getBoolean("two_factor")))
                 .optional();
+    }
+
+    public LoginResponse login(String email, String password) {
+        return login(email, password, null);
+    }
+
+    public LoginResponse login(String email, String password, String ip) {
+        String normalizedEmail = normalize(email);
+        String adminChallenge = admins.startLogin(ip, email, password).orElse(null);
+        Optional<LoginCredentials> credentials = findCredentials(normalizedEmail);
 
         // Unknown emails still pay for a hash comparison, so response time does not reveal which emails exist.
         String hash = credentials.map(LoginCredentials::passwordHash).orElse(decoyHash);

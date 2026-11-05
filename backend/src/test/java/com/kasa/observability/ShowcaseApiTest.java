@@ -91,7 +91,11 @@ class ShowcaseApiTest extends PostgresIntegrationTest {
     void responsesCarrySecurityHeaders() {
         ResponseEntity<Void> response = client().get().uri("/actuator/health").retrieve().toBodilessEntity();
 
-        assertThat(response.getHeaders().getFirst("Content-Security-Policy")).contains("default-src 'self'", "frame-ancestors 'none'");
+        String policy = response.getHeaders().getFirst("Content-Security-Policy");
+        assertThat(policy).contains("default-src 'self'", "frame-ancestors 'none'", "object-src 'none'");
+        // Google's sign-in script is the only outside code allowed to run, and nothing may run inline.
+        assertThat(policy).contains("script-src 'self' https://accounts.google.com/gsi/client;");
+        assertThat(policy.split("script-src")[1].split(";")[0]).doesNotContain("unsafe");
         assertThat(response.getHeaders().getFirst("X-Content-Type-Options")).isEqualTo("nosniff");
     }
 

@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError } from '../api';
 import { ErrorNote, Loading } from '../components';
+import { t } from '../i18n';
 import { formatMoney } from '../money';
 import type { BankAnswer, BankChallenge as Challenge, SignedBankResult } from '../types';
 import { useFetch } from '../useFetch';
@@ -38,7 +39,7 @@ export function BankChallenge() {
   const returnToShop = async (result: SignedBankResult, returnUrl: string) => {
     const session = sessionOf(returnUrl);
     if (!session) {
-      setError('Mağazaya dönüş adresi tanınmadı.');
+      setError(t('Mağazaya dönüş adresi tanınmadı.'));
       setBusy(false);
       return;
     }
@@ -56,14 +57,14 @@ export function BankChallenge() {
       const answer = await api<BankAnswer>(`/public/bank/3ds/${id}`, { method: 'POST', body: cancel ? { cancel: true } : { code } });
       if (answer.status === 'PENDING') {
         setAttemptsLeft(answer.attemptsLeft);
-        setError(`Kod hatalı. ${answer.attemptsLeft} deneme hakkınız kaldı.`);
+        setError(t('Kod hatalı. {count} deneme hakkınız kaldı.', { count: answer.attemptsLeft ?? 0 }));
         setCode('');
         setBusy(false);
         return;
       }
       await returnToShop(answer.result!, answer.returnUrl!);
     } catch (e) {
-      setError(e instanceof ApiError && e.status === 409 ? 'Bu doğrulama zaten tamamlandı.' : (e as Error).message);
+      setError(e instanceof ApiError && e.status === 409 ? t('Bu doğrulama zaten tamamlandı.') : (e as Error).message);
       setBusy(false);
     }
   };
@@ -78,10 +79,11 @@ export function BankChallenge() {
   }
   const data = challenge.data;
   if (!data) {
-    return <div className="bank-page"><div className="bank-card"><ErrorNote message="Doğrulama bulunamadı." /></div></div>;
+    return <div className="bank-page"><div className="bank-card"><ErrorNote message={t('Doğrulama bulunamadı.')} /></div></div>;
   }
   const remaining = secondsLeft(data.expiresAt, now);
   const finished = data.status !== 'PENDING' || remaining === 0;
+  const time = `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, '0')}`;
 
   return (
     <div className="bank-page">
@@ -89,42 +91,43 @@ export function BankChallenge() {
         <header className="bank-header">
           <span className="bank-logo" aria-hidden="true">◆</span>
           <div>
-            <strong>Kasa Test Bankası</strong>
-            <span className="bank-sub">3D Secure güvenli ödeme doğrulaması</span>
+            <strong>{t('Kasa Test Bankası')}</strong>
+            <span className="bank-sub">{t('3D Secure güvenli ödeme doğrulaması')}</span>
           </div>
         </header>
         <dl className="bank-details">
-          <div><dt>İşyeri</dt><dd>{data.merchantName}</dd></div>
-          <div><dt>Tutar</dt><dd>{formatMoney(data.amount, data.currency)}</dd></div>
-          <div><dt>Kart</dt><dd>{data.cardHint}</dd></div>
+          <div><dt>{t('İşyeri')}</dt><dd>{data.merchantName}</dd></div>
+          <div><dt>{t('Tutar')}</dt><dd>{formatMoney(data.amount, data.currency)}</dd></div>
+          <div><dt>{t('Kart')}</dt><dd>{data.cardHint}</dd></div>
         </dl>
         {finished ? (
-          <p className="note note-warning">Bu doğrulamanın süresi doldu veya tamamlandı. Mağazaya dönüp yeniden deneyebilirsiniz.</p>
+          <p className="note note-warning">{t('Bu doğrulamanın süresi doldu veya tamamlandı. Mağazaya dönüp yeniden deneyebilirsiniz.')}</p>
         ) : (
           <form className="stack" onSubmit={submit}>
-            <p>Telefonunuza gönderilen 6 haneli doğrulama kodunu girin.</p>
+            <p>{t('Telefonunuza gönderilen 6 haneli doğrulama kodunu girin.')}</p>
             <div className="bank-sms" role="note">
-              <span className="hint">Test modu · SMS</span>
-              <span>Kasa Test Bankası: {formatMoney(data.amount, data.currency)} tutarlı işleminiz için doğrulama kodunuz <strong>{data.testCode}</strong></span>
+              <span className="hint">{t('Test modu · SMS')}</span>
+              <span>
+                {t('Kasa Test Bankası: {amount} tutarlı işleminiz için doğrulama kodunuz', { amount: formatMoney(data.amount, data.currency) })} <strong>{data.testCode}</strong>
+              </span>
             </div>
             <label className="field">
-              Doğrulama kodu
+              {t('Doğrulama kodu')}
               <input autoFocus required inputMode="numeric" autoComplete="one-time-code" pattern="\d{6}" maxLength={6}
                 value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} />
               <span className="hint">
-                Kalan süre {Math.floor(remaining / 60)}:{String(remaining % 60).padStart(2, '0')}
-                {` · ${attemptsLeft ?? data.attemptsLeft} deneme hakkı`}
+                {t('Kalan süre {time} · {count} deneme hakkı', { time, count: attemptsLeft ?? data.attemptsLeft })}
               </span>
             </label>
             <ErrorNote message={error} />
             <div className="form-actions">
-              <button type="button" className="button" disabled={busy} onClick={() => void send(true)}>İşlemi iptal et</button>
-              <button type="submit" className="button button-primary" disabled={busy || code.length !== 6}>{busy ? 'Doğrulanıyor…' : 'Onayla'}</button>
+              <button type="button" className="button" disabled={busy} onClick={() => void send(true)}>{t('İşlemi iptal et')}</button>
+              <button type="submit" className="button button-primary" disabled={busy || code.length !== 6}>{busy ? t('Doğrulanıyor…') : t('Onayla')}</button>
             </div>
           </form>
         )}
       </div>
-      <p className="checkout-footer muted">Bu sayfa kart bankanızı temsil eder · Test modu</p>
+      <p className="checkout-footer muted">{t('Bu sayfa kart bankanızı temsil eder · Test modu')}</p>
     </div>
   );
 }

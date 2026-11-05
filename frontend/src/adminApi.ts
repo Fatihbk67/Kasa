@@ -1,4 +1,5 @@
 import { ApiError } from './api';
+import { t } from './i18n';
 
 const TOKEN_KEY = 'kasa.adminToken';
 
@@ -45,13 +46,13 @@ export async function adminApi<T>(path: string, method: 'GET' | 'POST' = 'GET', 
       body: body === undefined ? undefined : JSON.stringify(body),
     });
   } catch {
-    throw new ApiError(0, 'Sunucuya ulaşılamadı. Bağlantınızı kontrol edip yeniden deneyin.');
+    throw new ApiError(0, t('Sunucuya ulaşılamadı. Bağlantınızı kontrol edip yeniden deneyin.'));
   }
   if (response.status === 401) {
-    throw new ApiError(401, 'Oturum geçersiz. Yeniden giriş yapın.');
+    throw new ApiError(401, t('Oturum geçersiz. Yeniden giriş yapın.'));
   }
   if (!response.ok) {
-    throw new ApiError(response.status, 'İşlem tamamlanamadı.');
+    throw new ApiError(response.status, t('İşlem tamamlanamadı.'));
   }
   return (response.status === 204 ? undefined : await response.json()) as T;
 }

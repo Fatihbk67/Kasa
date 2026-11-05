@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
-import { EmptyState, ErrorNote, FormDialog, formatDateTime, Loading, PageHeader, RISK_REASONS } from '../components';
+import { EmptyState, ErrorNote, FormDialog, formatDateTime, Loading, PageHeader, riskReason } from '../components';
+import { t, tk } from '../i18n';
 import { canOperate, useMe } from '../me';
 import { formatMoney, parseAmount } from '../money';
 import { useToast } from '../toast';
@@ -9,31 +10,31 @@ import type { BlockedCard, Payment, RiskRule, RiskRuleKind } from '../types';
 import { useFetch } from '../useFetch';
 
 const KIND_LABELS: Record<RiskRuleKind, string> = {
-  CARD_VELOCITY: 'Kart deneme sıklığı',
-  CARD_DECLINES: 'Art arda reddedilen kart',
-  AMOUNT_ABOVE: 'Yüksek tutar',
+  CARD_VELOCITY: tk('Kart deneme sıklığı'),
+  CARD_DECLINES: tk('Art arda reddedilen kart'),
+  AMOUNT_ABOVE: tk('Yüksek tutar'),
 };
 
 function windowLabel(minutes: number): string {
   if (minutes % 1440 === 0) {
-    return `${minutes / 1440} gün`;
+    return t('{count} gün', { count: minutes / 1440 });
   }
   if (minutes % 60 === 0) {
-    return `${minutes / 60} saat`;
+    return t('{count} saat', { count: minutes / 60 });
   }
-  return `${minutes} dakika`;
+  return t('{count} dakika', { count: minutes });
 }
 
 /** The rule as a sentence, because "CARD_VELOCITY 5/10" means nothing to the person who has to trust it. */
 export function describeRule(rule: Pick<RiskRule, 'kind' | 'threshold' | 'windowMinutes' | 'currency' | 'action'>): string {
-  const outcome = rule.action === 'BLOCK' ? 'engelle' : 'incelemeye al';
+  const outcome = rule.action === 'BLOCK' ? t('engelle') : t('incelemeye al');
   switch (rule.kind) {
     case 'CARD_VELOCITY':
-      return `Aynı kart ${windowLabel(rule.windowMinutes ?? 0)} içinde ${rule.threshold} kereden fazla denenirse ${outcome}`;
+      return t('Aynı kart {window} içinde {count} kereden fazla denenirse {outcome}', { window: windowLabel(rule.windowMinutes ?? 0), count: rule.threshold, outcome });
     case 'CARD_DECLINES':
-      return `Kart ${windowLabel(rule.windowMinutes ?? 0)} içinde bankadan ${rule.threshold} kez reddedildiyse ${outcome}`;
+      return t('Kart {window} içinde bankadan {count} kez reddedildiyse {outcome}', { window: windowLabel(rule.windowMinutes ?? 0), count: rule.threshold, outcome });
     case 'AMOUNT_ABOVE':
-      return `Tutar ${formatMoney(rule.threshold, rule.currency ?? 'TRY')} üstündeyse ${outcome}`;
+      return t('Tutar {amount} üstündeyse {outcome}', { amount: formatMoney(rule.threshold, rule.currency ?? 'TRY'), outcome });
   }
 }
 
@@ -50,7 +51,7 @@ function ReviewQueue({ onChanged }: { onChanged: () => void }) {
     setError(null);
     try {
       const result = await api<Payment>(`/risk/reviews/${payment.id}/approve`, { method: 'POST', body: { capture: true } });
-      notify(result.status === 'CAPTURED' ? 'Ödeme onaylandı ve tahsil edildi.' : 'Ödeme onaylandı.');
+      notify(result.status === 'CAPTURED' ? t('Ödeme onaylandı ve tahsil edildi.') : t('Ödeme onaylandı.'));
       queue.reload();
       onChanged();
     } catch (e) {
@@ -62,7 +63,7 @@ function ReviewQueue({ onChanged }: { onChanged: () => void }) {
 
   const reject = async () => {
     await api(`/risk/reviews/${rejecting!.id}/reject`, { method: 'POST', body: { blockCard } });
-    notify(blockCard ? 'Ödeme reddedildi ve kart engellendi.' : 'Ödeme reddedildi, provizyon iptal edildi.');
+    notify(blockCard ? t('Ödeme reddedildi ve kart engellendi.') : t('Ödeme reddedildi, provizyon iptal edildi.'));
     setRejecting(null);
     queue.reload();
     onChanged();
@@ -71,7 +72,7 @@ function ReviewQueue({ onChanged }: { onChanged: () => void }) {
   return (
     <section>
       <div className="section-header">
-        <h2>İnceleme bekleyen ödemeler</h2>
+        <h2>{t('İnceleme bekleyen ödemeler')}</h2>
       </div>
       <ErrorNote message={queue.error ?? error} />
       {queue.loading && !queue.data ? <Loading /> : queue.data && queue.data.length > 0 ? (
@@ -79,27 +80,27 @@ function ReviewQueue({ onChanged }: { onChanged: () => void }) {
           <table>
             <thead>
               <tr>
-                <th scope="col">Ödeme</th>
-                <th scope="col">Neden</th>
-                <th scope="col" className="numeric">Tutar</th>
-                <th scope="col"><span className="visually-hidden">Karar</span></th>
+                <th scope="col">{t('Ödeme')}</th>
+                <th scope="col">{t('Neden')}</th>
+                <th scope="col" className="numeric">{t('Tutar')}</th>
+                <th scope="col"><span className="visually-hidden">{t('Karar')}</span></th>
               </tr>
             </thead>
             <tbody>
               {queue.data.map((payment) => (
                 <tr key={payment.id}>
                   <td>
-                    <Link to={`/payments/${payment.id}`}>{payment.description || 'Açıklamasız ödeme'}</Link>
+                    <Link to={`/payments/${payment.id}`}>{payment.description || t('Açıklamasız ödeme')}</Link>
                     <span className="hint row-hint">{formatDateTime(payment.createdAt)}</span>
                   </td>
-                  <td>{payment.riskReasons.map((reason) => RISK_REASONS[reason]).join(', ')}</td>
+                  <td>{payment.riskReasons.map(riskReason).join(', ')}</td>
                   <td className="numeric">{formatMoney(payment.amount, payment.currency)}</td>
                   <td className="numeric">
                     <span className="row-actions">
                       <button type="button" className="button button-small button-primary" disabled={busy === payment.id} onClick={() => approve(payment)}>
-                        {busy === payment.id ? 'İşleniyor…' : 'Onayla ve tahsil et'}
+                        {busy === payment.id ? t('İşleniyor…') : t('Onayla ve tahsil et')}
                       </button>
-                      <button type="button" className="button button-small" onClick={() => { setBlockCard(true); setRejecting(payment); }}>Reddet</button>
+                      <button type="button" className="button button-small" onClick={() => { setBlockCard(true); setRejecting(payment); }}>{t('Reddet')}</button>
                     </span>
                   </td>
                 </tr>
@@ -108,14 +109,14 @@ function ReviewQueue({ onChanged }: { onChanged: () => void }) {
           </table>
         </div>
       ) : !queue.error && (
-        <div className="card"><EmptyState title="İnceleme bekleyen ödeme yok">Bir kural “incelemeye al” dediğinde ödeme burada bekler; onaylanana kadar tahsil edilmez.</EmptyState></div>
+        <div className="card"><EmptyState title={t('İnceleme bekleyen ödeme yok')}>{t('Bir kural “incelemeye al” dediğinde ödeme burada bekler; onaylanana kadar tahsil edilmez.')}</EmptyState></div>
       )}
       {rejecting && (
-        <FormDialog title="Ödemeyi reddet" submitLabel="Reddet" danger onClose={() => setRejecting(null)} onSubmit={reject}>
-          <p>{formatMoney(rejecting.amount, rejecting.currency)} tutarındaki provizyon iptal edilir ve müşterinin kart limiti hemen serbest kalır.</p>
+        <FormDialog title={t('Ödemeyi reddet')} submitLabel={t('Reddet')} danger onClose={() => setRejecting(null)} onSubmit={reject}>
+          <p>{t('{amount} tutarındaki provizyon iptal edilir ve müşterinin kart limiti hemen serbest kalır.', { amount: formatMoney(rejecting.amount, rejecting.currency) })}</p>
           <label className="field field-inline">
             <input type="checkbox" checked={blockCard} onChange={(e) => setBlockCard(e.target.checked)} />
-            Bu kartı engelle; bir daha ödeme alınmasın
+            {t('Bu kartı engelle; bir daha ödeme alınmasın')}
           </label>
         </FormDialog>
       )}
@@ -144,7 +145,7 @@ function RuleDialog({ rule, onClose, onSaved }: { rule: RiskRule | null; onClose
 
   const submit = async () => {
     if (!valid) {
-      setFormError(amountRule ? 'Geçerli bir tutar girin.' : 'Sayı ve süre pozitif olmalı; süre en fazla 7 gün olabilir.');
+      setFormError(amountRule ? t('Geçerli bir tutar girin.') : t('Sayı ve süre pozitif olmalı; süre en fazla 7 gün olabilir.'));
       return;
     }
     const body = {
@@ -156,38 +157,38 @@ function RuleDialog({ rule, onClose, onSaved }: { rule: RiskRule | null; onClose
   };
 
   return (
-    <FormDialog title={rule ? 'Kuralı düzenle' : 'Yeni kural'} submitLabel="Kaydet" onClose={onClose} onSubmit={submit}>
+    <FormDialog title={rule ? t('Kuralı düzenle') : t('Yeni kural')} submitLabel={t('Kaydet')} onClose={onClose} onSubmit={submit}>
       <label className="field">
-        Kural türü
+        {t('Kural türü')}
         <select value={form.kind} disabled={rule !== null} onChange={(e) => {
           const kind = e.target.value as RiskRuleKind;
           setForm({ ...form, kind, threshold: kind === 'AMOUNT_ABOVE' ? '10000' : kind === 'CARD_DECLINES' ? '3' : '5',
             action: kind === 'AMOUNT_ABOVE' ? 'REVIEW' : 'BLOCK' });
         }}>
-          {(Object.keys(KIND_LABELS) as RiskRuleKind[]).map((kind) => <option key={kind} value={kind}>{KIND_LABELS[kind]}</option>)}
+          {(Object.keys(KIND_LABELS) as RiskRuleKind[]).map((kind) => <option key={kind} value={kind}>{t(KIND_LABELS[kind])}</option>)}
         </select>
       </label>
       <div className="form-row">
         <label className="field">
-          {amountRule ? 'Tutar sınırı (₺)' : form.kind === 'CARD_VELOCITY' ? 'İzin verilen deneme' : 'İzin verilen ret'}
+          {amountRule ? t('Tutar sınırı (₺)') : form.kind === 'CARD_VELOCITY' ? t('İzin verilen deneme') : t('İzin verilen ret')}
           <input required inputMode={amountRule ? 'decimal' : 'numeric'} value={form.threshold} onChange={(e) => setForm({ ...form, threshold: e.target.value })} />
         </label>
         {!amountRule && (
           <label className="field">
-            Süre (dakika)
+            {t('Süre (dakika)')}
             <input required inputMode="numeric" value={form.windowMinutes} onChange={(e) => setForm({ ...form, windowMinutes: e.target.value })} />
           </label>
         )}
       </div>
       <fieldset className="card-options">
-        <legend>Kural tutarsa</legend>
+        <legend>{t('Kural tutarsa')}</legend>
         <label className="card-option">
           <input type="radio" name="action" checked={form.action === 'BLOCK'} onChange={() => setForm({ ...form, action: 'BLOCK' })} />
-          <span><strong>Engelle</strong><br /><span className="hint">Ödeme bankaya gönderilmez, müşteri reddedilir.</span></span>
+          <span><strong>{t('Engelle')}</strong><br /><span className="hint">{t('Ödeme bankaya gönderilmez, müşteri reddedilir.')}</span></span>
         </label>
         <label className="card-option">
           <input type="radio" name="action" checked={form.action === 'REVIEW'} onChange={() => setForm({ ...form, action: 'REVIEW' })} />
-          <span><strong>İncelemeye al</strong><br /><span className="hint">Provizyon alınır, siz onaylayana kadar tahsil edilmez.</span></span>
+          <span><strong>{t('İncelemeye al')}</strong><br /><span className="hint">{t('Provizyon alınır, siz onaylayana kadar tahsil edilmez.')}</span></span>
         </label>
       </fieldset>
       {valid && <p className="note note-success">{describeRule({ kind: form.kind, threshold: threshold!, windowMinutes, currency: 'TRY', action: form.action })}.</p>}
@@ -214,13 +215,13 @@ function Rules() {
   };
 
   const toggle = (rule: RiskRule) => run(() => api(`/risk/rules/${rule.id}`, { method: 'PUT', body: { ...rule, enabled: !rule.enabled } }),
-    rule.enabled ? 'Kural kapatıldı.' : 'Kural açıldı.');
+    rule.enabled ? t('Kural kapatıldı.') : t('Kural açıldı.'));
 
   return (
     <section>
       <div className="section-header">
-        <h2>Kurallar</h2>
-        <button type="button" className="button button-small" onClick={() => setEditing('new')}>Kural ekle</button>
+        <h2>{t('Kurallar')}</h2>
+        <button type="button" className="button button-small" onClick={() => setEditing('new')}>{t('Kural ekle')}</button>
       </div>
       <ErrorNote message={rules.error ?? error} />
       {rules.loading && !rules.data ? <Loading /> : rules.data && rules.data.length > 0 ? (
@@ -228,28 +229,28 @@ function Rules() {
           <table>
             <thead>
               <tr>
-                <th scope="col">Kural</th>
-                <th scope="col">Sonuç</th>
-                <th scope="col"><span className="visually-hidden">İşlemler</span></th>
+                <th scope="col">{t('Kural')}</th>
+                <th scope="col">{t('Sonuç')}</th>
+                <th scope="col"><span className="visually-hidden">{t('İşlemler')}</span></th>
               </tr>
             </thead>
             <tbody>
               {rules.data.map((rule) => (
                 <tr key={rule.id} className={rule.enabled ? undefined : 'muted'}>
                   <td>
-                    <strong>{KIND_LABELS[rule.kind]}</strong>
+                    <strong>{t(KIND_LABELS[rule.kind])}</strong>
                     <span className="hint row-hint">{describeRule(rule)}</span>
                   </td>
                   <td>
                     <span className={`badge badge-${!rule.enabled ? 'neutral' : rule.action === 'BLOCK' ? 'danger' : 'warning'}`}>
-                      {!rule.enabled ? 'Kapalı' : rule.action === 'BLOCK' ? 'Engeller' : 'İncelemeye alır'}
+                      {!rule.enabled ? t('Kapalı') : rule.action === 'BLOCK' ? t('Engeller') : t('İncelemeye alır')}
                     </span>
                   </td>
                   <td className="numeric">
                     <span className="row-actions">
-                      <button type="button" className="button button-small" onClick={() => toggle(rule)}>{rule.enabled ? 'Kapat' : 'Aç'}</button>
-                      <button type="button" className="button button-small" onClick={() => setEditing(rule)}>Düzenle</button>
-                      <button type="button" className="button button-small" onClick={() => run(() => api(`/risk/rules/${rule.id}`, { method: 'DELETE' }), 'Kural silindi.')}>Sil</button>
+                      <button type="button" className="button button-small" onClick={() => toggle(rule)}>{rule.enabled ? t('Kuralı kapat') : t('Kuralı aç')}</button>
+                      <button type="button" className="button button-small" onClick={() => setEditing(rule)}>{t('Düzenle')}</button>
+                      <button type="button" className="button button-small" onClick={() => run(() => api(`/risk/rules/${rule.id}`, { method: 'DELETE' }), t('Kural silindi.'))}>{t('Sil')}</button>
                     </span>
                   </td>
                 </tr>
@@ -259,16 +260,16 @@ function Rules() {
         </div>
       ) : !rules.error && (
         <div className="card">
-          <EmptyState title="Henüz kural yok">Kural olmadan her ödeme doğrudan bankaya gider. Önerilen kurallarla başlayıp işletmenize göre ayarlayabilirsiniz.</EmptyState>
+          <EmptyState title={t('Henüz kural yok')}>{t('Kural olmadan her ödeme doğrudan bankaya gider. Önerilen kurallarla başlayıp işletmenize göre ayarlayabilirsiniz.')}</EmptyState>
           <div className="form-actions">
-            <button type="button" className="button button-primary" onClick={() => run(() => api('/risk/rules/recommended', { method: 'POST' }), 'Önerilen kurallar eklendi.')}>
-              Önerilen kuralları ekle
+            <button type="button" className="button button-primary" onClick={() => run(() => api('/risk/rules/recommended', { method: 'POST' }), t('Önerilen kurallar eklendi.'))}>
+              {t('Önerilen kuralları ekle')}
             </button>
           </div>
         </div>
       )}
       {editing && <RuleDialog rule={editing === 'new' ? null : editing} onClose={() => setEditing(null)}
-        onSaved={() => { setEditing(null); notify('Kural kaydedildi.'); rules.reload(); }} />}
+        onSaved={() => { setEditing(null); notify(t('Kural kaydedildi.')); rules.reload(); }} />}
     </section>
   );
 }
@@ -282,7 +283,7 @@ function Blocklist({ version }: { version: number }) {
     setError(null);
     try {
       await api(`/risk/blocklist/${card.fingerprint}`, { method: 'DELETE' });
-      notify('Kartın engeli kaldırıldı.');
+      notify(t('Kartın engeli kaldırıldı.'));
       cards.reload();
     } catch (e) {
       setError((e as Error).message);
@@ -292,7 +293,7 @@ function Blocklist({ version }: { version: number }) {
   return (
     <section>
       <div className="section-header">
-        <h2>Engelli kartlar</h2>
+        <h2>{t('Engelli kartlar')}</h2>
       </div>
       <ErrorNote message={cards.error ?? error} />
       {cards.loading && !cards.data ? <Loading /> : cards.data && cards.data.length > 0 ? (
@@ -300,10 +301,10 @@ function Blocklist({ version }: { version: number }) {
           <table>
             <thead>
               <tr>
-                <th scope="col">Kart</th>
-                <th scope="col">Neden</th>
-                <th scope="col" className="hide-narrow">Tarih</th>
-                <th scope="col"><span className="visually-hidden">İşlemler</span></th>
+                <th scope="col">{t('Kart')}</th>
+                <th scope="col">{t('Neden')}</th>
+                <th scope="col" className="hide-narrow">{t('Tarih')}</th>
+                <th scope="col"><span className="visually-hidden">{t('İşlemler')}</span></th>
               </tr>
             </thead>
             <tbody>
@@ -311,18 +312,18 @@ function Blocklist({ version }: { version: number }) {
                 <tr key={card.fingerprint}>
                   <td>
                     <code>…{card.fingerprint.slice(-8)}</code>
-                    {card.sourcePayment && <span className="hint row-hint"><Link to={`/payments/${card.sourcePayment}`}>Engellendiği ödeme</Link></span>}
+                    {card.sourcePayment && <span className="hint row-hint"><Link to={`/payments/${card.sourcePayment}`}>{t('Engellendiği ödeme')}</Link></span>}
                   </td>
                   <td>{card.reason}</td>
                   <td className="hide-narrow muted">{formatDateTime(card.createdAt)}</td>
-                  <td className="numeric"><button type="button" className="button button-small" onClick={() => unblock(card)}>Engeli kaldır</button></td>
+                  <td className="numeric"><button type="button" className="button button-small" onClick={() => unblock(card)}>{t('Engeli kaldır')}</button></td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       ) : !cards.error && (
-        <div className="card"><EmptyState title="Engelli kart yok">Bir ödemenin sayfasından veya incelemede reddederken kartı engelleyebilirsiniz.</EmptyState></div>
+        <div className="card"><EmptyState title={t('Engelli kart yok')}>{t('Bir ödemenin sayfasından veya incelemede reddederken kartı engelleyebilirsiniz.')}</EmptyState></div>
       )}
     </section>
   );
@@ -335,16 +336,16 @@ export function RiskPage() {
   if (!canOperate(me)) {
     return (
       <>
-        <PageHeader title="Risk ve dolandırıcılık" />
-        <p className="note note-warning">Bu sayfayı yalnızca sahip ve yöneticiler görebilir.</p>
+        <PageHeader title={t('Risk ve dolandırıcılık')} />
+        <p className="note note-warning">{t('Bu sayfayı yalnızca sahip ve yöneticiler görebilir.')}</p>
       </>
     );
   }
 
   return (
     <>
-      <PageHeader title="Risk ve dolandırıcılık"
-        description="Her ödeme bankaya gitmeden önce bu kurallardan geçer. Şüpheli olanlar engellenir ya da sizin onayınızı bekler." />
+      <PageHeader title={t('Risk ve dolandırıcılık')}
+        description={t('Her ödeme bankaya gitmeden önce bu kurallardan geçer. Şüpheli olanlar engellenir ya da sizin onayınızı bekler.')} />
       <div className="sections">
         <ReviewQueue onChanged={() => setVersion((v) => v + 1)} />
         <Rules />
