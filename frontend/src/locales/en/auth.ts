@@ -24,6 +24,15 @@ export const AUTH: Record<string, string> = {
   'Parolamı unuttum': 'Forgot password',
   'Hesabınız yok mu?': 'No account yet?',
   'Kayıt olun': 'Sign up',
+  'Hesap açmadan göz atın': 'Look around without an account',
+  'Örnek bir işletmenin 45 günlük ödemeleri, analizi ve hesap kesimleri. Yalnızca görüntülenir.':
+    'A sample business with 45 days of payments, analytics and payouts. View only.',
+  'Açılıyor…': 'Opening…',
+  'Demo hesabıyla dene': 'Try the demo',
+  'Demo hesabındasınız.': 'You are in the demo account.',
+  'Örnek verileri gezebilir ama değiştiremezsiniz. Ödeme almak, ekip kurmak ve API anahtarı oluşturmak için kendi ücretsiz hesabınızı açın.':
+    'You can look around the sample data but not change it. To take payments, build a team and create API keys, open your own free account.',
+  'Hesap aç': 'Open an account',
   'Bu e-postayla bir hesap varsa sıfırlama bağlantısı gönderildi. Bağlantı 30 dakika geçerlidir; gelen kutunuzu ve istenmeyen klasörünü kontrol edin.':
     'If an account uses this email, a reset link has been sent. It is valid for 30 minutes; check your inbox and spam folder.',
   'Gönderiliyor…': 'Sending…',

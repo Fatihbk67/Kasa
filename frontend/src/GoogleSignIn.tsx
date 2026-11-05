@@ -27,16 +27,24 @@ declare global {
 }
 
 const SCRIPT = 'https://accounts.google.com/gsi/client';
-let providers: Promise<string | null> | null = null;
+let providers: Promise<Providers> | null = null;
 let script: Promise<void> | null = null;
 let scriptLang: string | null = null;
 
-/** Asked once per page load: the server says whether Google sign-in is set up, and with which public client id. */
-function googleClientId(): Promise<string | null> {
-  providers ??= api<{ googleClientId: string | null }>('/auth/providers')
-    .then((result) => result.googleClientId)
-    .catch(() => null);
+/** The ways in that the server offers besides email and password. */
+export interface Providers {
+  googleClientId: string | null;
+  demo: boolean;
+}
+
+/** Asked once per page load: whether Google sign-in is set up (and its public client id), and whether the demo is on. */
+export function signInProviders(): Promise<Providers> {
+  providers ??= api<Providers>('/auth/providers').catch(() => ({ googleClientId: null, demo: false }));
   return providers;
+}
+
+function googleClientId(): Promise<string | null> {
+  return signInProviders().then((result) => result.googleClientId);
 }
 
 /** Google fixes the button's language when its script loads, so another language means loading it again. */

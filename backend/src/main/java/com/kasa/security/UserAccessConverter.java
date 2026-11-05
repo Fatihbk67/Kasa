@@ -12,6 +12,8 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.stereotype.Component;
 
+import com.kasa.demo.DemoAccountService;
+
 /**
  * Takes a user's permissions from the database on every request instead of from the token. A signed token
  * cannot be recalled, so this is what makes removing a member, lowering a role or changing a password
@@ -49,9 +51,13 @@ class UserAccessConverter implements Converter<Jwt, AbstractAuthenticationToken>
         if (tokenVersion == null || tokenVersion != access.tokenVersion() || !sameTenant) {
             throw new BadCredentialsException("token has been revoked");
         }
-        return new JwtAuthenticationToken(jwt, List.of(
+        List<SimpleGrantedAuthority> authorities = new java.util.ArrayList<>(List.of(
                 new SimpleGrantedAuthority("ROLE_" + access.role()),
-                new SimpleGrantedAuthority("SCOPE_" + SecurityConfig.DASHBOARD_SCOPE)), access.email());
+                new SimpleGrantedAuthority("SCOPE_" + SecurityConfig.DASHBOARD_SCOPE)));
+        if (DemoAccountService.VISITOR_EMAIL.equals(access.email())) {
+            authorities.add(new SimpleGrantedAuthority(DemoReadOnlyFilter.DEMO_AUTHORITY));
+        }
+        return new JwtAuthenticationToken(jwt, authorities, access.email());
     }
 
     private AbstractAuthenticationToken convertAdmin(Jwt jwt) {

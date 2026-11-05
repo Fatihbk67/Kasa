@@ -4,6 +4,7 @@ import { asAdminSession, setAdminToken } from '../adminApi';
 import { api, ApiError } from '../api';
 import { useAuth } from '../auth';
 import { Brand, ErrorNote, usePageTitle } from '../components';
+import { DemoButton } from '../Demo';
 import { GoogleButton, GoogleSignup, type GoogleResult } from '../GoogleSignIn';
 import { LanguagePicker, t } from '../i18n';
 import { LegalLinks } from './Legal';
@@ -169,6 +170,7 @@ export function Login() {
 
   return (
     <AuthCard title={t('Giriş yapın')}>
+      <DemoButton />
       <GoogleButton context="signin" onResult={continueWithGoogle} />
       <form onSubmit={submit} className="stack">
         <label className="field">

@@ -7,6 +7,7 @@ import { NotificationBell } from './Notifications';
 import { api, ApiError } from './api';
 import { ToastProvider, useToast } from './toast';
 import { Brand } from './components';
+import { DemoBanner, isDemo } from './Demo';
 import { saveTheme, storedTheme, THEME_LABELS, type ThemeChoice } from './theme';
 import { LanguagePicker, t, tk } from './i18n';
 
@@ -161,6 +162,7 @@ function Shell() {
         </div>
       </aside>
       <main className="content">
+        {isDemo(me) && <DemoBanner />}
         {me && !me.emailVerified && <VerifyEmailBanner email={me.email} />}
         {me?.tenantStatus === 'PENDING' && (
           <p className="note note-warning" role="status">

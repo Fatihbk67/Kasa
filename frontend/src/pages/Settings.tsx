@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { api, ApiError } from '../api';
 import { useAuth } from '../auth';
 import { AuthenticatorSetup } from '../AuthenticatorSetup';
+import { isDemo } from '../Demo';
 import { CopyButton, ErrorNote, Loading, PageHeader } from '../components';
 import { LanguagePicker, t, tk } from '../i18n';
 import { isOwner, ROLE_LABELS, useMe } from '../me';
@@ -330,9 +331,14 @@ export function Settings() {
       <div className="settings">
         {isOwner(me) && <BusinessSettings />}
         <LanguageSettings />
-        <PasswordSettings />
-        <TwoFactorSettings />
-        <RoleRequestSettings />
+        {/* The demo account is shared by every visitor, so its sign-in settings stay out of reach. */}
+        {!isDemo(me) && (
+          <>
+            <PasswordSettings />
+            <TwoFactorSettings />
+            <RoleRequestSettings />
+          </>
+        )}
       </div>
     </>
   );

@@ -81,6 +81,7 @@ public class SecurityConfig {
                 .addFilterBefore(adminTokenFilter, BearerTokenAuthenticationFilter.class)
                 .addFilterBefore(apiKeyFilter, BearerTokenAuthenticationFilter.class)
                 .oauth2ResourceServer(server -> server.jwt(jwt -> jwt.jwtAuthenticationConverter(userAccess)))
+                .addFilterAfter(new DemoReadOnlyFilter(), BearerTokenAuthenticationFilter.class)
                 .build();
     }
 

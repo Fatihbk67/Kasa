@@ -1066,6 +1066,41 @@ form.toolbar {
   text-align: center;
 }
 
+/* "Try the demo": the first thing a visitor who only wants to look should see */
+.demo-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 18px;
+  padding: 14px;
+  border: 1px dashed var(--accent);
+  border-radius: 8px;
+  background: var(--surface-muted);
+}
+
+.demo-entry > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.note-info {
+  background: var(--info-bg);
+  color: var(--info);
+}
+
+.demo-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.demo-banner > span {
+  flex: 1 1 320px;
+}
+
 /* Privacy policy and terms */
 .legal-links {
   display: flex;

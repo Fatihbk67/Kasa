@@ -16,7 +16,8 @@ import io.zonky.test.db.postgres.embedded.EmbeddedPostgres;
  * Runs the application against a real PostgreSQL, connected as the restricted role like production.
  * {@link #owner} is a superuser connection for arranging data and asserting past row level security.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+// Seeding the sample business takes a while; DemoAccountApiTest turns it on for itself, which a dynamic property can.
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = "kasa.demo.enabled=false")
 public abstract class PostgresIntegrationTest {
 
     private static final EmbeddedPostgres POSTGRES = startPostgres();

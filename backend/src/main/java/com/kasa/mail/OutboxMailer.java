@@ -27,6 +27,10 @@ class OutboxMailer implements Mailer {
     @Override
     @Transactional
     public void send(String to, String subject, String body) {
+        // .invalid is reserved never to exist (RFC 2606); the demo business uses it, and nothing could be delivered there.
+        if (to.toLowerCase(java.util.Locale.ROOT).endsWith(".invalid")) {
+            return;
+        }
         UUID id = UUID.randomUUID();
         jdbc.sql("INSERT INTO email_outbox (id, recipient, subject, body) VALUES (:id, :to, :subject, :body)")
                 .param("id", id)

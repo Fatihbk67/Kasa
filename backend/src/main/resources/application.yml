@@ -91,6 +91,9 @@ kasa:
     # "Sign in with Google". Left empty, the sign-in page shows only email and password.
     client-id: ${KASA_GOOGLE_CLIENT_ID:}
     jwks-url: https://www.googleapis.com/oauth2/v3/certs
+  demo:
+    # A read-only sample business behind the sign-in page's "try the demo" button, created on first start.
+    enabled: ${KASA_DEMO_ENABLED:true}
   disputes:
     # Charged only when the merchant loses, in minor units.
     loss-fee: 15000

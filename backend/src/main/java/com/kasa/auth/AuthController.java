@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.kasa.admin.AdminAccountService;
+import com.kasa.demo.DemoAccountService;
 import com.kasa.security.RateLimitProperties;
 import com.kasa.security.RateLimiter;
 
@@ -53,7 +54,7 @@ public class AuthController {
     }
 
     /** What the sign-in page may offer. The Google client id is public: Google's button prints it into the page anyway. */
-    public record Providers(String googleClientId) {
+    public record Providers(String googleClientId, boolean demo) {
     }
 
     public record GoogleSignInResponse(UUID tenantId, String accessToken, Long expiresInSeconds, boolean twoFactorRequired,
@@ -70,10 +71,12 @@ public class AuthController {
 
     private final GoogleSignInService google;
     private final GoogleProperties googleProperties;
+    private final DemoAccountService demo;
 
     public AuthController(AuthService authService, PasswordResetService passwordResets, AdminAccountService admins,
                           RateLimiter rateLimiter, RateLimitProperties limits, EmailVerificationService emailVerification,
-                          GoogleSignInService google, GoogleProperties googleProperties) {
+                          GoogleSignInService google, GoogleProperties googleProperties, DemoAccountService demo) {
+        this.demo = demo;
         this.google = google;
         this.googleProperties = googleProperties;
         this.emailVerification = emailVerification;
@@ -102,7 +105,14 @@ public class AuthController {
 
     @GetMapping("/providers")
     public Providers providers() {
-        return new Providers(googleProperties.enabled() ? googleProperties.clientId() : null);
+        return new Providers(googleProperties.enabled() ? googleProperties.clientId() : null, demo.enabled());
+    }
+
+    /** Opens the shared sample business as its read-only viewer. No account and no password: that is the point. */
+    @PostMapping("/demo")
+    public AuthService.TokenResponse demo(HttpServletRequest http) {
+        rateLimiter.check("login-ip:" + http.getRemoteAddr(), limits.loginPerIp());
+        return demo.signIn();
     }
 
     @PostMapping("/google")
