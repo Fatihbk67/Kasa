@@ -77,6 +77,23 @@ export function Checkout() {
   const session = fetched.data ?? paid;
   const awaitingBank = session?.status === 'COMPLETED' && session.paymentStatus === 'PENDING';
   usePolling(awaitingBank, fetched.reload);
+  // Set by our callback when iyzico's answer could not be fetched or checked.
+  const iyzicoTrouble = new URLSearchParams(location.search).get('iyzico') === 'error';
+
+  const payWithIyzico = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const started = await api<{ pageUrl: string }>(`/public/checkout/${id}/iyzico`, { method: 'POST' });
+      window.location.assign(started.pageUrl);
+    } catch (e) {
+      setError(e instanceof ApiError && e.status === 409 ? 'Ödemeniz zaten işleniyor. Lütfen bekleyin.'
+        : e instanceof ApiError && e.status === 502 ? 'iyzico\'ya şu an ulaşılamıyor. Kartınızdan para çekilmedi; biraz sonra yeniden deneyin.'
+          : (e as Error).message);
+      fetched.reload();
+      setBusy(false);
+    }
+  };
 
   if (fetched.loading && !session) {
     return <div className="checkout-page"><Loading /></div>;
@@ -117,6 +134,21 @@ export function Checkout() {
     }
   };
 
+  if (session.status === 'AUTHENTICATING' && session.challengeUrl?.startsWith('http')) {
+    return (
+      <Frame session={session}>
+        <Outcome tone="warning" title="iyzico ödeme sayfasında işlem bekleniyor">
+          Ödemeyi iyzico'nun sayfasında tamamlayın. Sayfayı kapattıysanız aşağıdan geri dönebilirsiniz.
+        </Outcome>
+        {iyzicoTrouble && (
+          <p className="note note-warning" role="status">
+            iyzico'dan sonuç alınamadı. Kartınızdan çekim yapıldıysa ödemeniz birkaç dakika içinde burada görünür; tekrar ödemeden önce bekleyin.
+          </p>
+        )}
+        <a className="button button-primary button-block" href={session.challengeUrl}>iyzico sayfasına dön</a>
+      </Frame>
+    );
+  }
   if (session.status === 'AUTHENTICATING' && session.challengeUrl) {
     return (
       <Frame session={session}>
@@ -167,6 +199,25 @@ export function Checkout() {
         </p>
       )}
       <ErrorNote message={error} />
+      {iyzicoTrouble && (
+        <p className="note note-warning" role="status">iyzico'dan sonuç alınamadı. Kartınızdan çekim yapıldıysa iade edilir; yeniden deneyebilirsiniz.</p>
+      )}
+      {session.iyzicoAvailable && (
+        <section className="iyzico-option" aria-labelledby="iyzico-title">
+          <div>
+            <strong id="iyzico-title">iyzico ile öde</strong>
+            <span className="badge badge-info">Gerçek test ortamı</span>
+          </div>
+          <p className="hint">
+            Kart bilgilerinizi iyzico'nun güvenli sayfasında girersiniz; bu siteye hiç gelmez. Test kartı: <code>5528 7900 0000 0008</code>,
+            son kullanma tarihi ileri bir tarih, güvenlik kodu herhangi üç hane.
+          </p>
+          <button type="button" className="button button-primary button-block" onClick={payWithIyzico} disabled={busy}>
+            {busy ? 'Yönlendiriliyor…' : 'iyzico ile öde'}
+          </button>
+          <p className="divider-label">veya simüle bankayla deneyin</p>
+        </section>
+      )}
       <form onSubmit={submit} className="stack">
         <fieldset className="card-options">
           <legend>Test kartı seçin</legend>

@@ -28,5 +28,7 @@ record Payment(
         String cardFingerprint,
         String threeDsMethod,
         String threeDsEci,
-        int installments) {
+        int installments,
+        String processor,
+        String cardLabel) {
 }

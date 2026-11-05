@@ -17,6 +17,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.kasa.bank.SimulatedAcs;
+import com.kasa.iyzico.IyzicoProperties;
 import com.kasa.bank.ThreeDsSigner;
 import com.kasa.payment.CardAuthentication;
 import com.kasa.payment.Installments;
@@ -38,11 +39,20 @@ public class CheckoutService {
     /** What the customer's browser may see. The tenant id stays internal. */
     public record PublicSession(UUID id, String merchantName, long amount, String currency, String description,
                                 String status, String failureCode, String paymentStatus, OffsetDateTime expiresAt,
-                                String challengeUrl, int installments) {
+                                String challengeUrl, int installments, boolean iyzicoAvailable) {
     }
 
     private record Session(PublicSession view, UUID tenantId, UUID paymentLinkId, UUID customerId) {
     }
+
+    /** A session handed to an outside payment page, such as iyzico's, while the customer is there. */
+    public record ExternalVisit(UUID tenantId, UUID visitId, PublicSession view) {
+    }
+
+    /** iyzico takes these currencies; a session in any other is offered the simulated bank only. */
+    private static final java.util.Set<String> IYZICO_CURRENCIES = java.util.Set.of("TRY", "USD", "EUR", "GBP");
+    /** As long as iyzico keeps its payment page open. */
+    private static final Duration EXTERNAL_VISIT_LIFETIME = Duration.ofMinutes(20);
 
     private record LinkLimits(Integer maxPayments, boolean closed) {
     }
@@ -58,9 +68,11 @@ public class CheckoutService {
     private final SimulatedAcs acs;
     private final ThreeDsSigner signer;
     private final SecretCipher cipher;
+    private final IyzicoProperties iyzico;
 
     public CheckoutService(JdbcClient jdbc, TransactionTemplate tx, TenantScope tenantScope, PaymentService payments,
-                           SimulatedAcs acs, ThreeDsSigner signer, SecretCipher cipher) {
+                           SimulatedAcs acs, ThreeDsSigner signer, SecretCipher cipher, IyzicoProperties iyzico) {
+        this.iyzico = iyzico;
         this.acs = acs;
         this.signer = signer;
         this.cipher = cipher;
@@ -254,7 +266,94 @@ public class CheckoutService {
                 new CardAuthentication(CardAuthentication.Method.CHALLENGE, result.eci()), session.view().installments());
     }
 
+    /**
+     * Hands the session to an outside payment page. The same claim as {@link #pay} guards it, so a customer
+     * cannot be on iyzico's page and paying here at once, and a link place is held while they are away.
+     */
+    public ExternalVisit beginExternal(UUID sessionId) {
+        Session session = load(sessionId);
+        PublicSession view = session.view();
+        if (!view.iyzicoAvailable()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "iyzico is not available for this payment");
+        }
+        UUID visitId = UUID.randomUUID();
+        Integer claimed = tx.execute(status -> {
+            tenantScope.apply(session.tenantId());
+            if (session.paymentLinkId() != null) {
+                claimLinkPlace(session.paymentLinkId());
+            }
+            return jdbc.sql("""
+                            UPDATE checkout_sessions
+                            SET status = 'AUTHENTICATING', failure_code = NULL, three_ds_id = :visitId,
+                                three_ds_expires_at = now() + make_interval(secs => :seconds), updated_at = now()
+                            WHERE id = :id AND expires_at > now()
+                              AND (status = 'OPEN' OR (status = 'AUTHENTICATING' AND three_ds_expires_at <= now()))
+                            """)
+                    .param("visitId", visitId)
+                    .param("seconds", EXTERNAL_VISIT_LIFETIME.toSeconds())
+                    .param("id", sessionId)
+                    .update();
+        });
+        if (claimed == 0) {
+            if (view.status().equals(EXPIRED)) {
+                throw new ResponseStatusException(HttpStatus.GONE, "checkout session has expired");
+            }
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "payment is already in progress");
+        }
+        return new ExternalVisit(session.tenantId(), visitId, view);
+    }
+
+    /** The outside page could not be opened, or the customer's payment failed there: they may try again. */
+    public void reopenExternal(UUID sessionId, UUID visitId, String failureCode) {
+        UUID tenantId = load(sessionId).tenantId();
+        tx.executeWithoutResult(status -> {
+            tenantScope.apply(tenantId);
+            jdbc.sql("""
+                            UPDATE checkout_sessions
+                            SET status = 'OPEN', failure_code = :code, three_ds_id = NULL, three_ds_expires_at = NULL,
+                                updated_at = now()
+                            WHERE id = :id AND status = 'AUTHENTICATING' AND three_ds_id = :visitId
+                            """)
+                    .param("code", failureCode)
+                    .param("id", sessionId)
+                    .param("visitId", visitId)
+                    .update();
+        });
+    }
+
+    /**
+     * Records a payment the outside page has already charged, and collects it at once, since the money has moved.
+     * Expiry is not checked: a customer who paid slowly has still paid. Returns empty when the session has moved
+     * on without this visit, for instance after the customer paid another way, so the caller must give the money back.
+     */
+    public java.util.Optional<PublicSession> completeExternal(UUID sessionId, UUID visitId, String cardToken,
+                                                              int installments, String processor, String cardLabel) {
+        Session session = load(sessionId);
+        Integer claimed = tx.execute(status -> {
+            tenantScope.apply(session.tenantId());
+            return jdbc.sql("""
+                            UPDATE checkout_sessions SET status = 'PROCESSING', three_ds_id = NULL, three_ds_expires_at = NULL,
+                                                         installments = :installments, updated_at = now()
+                            WHERE id = :id AND status = 'AUTHENTICATING' AND three_ds_id = :visitId
+                            """)
+                    .param("installments", installments)
+                    .param("id", sessionId)
+                    .param("visitId", visitId)
+                    .update();
+        });
+        if (claimed == 0) {
+            return java.util.Optional.empty();
+        }
+        return java.util.Optional.of(charge(session, cardToken, "checkout:" + sessionId + ":" + visitId, null, installments,
+                true, processor, cardLabel));
+    }
+
     private PublicSession charge(Session session, String cardToken, String key, CardAuthentication authentication, int installments) {
+        return charge(session, cardToken, key, authentication, installments, false, null, null);
+    }
+
+    private PublicSession charge(Session session, String cardToken, String key, CardAuthentication authentication, int installments,
+                                 boolean collectNow, String processor, String cardLabel) {
         PublicSession view = session.view();
         UUID sessionId = view.id();
         UUID tenantId = session.tenantId();
@@ -267,6 +366,9 @@ public class CheckoutService {
             OperationResult result = payments.create(tenantId, key, view.amount(), view.currency(), cardToken,
                     view.description(), session.customerId(), RiskEngine.Screening.FULL, authentication, installments);
             paymentId = result.payment().id();
+            if (processor != null) {
+                labelPayment(tenantId, paymentId, processor, cardLabel);
+            }
             failureCode = result.payment().failureCode();
             paymentStatus = result.payment().status();
             held = "OPEN".equals(result.payment().reviewStatus());
@@ -278,10 +380,21 @@ public class CheckoutService {
         }
         // A held payment is collected only after a person releases it. The customer still sees success: their card
         // was authorized, and whether to keep the money is now the business's decision.
-        if (session.paymentLinkId() != null && paymentStatus == PaymentStatus.AUTHORIZED && !held) {
+        if ((session.paymentLinkId() != null || collectNow) && paymentStatus == PaymentStatus.AUTHORIZED && !held) {
             captureForLink(tenantId, sessionId, paymentId);
         }
         return load(sessionId).view();
+    }
+
+    private void labelPayment(UUID tenantId, UUID paymentId, String processor, String cardLabel) {
+        tx.executeWithoutResult(status -> {
+            tenantScope.apply(tenantId);
+            jdbc.sql("UPDATE payments SET processor = :processor, card_label = :label WHERE id = :id")
+                    .param("processor", processor)
+                    .param("label", cardLabel)
+                    .param("id", paymentId)
+                    .update();
+        });
     }
 
     /**
@@ -345,6 +458,15 @@ public class CheckoutService {
         });
     }
 
+    /** Where a customer who left mid-verification goes back to: iyzico's page for an iyzico visit, else our bank's. */
+    private String challengeUrl(UUID visitId) {
+        return jdbc.sql("SELECT page_url FROM find_iyzico_checkout_page(:id)")
+                .param("id", visitId)
+                .query(String.class)
+                .optional()
+                .orElse("/bank/3ds/" + visitId);
+    }
+
     private static String tokenContext(UUID authenticationId) {
         return "three-ds-card:" + authenticationId;
     }
@@ -362,6 +484,7 @@ public class CheckoutService {
                     // An abandoned visit to the bank reads as open again, matching what pay() will accept.
                     String status = stored.equals("AUTHENTICATING") && !challengeOpen ? "OPEN" : stored;
                     UUID challengeId = rs.getObject("three_ds_id", UUID.class);
+                    String currency = rs.getString("currency");
                     return new Session(new PublicSession(
                             rs.getObject("id", UUID.class),
                             rs.getString("merchant_name"),
@@ -372,8 +495,9 @@ public class CheckoutService {
                             rs.getString("failure_code"),
                             rs.getString("payment_status"),
                             expiresAt,
-                            challengeOpen && !expired ? "/bank/3ds/" + challengeId : null,
-                            rs.getInt("installments")),
+                            challengeOpen && !expired ? challengeUrl(challengeId) : null,
+                            rs.getInt("installments"),
+                            iyzico.enabled() && IYZICO_CURRENCIES.contains(currency)),
                             rs.getObject("tenant_id", UUID.class),
                             rs.getObject("payment_link_id", UUID.class),
                             rs.getObject("customer_id", UUID.class));

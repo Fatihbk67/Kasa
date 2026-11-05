@@ -4,7 +4,7 @@
 
 Çok kiracılı (multi-tenant) ödeme altyapısı platformu. İşletmeler API anahtarıyla sisteme bağlanır, ödeme alır, iade yapar ve kazançlarını çeker. Her para hareketi çift taraflı muhasebe defterine (double-entry ledger) yazılır.
 
-> Eğitim ve portföy projesidir. Gerçek kart verisi işlemez; banka tarafı simüle edilir.
+> Eğitim ve portföy projesidir. Ödemeler iki yoldan geçebilir: her hata senaryosunu tekrar üretebilen simüle banka veya **iyzico'nun gerçek test ortamı (sandbox)**. Kart bilgisi bu uygulamaya hiç gelmez; iyzico'da kart, iyzico'nun kendi sayfasında girilir.
 
 **Canlı demo:** [kasa-rpb3.onrender.com](https://kasa-rpb3.onrender.com). Ücretsiz sunucu uykudaysa ilk açılış bir dakikadan uzun sürebilir. Kayıt olurken gerçek e-posta veya başka yerde kullandığınız bir parola girmeyin.
 
@@ -23,7 +23,10 @@ flowchart LR
         J --> SE[Hesap kesimi]
         J --> MU[Mutabakat]
     end
-    P -->|transaction dışında| B[Banka]
+    P -->|transaction dışında| RB{Yönlendirici}
+    RB -->|tok_*| B[Simüle banka]
+    RB -->|iyzico:*| IY[iyzico sandbox API]
+    C -->|kart bilgisi| IY
     R --> B
     SE --> B
     MU -->|gün sonu dosyası| B
@@ -115,6 +118,7 @@ java -Djdk.net.unixdomain.tmpdir=backend/target load-test/LoadTest.java http://l
 - **E-posta kaybolmaz ve gerçekten gider:** E-postalar doğrudan gönderilmez, önce bir kuyruğa (outbox) yazılır. Hesap açılışı ile doğrulama e-postası aynı transaction'da kaydedilir; biri olmadan diğeri olamaz. Ayrı bir iş kuyruğu Brevo'nun HTTP API'siyle gönderir (birçok sunucu SMTP portlarını kapatır). Servis çökerse e-posta kaybolmaz; 30 sn, 1, 2, 4, 8 dakika arayla yeniden denenir. Geçersiz adres gibi kalıcı hatalarda boşuna denenmez. Birden fazla sunucu aynı anda çalışsa da `FOR UPDATE SKIP LOCKED` sayesinde her e-posta bir kez gönderilir. E-posta metni (içinde parola sıfırlama bağlantısı olabilir) kuyrukta şifreli durur ve gönderilince silinir.
 - **E-posta adresi doğrulanır:** Kayıt olan işletme sahibine tek kullanımlık, 24 saat geçerli bir bağlantı gider. Veritabanında yalnızca bağlantının özeti (hash) saklanır. Yeni bağlantı eskisini geçersiz kılar. Adresini doğrulamayan işletme başvuru yapamaz, yani ödeme alamaz. Davetle katılan üyeler de doğrular, çünkü davet bağlantısı başkasına iletilebilir.
 - **3D Secure ile kart sahibi doğrulanır:** Ödeme sayfasında kart bankası isterse müşteri bankanın doğrulama sayfasına gider, SMS kodunu girer ve bankanın imzalı cevabıyla geri döner. Kart ancak bu cevaptan sonra çekilir. Cevap müşterinin tarayıcısından geçtiği için HMAC imzasıyla doğrulanır, sabit sürede karşılaştırılır ve süresi geçmişse reddedilir. Tarayıcıda "başarısız"ı "başarılı"ya çevirmek işe yaramaz. Aynı cevap beş sekmeden aynı anda gönderilse de tek bir koşullu güncelleme yüzünden ödeme bir kez alınır. Bekleme sırasında kart token'ı şifreli saklanır. Müşteri bankadan hiç dönmezse oturum, doğrulamanın süresi dolunca yeniden açılır. Ödeme bağlantısının son yeri o sırada müşteriye ayrılmış kalır. Bankanın kendi sayfası da simüle edilir: yanlış kodlar satır kilidiyle sayılır, paralel tahminlerde bile üç denemeden fazlasına izin verilmez.
+- **Gerçek ödeme altyapısı (iyzico sandbox):** Müşteri ödeme sayfasında "iyzico ile öde"yi seçerse iyzico'nun barındırdığı ödeme sayfasına (Checkout Form) gider, kartını ve 3D Secure doğrulamasını orada yapar. Kart bilgisi sunucumuza hiç gelmez (PCI kapsamı küçülür). İstekler iyzico'nun IYZWSv2 şemasıyla HMAC-SHA256 imzalanır. iyzico müşteriyi bir token ile geri gönderdiğinde sonucu tarayıcıya değil iyzico'ya sorarız ve yalnızca iyzico'nun imzası tutan, bu satışa ait (aynı ziyaret, tutar, para birimi) sonucu kabul ederiz. Aynı geri dönüş beş kez gelse de ödeme bir kez kaydedilir; bir iyzico tahsilatı tek bir ödememize bağlanabilir. Dolandırıcılık kuralımız ödemeyi engellerse veya oturum bu arada başka yolla ödenmişse para iyzico'da otomatik iptal edilir. İadeler, kısmi tahsilat ve incelemede reddedilen ödemeler iyzico'nun iade/iptal API'sine gider. Her iyzico çağrısı önce "gönderildi" diye kaydedilir; sonucu bilinmeyen bir iade asla tahmin edilmez, çift iade riskine karşı kişinin kontrolüne bırakılır. Ödeme mantığı hangi altyapının kullanıldığını bilmez: bir yönlendirici kart token'ına veya banka referansına bakarak simüle bankayı ya da iyzico'yu seçer.
 - **Taksit:** Ödeme sayfası tutar 200 TL'yi geçince 2, 3, 6, 9 ve 12 taksit sunar. Müşterinin ödediği toplam değişmez. Taksit farkını işletme, taksit sayısına göre artan komisyonla karşılar; komisyon tahsilat anında defterde ayrılır.
 - **Dolandırıcılık kuralları bankadan önce çalışır:** Her işletme kendi kurallarını yazar: aynı kartla kısa sürede çok deneme, art arda reddedilen kart, yüksek tutar ve engelli kartlar. Kural ya ödemeyi bankaya hiç göndermeden reddeder ya da provizyonu alıp bir kişinin onayına bırakır; onaylanmayan ödeme tahsil edilemez. Bu yasağı veritabanı tetikleyicisi de uygular, unutulan bir kod yolu bile aşamaz. Aynı karttan aynı anda gelen 20 ödeme, sınırı 5 olan kuralı birlikte geçemez, çünkü sayım kart başına bir kilitle sıraya girer; yalnızca aynı işletmenin aynı kartı bekler. Engellenen ödeme müşteriye sıradan bir ret gibi görünür, böylece çalıntı kart deneyen biri kuralları öğrenemez. Abonelik yenilemelerinde bekleyen müşteri olmadığı için inceleme kuralları uygulanmaz, engelleme kuralları uygulanır. API anahtarı kuralları göremez ve değiştiremez; anahtarı çalan kişi alarmı kapatamaz.
 - **Bildirimler olayla birlikte yazılır:** İtiraz, hesap kesimi sonucu, abonelik tahsilat hatası, ekibe katılım, rol talebi kararı ve hesap durumu değişikliği, olayı kaydeden işlemin içinde ilgili rollere bildirim olarak düşer. Geri alınan bir işlem için bildirim gitmez, gerçekleşen bir olay da bildirimsiz kalmaz. Herkes yalnızca kendi bildirimini okuyabilir ve okundu sayabilir; API anahtarının gelen kutusu yoktur.
@@ -216,6 +220,15 @@ Tek bir Docker imajı API ile arayüzü birlikte sunar. Depodaki `render.yaml`, 
 
    Bunlar girilmeden e-postalar yalnızca log'a yazılır ve site normal çalışır.
 
+4. iyzico ile gerçek test ödemesi için (isteğe bağlı) [sandbox-merchant.iyzipay.com](https://sandbox-merchant.iyzipay.com) adresinde hesap açın, **Ayarlar → Firma Ayarları**'ndaki anahtarları Render'a girin:
+
+   | Değişken | Değer |
+   |---|---|
+   | `KASA_IYZICO_API_KEY` | iyzico sandbox API anahtarı |
+   | `KASA_IYZICO_SECRET_KEY` | iyzico sandbox güvenlik anahtarı |
+
+   Anahtarlar girilmezse ödeme sayfası yalnızca simüle bankayı gösterir. Test kartı: `5528 7900 0000 0008`, ileri bir son kullanma tarihi, herhangi üç haneli güvenlik kodu.
+
 Başka bir platformda aynı değişkenlere ek olarak `KASA_DB_APP_USER=kasa_app` tanımlayın. Ters proxy arkasında `KASA_FORWARD_HEADERS=native` gerekir; aksi halde tüm istemciler tek adres sayılır ve istek sınırı herkesi birlikte engeller.
 
 **Ücretsiz planda bilinmesi gerekenler:** Sunucu 15 dakika istek almazsa uyur ve ilk istekte yeniden başlaması bir dakikadan uzun sürebilir. Uyurken zamanlanmış işler çalışmaz, bu yüzden günlük hesap kesimi ve mutabakat güvenilir biçimde tetiklenmez. İşletme verileri ve simüle bankanın kayıtları PostgreSQL'de durduğu için yeniden başlatmada kaybolmaz. Banka kalıcı hale gelmeden önce alınan eski provizyonlar `unknown_authorization` hatası alır, mutabakat da o dönemin işlemlerini `MISSING_IN_BANK` olarak gösterir.
@@ -248,6 +261,8 @@ Başka bir platformda aynı değişkenlere ek olarak `KASA_DB_APP_USER=kasa_app`
 | GET | `/api/v1/public/checkout/{id}` | Yok | Ödeme sayfası bilgilerini döner |
 | POST | `/api/v1/public/checkout/{id}/pay` | Yok | Test kartıyla ödeme yapar (`installments`: 1, 2, 3, 6, 9, 12); banka isterse `AUTHENTICATING` ve `challengeUrl` döner |
 | POST | `/api/v1/public/checkout/{id}/3ds-callback` | Bankanın imzası | Bankanın 3D Secure cevabını doğrular ve ödemeyi tamamlar |
+| POST | `/api/v1/public/checkout/{id}/iyzico` | Yok | iyzico ödeme sayfasını açar, adresini (`pageUrl`) döner |
+| POST | `/api/v1/public/checkout/{id}/iyzico/callback` | iyzico token'ı | iyzico'nun geri dönüşü: sonucu iyzico'dan sorar, imzasını doğrular, ödemeyi kaydeder ve tahsil eder |
 | GET, POST | `/api/v1/public/bank/3ds/{id}` | Yok | Simüle kart bankasının doğrulama sayfası: kodu gösterir, kodu kontrol eder, imzalı cevap üretir |
 | GET | `/api/v1/payouts` | JWT veya `X-Api-Key` | Toplu ödemeleri listeler |
 | GET | `/api/v1/payouts/{id}` | JWT veya `X-Api-Key` | Toplu ödemeyi kalemleriyle döner |
@@ -440,4 +455,5 @@ Banka simüle edilir; davranışı token belirler. Böylece her hata senaryosu i
 - [x] **Gerçek e-posta:** Kuyruklu, yeniden denemeli gönderim (Brevo), kayıtta e-posta doğrulaması
 - [x] **3D Secure ve taksit:** Bankanın imzalı doğrulama cevabı, tek kullanımlık geri dönüş, süre aşımı, taksite göre komisyon
 - [x] **Dolandırıcılık önleme:** İşletmeye özel risk kuralları, engelli kartlar, inceleme kuyruğu ve veritabanı düzeyinde tahsilat kilidi
+- [x] **Gerçek ödeme altyapısı:** iyzico sandbox (Checkout Form), imzalı istek ve cevaplar, iyzico üzerinden iade ve iptal
 - [x] **Başvuru ve bildirimler:** Kontrol haneli işletme başvuru formu, yönetici inceleme ekranı, olaylara bağlı bildirim merkezi

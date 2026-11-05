@@ -35,6 +35,11 @@ services:
         sync: false
       - key: KASA_MAIL_FROM
         sync: false
+      # iyzico sandbox keys, entered by hand. Without them the checkout page offers only the simulated bank.
+      - key: KASA_IYZICO_API_KEY
+        sync: false
+      - key: KASA_IYZICO_SECRET_KEY
+        sync: false
       # Fits the JVM into a small instance, trading peak speed for memory.
       - key: JAVA_TOOL_OPTIONS
         value: -Xmx320m -XX:+UseSerialGC -XX:TieredStopAtLevel=1

@@ -82,6 +82,11 @@ kasa:
     # Doubles after each failure: 30 seconds, 1, 2, 4, 8 minutes.
     retry-delay: PT30S
     retention: P30D
+  iyzico:
+    # Real card payments in iyzico's sandbox. Left empty, the checkout page offers only the simulated bank.
+    api-key: ${KASA_IYZICO_API_KEY:}
+    secret-key: ${KASA_IYZICO_SECRET_KEY:}
+    base-url: ${KASA_IYZICO_BASE_URL:https://sandbox-api.iyzipay.com}
   disputes:
     # Charged only when the merchant loses, in minor units.
     loss-fee: 15000

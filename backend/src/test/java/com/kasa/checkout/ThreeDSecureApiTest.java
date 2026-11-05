@@ -43,7 +43,9 @@ class ThreeDSecureApiTest extends PostgresIntegrationTest {
 
         Map<String, Object> paid = pay(session, "tok_success");
 
-        assertThat(paid).containsEntry("status", "COMPLETED").containsEntry("challengeUrl", null);
+        assertThat(paid).containsEntry("status", "COMPLETED").containsEntry("challengeUrl", null)
+                // No iyzico keys are configured here, so the page offers the simulated bank only.
+                .containsEntry("iyzicoAvailable", false);
         assertThat(onlyPayment(session)).containsEntry("threeDsMethod", "FRICTIONLESS").containsEntry("threeDsEci", "05");
     }
 

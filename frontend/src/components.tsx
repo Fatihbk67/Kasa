@@ -30,6 +30,7 @@ const FAILURE_CODES: Record<string, string> = {
   unknown_authorization: 'Banka bu provizyonu bulamadı.',
   risk_blocked: 'Ödeme bir risk kuralına takıldı ve bankaya gönderilmedi.',
   '3ds_failed': 'Kart sahibi doğrulaması (3D Secure) tamamlanmadı.',
+  iyzico_declined: 'Ödeme iyzico sayfasında tamamlanmadı.',
 };
 
 export const RISK_REASONS: Record<string, string> = {

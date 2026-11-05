@@ -198,6 +198,10 @@ public class ReconciliationService {
                 .query(ReconciliationService::mapMovement)
                 .list();
         for (Movement movement : movements) {
+            // iyzico pays card money out in its own settlement batches, not line by line on this bank statement.
+            if (movement.reference() != null && movement.reference().startsWith("iyzico:")) {
+                continue;
+            }
             if (!bankReferences.contains(movement.reference())) {
                 discrepancies.add(new DiscrepancyView("MISSING_IN_BANK", movement.reference(), movement.tenantId(),
                         movement.sourceId(), movement.amount(), null, "we recorded a " + movement.type()

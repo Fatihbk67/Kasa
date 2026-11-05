@@ -282,7 +282,9 @@ class PaymentStore {
                 rs.getString("card_fingerprint"),
                 rs.getString("three_ds_method"),
                 rs.getString("three_ds_eci"),
-                rs.getInt("installments"));
+                rs.getInt("installments"),
+                rs.getString("processor"),
+                rs.getString("card_label"));
     }
 
     private static List<String> reasons(java.sql.Array array) throws SQLException {

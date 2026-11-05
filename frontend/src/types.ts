@@ -33,6 +33,9 @@ export interface Payment {
   threeDsMethod: 'FRICTIONLESS' | 'CHALLENGE' | null;
   threeDsEci: string | null;
   installments: number;
+  processor: 'SIMULATED' | 'IYZICO';
+  /** The card as iyzico reports it, such as "Mastercard •••• 0008". */
+  cardLabel: string | null;
 }
 
 export type RiskRuleKind = 'CARD_VELOCITY' | 'CARD_DECLINES' | 'AMOUNT_ABOVE';
@@ -151,6 +154,8 @@ export interface CheckoutSession {
   /** Set while the customer must verify themselves on their bank's page. */
   challengeUrl: string | null;
   installments: number;
+  /** Whether this payment can also be made on iyzico's real (sandbox) payment page. */
+  iyzicoAvailable: boolean;
 }
 
 export interface BankChallenge {

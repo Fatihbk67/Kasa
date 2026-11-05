@@ -23,6 +23,9 @@ export function PaymentTable({ payments }: { payments: Payment[] }) {
                 <a href={`/payments/${payment.id}`} onClick={(e) => e.preventDefault()}>
                   {payment.description || 'Açıklamasız ödeme'}
                 </a>
+                {payment.processor === 'IYZICO' && (
+                  <span className="hint row-hint">iyzico{payment.cardLabel ? ` · ${payment.cardLabel}` : ''}</span>
+                )}
               </td>
               <td>
                 <PaymentStatusBadge status={payment.status} />

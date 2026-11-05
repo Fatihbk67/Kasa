@@ -204,11 +204,17 @@ export function PaymentDetailPage() {
           <div>
             <dt>Kart doğrulaması</dt>
             <dd>
-              {payment.threeDsMethod === 'CHALLENGE' ? `3D Secure, SMS ile (ECI ${payment.threeDsEci})`
-                : payment.threeDsMethod === 'FRICTIONLESS' ? `3D Secure, sessiz onay (ECI ${payment.threeDsEci})`
-                  : 'Yok (API ile alınan ödeme)'}
+              {payment.processor === 'IYZICO' ? 'iyzico ödeme sayfasında'
+                : payment.threeDsMethod === 'CHALLENGE' ? `3D Secure, SMS ile (ECI ${payment.threeDsEci})`
+                  : payment.threeDsMethod === 'FRICTIONLESS' ? `3D Secure, sessiz onay (ECI ${payment.threeDsEci})`
+                    : 'Yok (API ile alınan ödeme)'}
             </dd>
           </div>
+          <div>
+            <dt>Ödeme altyapısı</dt>
+            <dd>{payment.processor === 'IYZICO' ? 'iyzico (test ortamı)' : 'Simüle banka'}</dd>
+          </div>
+          {payment.cardLabel && <div><dt>Kart</dt><dd>{payment.cardLabel}</dd></div>}
           <div><dt>Taksit</dt><dd>{payment.installments === 1 ? 'Tek çekim' : `${payment.installments} taksit`}</dd></div>
           <div><dt>Oluşturulma</dt><dd>{formatDateTime(payment.createdAt)}</dd></div>
           <div className="details-id"><dt>Ödeme kimliği</dt><dd><code>{payment.id}</code> <CopyButton value={payment.id} /></dd></div>

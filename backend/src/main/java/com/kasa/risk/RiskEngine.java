@@ -52,6 +52,10 @@ public class RiskEngine {
 
     /** The token stands for the card, so its hash recognises the card again without keeping anything usable. */
     public static String fingerprint(String cardToken) {
+        // An iyzico token ends with the payment it belongs to; only the card part before it identifies the card.
+        if (cardToken.startsWith("iyzico:")) {
+            return Hashes.sha256Hex("card:" + cardToken.substring(0, cardToken.lastIndexOf(':')));
+        }
         return Hashes.sha256Hex("card:" + cardToken);
     }
 
