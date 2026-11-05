@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } 
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { adminApi, getAdminToken, setAdminToken } from '../adminApi';
 import { ApiError } from '../api';
-import { EmptyState, ErrorNote, FormDialog, formatDate, formatDateTime, Loading, OneTimeSecret, PageHeader } from '../components';
+import { Brand, EmptyState, ErrorNote, FormDialog, formatDate, formatDateTime, Loading, OneTimeSecret, PageHeader } from '../components';
 import { formatMoney } from '../money';
 import { formatIban } from '../identifiers';
 import type { BusinessProfile, PlatformOverview, ReconciliationDetail, ReconciliationRun } from '../types';
@@ -63,7 +63,7 @@ function AdminSignIn({ onSignedIn }: { onSignedIn: () => void }) {
   return (
     <div className="auth-page">
       <div className="card auth-card">
-        <div className="brand">Kasa</div>
+        <Brand />
         <h1>Platform yönetimi</h1>
         <p className="muted">Yöneticiler de işletmelerle aynı giriş sayfasını kullanır: e-posta, parola, sonra doğrulama kodu.</p>
         <Link className="button button-primary button-block" to="/login">Giriş sayfasına git</Link>

@@ -21,13 +21,15 @@
   --chart-bar: #0e8a70;
   --chart-bar-active: #0a6653;
   --radius: 8px;
+  --shadow: 0 1px 2px rgb(16 32 28 / 0.05);
   font-family: 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif;
   font-size: 15px;
   line-height: 1.5;
 }
 
+/* Dark follows the system unless the person picked a theme; the picker sets data-theme on the root element. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme='light']) {
     --bg: #101513;
     --surface: #181f1c;
     --surface-muted: #202825;
@@ -48,7 +50,37 @@
     --neutral-bg: #29322e;
     --chart-bar: #2aa085;
     --chart-bar-active: #5ccdb0;
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.3);
   }
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #101513;
+  --surface: #181f1c;
+  --surface-muted: #202825;
+  --text: #e8edeb;
+  --text-muted: #9aa8a2;
+  --border: #2c3632;
+  --accent: #3cb597;
+  --accent-hover: #55c8ab;
+  --on-accent: #06211a;
+  --danger: #f2877f;
+  --danger-bg: #3a1f1d;
+  --warning: #e7bc62;
+  --warning-bg: #352a12;
+  --success: #5ccdb0;
+  --success-bg: #16322b;
+  --info: #86b9ef;
+  --info-bg: #1a2c40;
+  --neutral-bg: #29322e;
+  --chart-bar: #2aa085;
+  --chart-bar-active: #5ccdb0;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.3);
 }
 
 * {
@@ -143,11 +175,28 @@ code {
 }
 
 .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   padding: 0 10px;
   font-size: 1.25rem;
   font-weight: 700;
   letter-spacing: -0.02em;
-  color: var(--accent);
+  color: var(--text);
+}
+
+.brand-mark {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  fill: var(--accent);
+}
+
+.brand-mark-line {
+  fill: none;
+  stroke: var(--on-accent);
+  stroke-width: 2.4;
+  stroke-linecap: round;
 }
 
 .sidebar nav {
@@ -155,6 +204,55 @@ code {
   flex-direction: column;
   gap: 14px;
   overflow-y: auto;
+  /* The default bar is wide and grey; a thin one keeps the menu calm when it overflows on short screens. */
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+/* Loading placeholders */
+.skeleton {
+  display: grid;
+  gap: 10px;
+  padding: 4px 0;
+}
+
+.skeleton-line {
+  display: block;
+  height: 14px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--surface-muted) 25%, var(--border) 50%, var(--surface-muted) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+.skeleton-line:nth-child(3n + 2) { width: 85%; }
+.skeleton-line:nth-child(3n + 3) { width: 60%; }
+
+@keyframes skeleton-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-line,
+  .toast {
+    animation: none;
+  }
+}
+
+.theme-picker {
+  margin: 6px 0 2px;
+}
+
+.theme-picker button {
+  min-height: 26px;
+  padding: 1px 9px;
+  font-size: 0.8rem;
 }
 
 .sidebar-top {
@@ -200,6 +298,7 @@ code {
   background: var(--text);
   color: var(--bg);
   box-shadow: 0 6px 20px rgb(0 0 0 / 0.18);
+  animation: toast-in 0.18s ease-out;
 }
 
 .toast-close {
@@ -244,8 +343,12 @@ code {
 }
 
 .test-mode {
-  font-size: 0.8rem;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--warning-bg);
   color: var(--warning);
+  font-size: 0.75rem;
+  font-weight: 600;
 }
 
 .link-button {
@@ -313,6 +416,7 @@ code {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
+  box-shadow: var(--shadow);
 }
 
 .stats {
@@ -356,6 +460,7 @@ code {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
+  box-shadow: var(--shadow);
 }
 
 table {
@@ -1097,7 +1202,19 @@ form.toolbar {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .filters-search {
+  /* Pairs (start and end, lowest and highest) sit side by side, so the filters do not fill a whole phone screen. */
+  .filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .filters input {
+    min-width: 0;
+  }
+
+  .filters-search,
+  .filters-wide,
+  .filters-actions {
     grid-column: 1 / -1;
   }
 

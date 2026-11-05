@@ -147,8 +147,36 @@ export function ErrorNote({ message }: { message: string | null }) {
   return message ? <p className="note note-danger" role="alert">{message}</p> : null;
 }
 
-export function Loading() {
-  return <p className="muted" role="status">Yükleniyor…</p>;
+/** Placeholder bars in the shape of the content to come, so the page does not jump when it arrives. */
+export function Loading({ rows = 3 }: { rows?: number }) {
+  return (
+    <div className="skeleton" role="status">
+      <span className="visually-hidden">Yükleniyor…</span>
+      {Array.from({ length: rows }, (_, i) => <span key={i} className="skeleton-line" aria-hidden="true" />)}
+    </div>
+  );
+}
+
+/** Names the browser tab after the page, so several open Kasa tabs can be told apart. */
+export function usePageTitle(title: string | null | undefined) {
+  useEffect(() => {
+    if (title) {
+      document.title = `${title} · Kasa`;
+    }
+  }, [title]);
+}
+
+export function Brand() {
+  return (
+    <div className="brand">
+      <svg className="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+        <rect width="32" height="32" rx="8" />
+        <rect x="7" y="10" width="18" height="13" rx="2.5" className="brand-mark-line" />
+        <path d="M7 14.5h18M11 19h4" className="brand-mark-line" />
+      </svg>
+      Kasa
+    </div>
+  );
 }
 
 export function EmptyState({ title, children }: { title: string; children?: ReactNode }) {
@@ -161,6 +189,7 @@ export function EmptyState({ title, children }: { title: string; children?: Reac
 }
 
 export function PageHeader({ title, description, actions }: { title: string; description?: string; actions?: ReactNode }) {
+  usePageTitle(title);
   return (
     <header className="page-header">
       <div>

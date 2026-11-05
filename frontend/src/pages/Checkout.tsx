@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError } from '../api';
 import { useAuth } from '../auth';
-import { ErrorNote, failureMessage, Loading } from '../components';
+import { ErrorNote, failureMessage, Loading, usePageTitle } from '../components';
 import { formatMoney } from '../money';
 import type { CheckoutSession } from '../types';
 import { useFetch, usePolling } from '../useFetch';
@@ -36,6 +36,7 @@ export function BackToDashboard() {
 }
 
 function Frame({ session, children }: { session?: CheckoutSession; children: React.ReactNode }) {
+  usePageTitle(session ? `${session.merchantName} ödemesi` : 'Ödeme');
   return (
     <div className="checkout-page">
       <BackToDashboard />

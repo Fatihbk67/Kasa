@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError } from '../api';
 import { useAuth } from '../auth';
-import { CopyButton, EmptyState, ErrorNote, FormDialog, formatDateTime, Loading, PageHeader } from '../components';
+import { Brand, CopyButton, EmptyState, ErrorNote, FormDialog, formatDateTime, Loading, PageHeader } from '../components';
 import { canOperate, isOwner, ROLE_LABELS, useMe } from '../me';
 import type { PublicInvitation, Role, Team, TeamInvitation, TeamMember } from '../types';
 import { useToast } from '../toast';
@@ -252,7 +252,7 @@ export function AcceptInvitation() {
   return (
     <div className="auth-page">
       <div className="card auth-card">
-        <div className="brand">Kasa</div>
+        <Brand />
         {invitation.loading ? <Loading /> : !data ? (
           <>
             <h1>Davet bulunamadı</h1>

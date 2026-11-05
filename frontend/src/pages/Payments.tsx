@@ -136,7 +136,7 @@ export function Payments() {
           Ara
           <input type="search" maxLength={200} placeholder="Açıklama veya ödeme kimliği" value={draft.q} onChange={(e) => update('q', e.target.value)} />
         </label>
-        <label className="field">
+        <label className="field filters-wide">
           Durum
           <select value={draft.status} onChange={(e) => update('status', e.target.value)}>
             <option value="">Tümü</option>

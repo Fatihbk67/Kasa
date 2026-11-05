@@ -5,6 +5,8 @@ import { canOperate, isOwner, MeProvider, ROLE_LABELS, useMe } from './me';
 import { NotificationBell } from './Notifications';
 import { api, ApiError } from './api';
 import { ToastProvider, useToast } from './toast';
+import { Brand } from './components';
+import { saveTheme, storedTheme, THEME_LABELS, type ThemeChoice } from './theme';
 
 interface NavItem {
   to: string;
@@ -79,6 +81,23 @@ function VerifyEmailBanner({ email }: { email: string }) {
   );
 }
 
+function ThemePicker() {
+  const [theme, setTheme] = useState<ThemeChoice>(storedTheme);
+  const choose = (choice: ThemeChoice) => {
+    setTheme(choice);
+    saveTheme(choice);
+  };
+  return (
+    <div className="segmented theme-picker" role="group" aria-label="Görünüm">
+      {(Object.keys(THEME_LABELS) as ThemeChoice[]).map((choice) => (
+        <button key={choice} type="button" aria-pressed={theme === choice} onClick={() => choose(choice)}>
+          {THEME_LABELS[choice]}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function Shell() {
   const { signOut } = useAuth();
   const { me } = useMe();
@@ -89,7 +108,7 @@ function Shell() {
     <div className="shell">
       <aside className={menuOpen ? 'sidebar sidebar-open' : 'sidebar'}>
         <div className="sidebar-top">
-          <div className="brand">Kasa</div>
+          <Brand />
           <NotificationBell />
           <button type="button" className="button button-small menu-toggle" aria-expanded={menuOpen} aria-controls="main-menu"
             onClick={() => setMenuOpen(!menuOpen)}>
@@ -118,6 +137,7 @@ function Shell() {
           <span className="merchant-name">{me?.tenantName}</span>
           {me && <span className="hint">{me.email} · {ROLE_LABELS[me.role]}</span>}
           <span className="test-mode">Test modu</span>
+          <ThemePicker />
           <button type="button" className="link-button" onClick={signOut}>Çıkış yap</button>
         </div>
       </aside>

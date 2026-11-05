@@ -3,7 +3,7 @@ import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { asAdminSession, setAdminToken } from '../adminApi';
 import { api, ApiError } from '../api';
 import { useAuth } from '../auth';
-import { ErrorNote } from '../components';
+import { Brand, ErrorNote, usePageTitle } from '../components';
 
 interface TokenResponse {
   accessToken: string;
@@ -17,10 +17,11 @@ interface LoginResponse {
 }
 
 function AuthCard({ title, children }: { title: string; children: ReactNode }) {
+  usePageTitle(title);
   return (
     <div className="auth-page">
       <div className="card auth-card">
-        <div className="brand">Kasa</div>
+        <Brand />
         <h1>{title}</h1>
         <p className="note note-warning auth-notice">
           Bu bir portföy demosudur. Doğrulama e-postası girdiğiniz adrese gönderilir; başka yerde kullandığınız bir parola girmeyin.
