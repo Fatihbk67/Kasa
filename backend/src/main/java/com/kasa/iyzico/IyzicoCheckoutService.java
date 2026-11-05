@@ -33,6 +33,8 @@ public class IyzicoCheckoutService {
 
     static final String DECLINED = "iyzico_declined";
     private static final int[] INSTALLMENT_CHOICES = {1, 2, 3, 6, 9, 12};
+    /** iyzico's own sample address. It rejects reserved test domains such as ".test" as badly formatted. */
+    static final String SANDBOX_BUYER_EMAIL = "email@email.com";
 
     private record Visit(UUID id, UUID tenantId, UUID sessionId, String status) {
     }
@@ -69,7 +71,7 @@ public class IyzicoCheckoutService {
             started = client.initialize(new IyzicoClient.Sale(visit.visitId().toString(), IyzicoGateway.minor(view.amount()),
                     view.currency(), publicUrl + "/api/v1/public/checkout/" + sessionId + "/iyzico/callback", installments,
                     view.description() == null || view.description().isBlank() ? view.merchantName() + " ödemesi" : view.description(),
-                    "musteri@kasa.test", customerIp));
+                    SANDBOX_BUYER_EMAIL, customerIp));
         } catch (RuntimeException e) {
             checkout.reopenExternal(sessionId, visit.visitId(), null);
             log.warn("Could not open iyzico's payment page for session {}: {}", sessionId, e.getMessage());

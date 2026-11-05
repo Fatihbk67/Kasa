@@ -372,6 +372,12 @@ class IyzicoApiTest extends PostgresIntegrationTest {
         }
 
         private void initialize(HttpExchange exchange, Map<String, Object> request) throws IOException {
+            // The real sandbox refuses reserved test domains, as it did with "musteri@kasa.test" on the live site.
+            String email = (String) ((Map<String, Object>) request.get("buyer")).get("email");
+            if (email == null || !email.matches("[^@\\s]+@[^@\\s]+\\.(com|net|org|com\\.tr)")) {
+                respond(exchange, Map.of("status", "failure", "errorCode", "5", "errorMessage", "email hatalı format ile gönderilmiştir"));
+                return;
+            }
             String token = "tok-" + UUID.randomUUID();
             sales.put(token, request);
             lastSale = request;
