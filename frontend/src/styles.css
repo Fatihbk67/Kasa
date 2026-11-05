@@ -361,9 +361,11 @@ code {
   cursor: pointer;
 }
 
+/* Wide enough for tables on a large monitor, centred in the space beside the menu so neither side is left bare. */
 .content {
   width: 100%;
-  max-width: 1040px;
+  max-width: 1320px;
+  margin-inline: auto;
   padding: 32px;
 }
 
@@ -1139,6 +1141,105 @@ form.toolbar {
 .outcome-danger h1 { color: var(--danger); }
 .outcome-warning h1 { color: var(--warning); }
 
+/* Dashboard */
+.kpis {
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  margin-bottom: 14px;
+}
+
+.kpi .stat-value {
+  font-size: 1.5rem;
+}
+
+.kpi-change {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.kpi-change-up { color: var(--success); }
+.kpi-change-down { color: var(--danger); }
+.kpi-change-flat { color: var(--text-muted); }
+
+.kpi-change .hint {
+  font-weight: 400;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.dashboard-main,
+.dashboard-side {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.dashboard-main .chart-card,
+.dashboard-main .section-header {
+  margin: 0;
+}
+
+@media (min-width: 1180px) {
+  .dashboard-grid {
+    grid-template-columns: minmax(0, 1fr) 320px;
+  }
+}
+
+.tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.task {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.task:hover {
+  border-color: var(--accent);
+  background: var(--surface-muted);
+}
+
+.task-count {
+  flex: none;
+  min-width: 2.2em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.task-danger .task-count { background: var(--danger-bg); color: var(--danger); }
+.task-warning .task-count { background: var(--warning-bg); color: var(--warning); }
+.task-info .task-count { background: var(--info-bg); color: var(--info); }
+
+.task-arrow {
+  margin-left: auto;
+  color: var(--text-muted);
+}
+
+.tasks-done {
+  margin: 0;
+  color: var(--success);
+  font-weight: 600;
+}
+
 /* 404 */
 .not-found {
   align-items: flex-start;
@@ -1380,8 +1481,18 @@ kbd {
     display: none;
   }
 
-  .stats-wide {
+  .stats-wide,
+  .kpis {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .kpi {
+    padding: 14px;
+  }
+
+  .kpi .stat-value {
+    font-size: 1.1rem;
   }
 
   /* Pairs (start and end, lowest and highest) sit side by side, so the filters do not fill a whole phone screen. */
